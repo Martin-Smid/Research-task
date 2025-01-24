@@ -9,8 +9,7 @@ The simulations aim to advance our understanding of the properties and cosmologi
 
 
 **Phase 0:**
-- making github repo with functional cupy - done
+- making github repo with functional cupy - ✓ done
   - it should include requirements.txt needed to run the main.py file
-  - and a Dockerfile which installs cuda - not sure if its necessary - but its here
-- Solving Schrödinger equation - in vacuum - using furier transform
+- Solving Schrödinger equation - in vacuum - using furier transform - ✓ done 24.1.
 - Extending the solution to 2D

@@ -12,4 +12,4 @@ The simulations aim to advance our understanding of the properties and cosmologi
 - making github repo with functional cupy - ✓ done
   - it should include requirements.txt needed to run the main.py file
 - Solving Schrödinger equation - in vacuum - using furier transform - ✓ done 24.1.
-- Extending the solution to 2D
+- Extending the solution to 2D - ✓ done 26.1.

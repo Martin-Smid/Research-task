@@ -32,5 +32,4 @@ anim = plot_1D_wavefunction_evolution(
     dx=vlna.dx[0]
 )
 
-# Display the animation
-plt.show()
+

@@ -13,3 +13,15 @@ The simulations aim to advance our understanding of the properties and cosmologi
   - it should include requirements.txt needed to run the main.py file
 - Solving Schrödinger equation - in vacuum - using furier transform - ✓ done 24.1.
 - Extending the solution to 2D
+
+
+**Phase 0.5:**
+- making 3D waves possible
+- adding error handeling into wave function class
+- Unifying functions for 1D,2D,3D animation
+
+**Phase 1:**
+- solving Schrödinger equation with harmonic potential
+- monitoring the errors
+  - the error of my solution from the analytical one
+  - the error of time propagation of the probability density 

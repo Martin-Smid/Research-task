@@ -65,9 +65,12 @@ class Simulation_parameters():
             dx_dim = (b - a) / (self.N - 1)
             self.dx.append(dx_dim)
             self.grids.append(cp.linspace(a, b, self.N))
-            print(self.dx)
+
         return self.dx, self.grids
 
+
+
+#-----------------------------------------------------------------------------------------------------------------------
 
 
 class Wave_function(Simulation_parameters):
@@ -88,16 +91,12 @@ class Wave_function(Simulation_parameters):
     def compute_propagator(self, potential=None, mass=1.0):
         """Create the time evolution propagator based on the wave's k-space."""
         if potential is None:  # Example: Free evolution propagator
-            if self.dim == 1:
-                self.propagator = cp.exp(-1j * (self.h / 2) * (self.k_space ** 2) / mass)
-            elif self.dim == 2:
-                kx, ky = self.k_space
-                self.propagator = cp.exp(-1j * (self.h / 2) * ((kx ** 2 + ky ** 2) / mass))
-            else:
-                raise ValueError(f"Unsupported dimensionality: {self.dim}")
+            k_squared_sum = sum(k**2 for k in self.k_space)  # Sum of squares of all k-space dimensions
+            self.propagator = cp.exp(-1j * (self.h / 2) * (k_squared_sum) / mass)
         else:
             # Example: With potential (needs spatial grid)
-            self.propagator = cp.exp(-1j * self.h * (potential + (self.k_space ** 2) / (2 * mass)))
+            k_squared_sum = sum(k**2 for k in self.k_space)  # Sum of squares of all k-space dimensions
+            self.propagator = cp.exp(-1j * self.h * (potential + (k_squared_sum) / (2 * mass)))
         return self.propagator
 
     def create_psi_0(self):
@@ -138,25 +137,12 @@ class Wave_function(Simulation_parameters):
             return psi_0  # Returns a normalized `psi_0`
 
     def create_k_space(self):
-        """Creates the k-space (wave vector space) for 1D or 2D wave functions."""
-        if self.dim == 1:
-            # For 1D, use cp.fft.fftfreq with the grid spacing
-            k_space = cp.fft.fftfreq(self.N, d=self.dx[0])
-        elif self.dim == 2:
-            # For 2D, use cp.fft.fftfreq for each dimension and create a meshgrid
-            kx = cp.fft.fftfreq(self.N, d=self.dx[0])
-            ky = cp.fft.fftfreq(self.N, d=self.dx[1])
-            k_space = cp.meshgrid(kx, ky, indexing='ij')  # Create 2D k-space
-        else: #need to add proper errorhandeling
-            raise ValueError(f"Unsupported dimensionality: {self.dim}")
+        """Creates the k-space (wave vector space) for any arbitrary number of dimensions."""
+        k_components = [cp.fft.fftfreq(self.N, d=self.dx[i]) for i in range(self.dim)]
+        k_space = cp.meshgrid(*k_components, indexing='ij')  # Create multidimensional k-space
         return k_space
 
     def transform_psi_0_to_k_space(self):
         """Performs the Fourier transform of the initial wavefunction to obtain psi_k."""
-        if self.dim == 1:
-            self.psi_k = cp.fft.fft(self.psi_0)  # 1D Fourier Transform
-        elif self.dim == 2:
-            self.psi_k = cp.fft.fftn(self.psi_0)  # 2D Fourier Transform
-        else:#need to add proper errorhandeling
-            raise ValueError(f"Unsupported dimensionality: {self.dim}")
+        self.psi_k = cp.fft.fftn(self.psi_0)  # N-dimensional Fourier Transform
         return self.psi_k

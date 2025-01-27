@@ -6,7 +6,9 @@ from Wave_function_class import *
 
 
 boundaries = [(-1,1), (-1,1)]
-N = 1024
+N = 256
+
+boundaries4D = [(-1,1), (-1,1), (-6,2), (-8,3)]
 
 twoD_wavefunction = Wave_function(
     packet_type="gaussian",
@@ -18,6 +20,19 @@ twoD_wavefunction = Wave_function(
     h=0.1,
     total_time=10
 )
+
+'''vlna4D = Wave_function(
+    packet_type="gaussian",
+    means=[0,0.5,4,0.5],
+    st_deviations=[0.1,0.1,0.1,0.8],
+    dim=4,  # 2D wave function
+    boundaries=boundaries4D,
+    N=N,
+    h=0.1,
+    total_time=10
+)'''
+
+
 
 # Create the animation
 anim = plot_2D_wavefunction_evolution(

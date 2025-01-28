@@ -74,7 +74,7 @@ class Simulation_parameters():
 
 
 class Wave_function(Simulation_parameters):
-    def __init__(self, packet_type="gaussian", momenta=[0], means=[0], st_deviations=[0.1], **kwargs):
+    def __init__(self, packet_type="gaussian", momenta=[0], means=[0], st_deviations=[0.1],potential = None, **kwargs):
         """
         Initialize a wavefunction with custom momenta for arbitrary dimensions.
 
@@ -89,42 +89,45 @@ class Wave_function(Simulation_parameters):
 
         # Additional parameters specific to Wave_function
         self.packet_type = packet_type
+        self.potential = potential
         self.means = means
         self.st_deviations = st_deviations
         self.momenta = momenta  # Added momentum parameter
         self.psi_0 = self.create_psi_0()
         self.k_space = self.create_k_space()  # Generate the k-space grid
         self.psi_k = self.transform_psi_0_to_k_space()
-        self.propagator = self.compute_propagator()  # Compute propagator (can be updated later)
+        self.propagator, self.potential_propagator = self.compute_propagators(self.potential,mass=1)  # Compute propagator (can be updated later)
 
-    def compute_propagator(self, potential=None, mass=1.0):
+    def compute_propagators(self, potential=None, mass=1.0):
         """
-        Create the time evolution propagator based on the wave's k-space and momentum.
+        Create the time evolution propagators for both kinetic and (if provided) potential energy terms.
 
         Parameters:
-            potential (cp.ndarray, optional): Potential energy grid for position-space evolution. Defaults to None (free evolution).
+            potential (callable, optional): A function to calculate potential energy at given spatial points.
             mass (float, optional): Particle mass. Defaults to 1.0.
 
         Returns:
-            cp.ndarray: The time evolution propagator.
+            tuple: Kinetic and potential propagators as separate components.
         """
-        # Validate momentum dimensions
-        if len(self.momenta) != self.dim:
-            raise ValueError(f"Expected {self.dim} momenta in the format [p1, p2, ...], but got {len(self.momenta)}.")
-
-        # Adjust the propagator using k-space and momenta
+        # Kinetic propagator in Fourier space
         k_shifted = [k + (momentum / (2 * cp.pi)) for k, momentum in zip(self.k_space, self.momenta)]
         k_squared_sum = sum(k ** 2 for k in k_shifted)
+        kinetic_propagator = cp.exp(-1j * (self.h / 2) * k_squared_sum / mass)
 
-        # Create the propagator for free evolution or with a potential
-        propagator = cp.exp(-1j * (self.h / 2) * (k_squared_sum) / mass)
-
-        # Include potential if provided
+        # Potential propagator in real space
         if potential is not None:
-            propagator *= cp.exp(-1j * potential * self.h)
+            # Build position-space grid to compute the potential
+            grid = cp.meshgrid(*self.grids, indexing='ij')  # Handle dimensions automatically
+            potential_values = potential(*grid)  # Apply the potential function to the grid
+            potential_propagator = cp.exp(-1j * self.h * potential_values)
+        else:
+            # If no potential, assume no effect (identity propagator)
+            potential_propagator = cp.ones_like(self.psi_0)
 
-        self.propagator = propagator  # Store the computed propagator
-        return propagator
+        self.kinetic_propagator = kinetic_propagator
+        self.potential_propagator = potential_propagator
+
+        return kinetic_propagator, potential_propagator
 
     def create_psi_0(self):
         """Validates the format of the inputted means and standard deviations
@@ -173,4 +176,55 @@ class Wave_function(Simulation_parameters):
         """Performs the Fourier transform of the initial wavefunction to obtain psi_k."""
         self.psi_k = cp.fft.fftn(self.psi_0)  # N-dimensional Fourier Transform
         return self.psi_k
+
+    def evolve_wavefunction_split_step(self, psi, mass=1.0):
+        """
+        Evolve the wavefunction using the split-step Fourier method, alternating
+        between kinetic and potential propagators.
+
+        Parameters:
+            psi (cp.ndarray): Initial wavefunction.
+            mass (float, optional): Particle mass. Defaults to 1.0.
+
+        Returns:
+            cp.ndarray: Evolved wavefunction after one time step.
+        """
+        # Apply half-step of kinetic evolution in Fourier space
+        psi_k = cp.fft.fftn(psi)  # Forward FFT
+        psi_k *= self.kinetic_propagator  # Kinetic propagator
+        psi = cp.fft.ifftn(psi_k)  # Inverse FFT back to real space
+
+
+        # Apply full-step of potential evolution in real space (only if potential is provided)
+        if self.potential_propagator is not None:
+            psi *= self.potential_propagator
+
+
+
+        # Apply another half-step of kinetic evolution in Fourier space
+        psi_k = cp.fft.fftn(psi)
+        psi_k *= self.kinetic_propagator
+        psi = cp.fft.ifftn(psi_k)
+
+        # Normalize the wavefunction to ensure it remains normalized
+        dx_total = cp.prod(cp.array(self.dx))  # Total grid spacing over all dimensions
+        psi = normalize_wavefunction(psi, dx_total)
+
+        norm = cp.sum(cp.abs(psi) ** 2) * cp.prod(cp.array(self.dx))  # Total norm
+        print("Wavefunction norm =", norm)
+
+        return psi
+
+    def evolve(self):
+        """
+        Perform the full time evolution for the wavefunction using the split-step Fourier method.
+
+        Returns:
+            cp.ndarray: Updated wavefunction after evolution.
+        """
+        psi = self.psi_0.copy()  # Start with the initial wavefunction
+        for _ in range(self.num_steps):
+            psi = self.evolve_wavefunction_split_step(psi)
+        return psi
+
 

@@ -18,12 +18,10 @@ vlna = Wave_function(
     boundaries=[(a, b)],
     N=N,
     h=0.1,
-    total_time=10
+    total_time=10,
+    potential=quadratic_potential
 )
 
-
-
-
-anim = plot_wave_equation_evolution(vlna, interval=20, save_file="wave_equation_evolution.mp4", N=N)
-print(anim)
-
+# Generate and show the animation
+anim = plot_1D_wavefunction_evolution(vlna, interval=20, save_file="1D_wave_potential.mp4")
+plt.show()

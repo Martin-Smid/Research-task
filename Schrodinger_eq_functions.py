@@ -14,61 +14,51 @@ def normalize_wavefunction(psi, dx):
     psi /= cp.sqrt(cp.sum(cp.abs(psi) ** 2) * dx)
     return psi
 
-def evolve_1D_wavefunction(psi, propagator, dx):
-    """Perform the time evolution of the wavefunction using cupy Fourier transforms
-    and evolving the wavefunction in k-space using its propagator."""
-    # Perform the Fourier Transform of the wavefunction
-    psi_k = cp.fft.fft(psi)
-
-    # Apply the time evolution propagator in k-space
-    psi_k *= propagator
-
-    # Transform back to real space
-    psi_x = cp.fft.ifft(psi_k)
-
-    # Normalize to ensure the wavefunction stays normalized
-    psi_x = normalize_wavefunction(psi_x, dx)
-    return psi_x
-
-def evolve_2D_wavefunction(psi, propagator_x, propagator_y, dx):
-    """Perform the time evolution of a 2D wave function using cupy Fourier transforms"""
-    psi_k = cp.fft.fft2(psi)
-
-    # Apply the time evolution propagators in k-space
-    psi_k *= propagator_x
-    psi_k *= propagator_y
-
-    # Transform back to real space
-    psi = cp.fft.ifft2(psi_k)
-
-    # Normalize to ensure the wavefunction stays normalized
-    psi = normalize_wavefunction(psi, dx)
-    return psi
-
-
-
-
-
-def plot_1D_wavefunction_evolution(x, vlna,dx, num_steps, interval=20, save_file=None,):
+def quadratic_potential(*grid, omega=1.0):
     """
-    Animate the time evolution of the wavefunction (integrated with Wave_function class).
+    Compute the potential V(r) = 1/2 * omega^2 * r^2 for arbitrary dimensions.
+    """
+    r2 = sum(g ** 2 for g in grid)  # r² = x² + y² (or higher dimensions)
+    return 0.5 * omega ** 2 * r2
+
+
+
+
+
+
+
+
+
+
+
+def plot_1D_wavefunction_evolution(wave_function, interval=20, save_file=None):
+    """
+    Animate the time evolution of a 1D wavefunction (integrated with Wave_function class),
+    with an optional plot of the potential if present.
 
     Parameters:
-        x (cp.ndarray): Spatial grid.
-        vlna (Wave_function): Instance of Wave_function class.
-        num_steps (int): Number of time evolution steps.
+        wave_function (Wave_function): Instance of the Wave_function class.
         interval (int): Interval between frames (in milliseconds).
         save_file (str, optional): Filepath to save the animation. Defaults to None.
 
     Returns:
         FuncAnimation: Animation object.
     """
-    x_numpy = cp.asnumpy(x)
-    psi = vlna.psi_0.copy()
+    # Get grid and initial wavefunction
+    x = wave_function.grids[0]  # 1D spatial grid
+    x_numpy = cp.asnumpy(x)  # Convert to numpy for plotting
+    psi = wave_function.psi_0.copy()  # Initial wavefunction
+
+    # Compute the potential for plotting (if it's provided)
+    if wave_function.potential is not None:
+        V = wave_function.potential(x)  # Potential function applied to grid
+        V_numpy = cp.asnumpy(V)  # Convert potential to numpy
+    else:
+        V_numpy = None  # No potential
 
     # Initialize the figure and plot elements
-    fig, axs = plt.subplots(3, figsize=(8, 8))
-    fig.suptitle("Wavefunction Evolution", fontsize=14)
+    fig, axs = plt.subplots(3, figsize=(10, 10))
+    fig.suptitle("1D Wavefunction Evolution", fontsize=14)
 
     # Configure subplots
     labels = ['|ψ|²', 'Re(ψ)', 'Im(ψ)']
@@ -83,6 +73,11 @@ def plot_1D_wavefunction_evolution(x, vlna,dx, num_steps, interval=20, save_file
         ax.legend()
         lines.append(line)
 
+        # If there is a potential, plot it as a dashed line in the |ψ|² plot
+        if label == '|ψ|²' and V_numpy is not None:
+            ax.plot(x_numpy, V_numpy, color="black", linestyle="--", label="V(x)")
+            ax.legend()
+
     def init():
         """Initialize the plot elements."""
         for line in lines:
@@ -92,21 +87,22 @@ def plot_1D_wavefunction_evolution(x, vlna,dx, num_steps, interval=20, save_file
     def update(step):
         """Update the plot for each frame."""
         nonlocal psi
-        psi = evolve_1D_wavefunction(psi, vlna.propagator, dx)
+        psi = wave_function.evolve_wavefunction_split_step(psi)  # Evolve wavefunction
         psi_real = cp.asnumpy(cp.real(psi))
         psi_imag = cp.asnumpy(cp.imag(psi))
         psi_abs2 = cp.asnumpy(cp.abs(psi) ** 2)
 
+        # Update plot lines
         lines[0].set_data(x_numpy, psi_abs2)
         lines[1].set_data(x_numpy, psi_real)
         lines[2].set_data(x_numpy, psi_imag)
 
-        fig.suptitle(f"Wavefunction Evolution - Step {step}")
+        fig.suptitle(f"1D Wavefunction Evolution - Step {step}")
         return lines
 
     # Create the animation
     anim = FuncAnimation(
-        fig, update, frames=num_steps, init_func=init, blit=True, interval=interval
+        fig, update, frames=wave_function.num_steps, init_func=init, blit=True, interval=interval
     )
 
     # Save the animation if a save file is specified
@@ -120,18 +116,13 @@ def plot_1D_wavefunction_evolution(x, vlna,dx, num_steps, interval=20, save_file
 
 
 
-def plot_2D_wavefunction_evolution(x, y, psi_0, propagator_x, propagator_y, dx, num_steps, interval=20, save_file=None,
-                                   N=1024):
+
+def plot_2D_wavefunction_evolution(wave_function, interval=20, save_file=None, N=1024):
     """
-    Animate the time evolution of the wavefunction.
+    Animate the time evolution of the wavefunction using the evolve method from the Wave_function class.
 
     Parameters:
-        x (cp.ndarray): Spatial grid.
-        psi_0 (cp.ndarray): Initial wavefunction.
-        propagator_x (cp.ndarray): Precomputed k-space propagator in x.
-        propagator_y (cp.ndarray): Precomputed k-space propagator in y.
-        dx (float): Spatial step size.
-        num_steps (int): Number of time evolution steps.
+        wave_function (Wave_function): Instance of the Wave_function class.
         interval (int): Interval between frames (in milliseconds).
         save_file (str, optional): Filepath to save the animation.
         N (int, optional): Grid size for visualization.
@@ -139,8 +130,10 @@ def plot_2D_wavefunction_evolution(x, y, psi_0, propagator_x, propagator_y, dx, 
     Returns:
         FuncAnimation: Animation object displaying 2D wave evolution.
     """
-    x_numpy = cp.asnumpy(x)
-    psi = psi_0.copy()
+    # Extract useful values from the Wave_function instance
+    x_numpy = cp.asnumpy(wave_function.grids[0])  # Spatial grid in x
+    y_numpy = cp.asnumpy(wave_function.grids[1])  # Spatial grid in y
+    psi = wave_function.psi_0.copy()  # Initial wavefunction
 
     # Initialize the figure and plot elements
     fig, ax = plt.subplots(figsize=(8, 8))
@@ -152,11 +145,11 @@ def plot_2D_wavefunction_evolution(x, y, psi_0, propagator_x, propagator_y, dx, 
     ax.set_ylabel('y')
     im = ax.imshow(
         cp.asnumpy(cp.abs(psi) ** 2),  # Initial |ψ|²
-        extent=[x_numpy[0], x_numpy[-1], x_numpy[0], x_numpy[-1]],
+        extent=[x_numpy[0], x_numpy[-1], y_numpy[0], y_numpy[-1]],
         origin='lower',
         cmap='viridis',
         vmin=0,  # Minimum fixed at 0
-        vmax=cp.abs(psi).max() ** 2  # Dynamically updated later
+        vmax=5
     )
     fig.colorbar(im, ax=ax)
 
@@ -169,18 +162,19 @@ def plot_2D_wavefunction_evolution(x, y, psi_0, propagator_x, propagator_y, dx, 
     def update(step):
         """Update the plot for each frame."""
         nonlocal psi
-        psi = evolve_2D_wavefunction(psi, propagator_x, propagator_y, dx)
+        # Use evolve_wavefunction_split_step to evolve
+        psi = wave_function.evolve_wavefunction_split_step(psi)
         psi_abs2 = cp.abs(psi) ** 2  # Compute |ψ|²
 
-        im.set_data(cp.asnumpy(psi_abs2))  # Update heatmap with new |ψ|² data
-        im.set_clim(vmin=0, vmax=float(0.15))  # Dynamically adjust vmax based on max(|ψ|²)
-
+        # Update the heatmap with new |ψ|² data
+        im.set_data(cp.asnumpy(psi_abs2))
+        im.set_clim(vmin=0, vmax=float(5))  # Dynamically adjust vmax based on max(|ψ|²)
         fig.suptitle(f"Wavefunction Evolution - Step {step}")
         return [im]
 
     # Create the animation
     anim = FuncAnimation(
-        fig, update, frames=num_steps, init_func=init, blit=False, interval=interval
+        fig, update, frames=wave_function.num_steps, init_func=init, blit=False, interval=interval
     )
 
     # Save the animation if a save file is specified
@@ -188,6 +182,7 @@ def plot_2D_wavefunction_evolution(x, y, psi_0, propagator_x, propagator_y, dx, 
         anim.save(save_file, fps=10, extra_args=['-vcodec', 'libx264'])
 
     return anim
+
 
 
 
@@ -323,26 +318,17 @@ def plot_wave_equation_evolution(wave_function, interval, save_file=None, N=1024
 
     if sim_dimension == 1:
         anim = plot_1D_wavefunction_evolution(
-            x=wave_function.grids[0],
-            vlna=wave_function,
-            dx=wave_function.dx[0],
-            num_steps=wave_function.num_steps,
+            wave_function=wave_function,
             interval=interval,
             save_file=save_file,
         )
         return anim
     elif sim_dimension == 2:
         anim = plot_2D_wavefunction_evolution(
-            x=wave_function.grids[0],
-            y=wave_function.grids[1],
-            psi_0=wave_function.psi_0,
-            propagator_x=wave_function.propagator,
-            propagator_y=wave_function.propagator,
-            dx=wave_function.dx[0],
-            num_steps=wave_function.num_steps,
+            wave_function=wave_function,
             interval=interval,
             save_file=save_file,
-            N=N
+            N=N,
         )
         return anim
     elif sim_dimension == 3:

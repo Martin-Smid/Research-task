@@ -11,25 +11,19 @@ N = 1024  # Number of spatial points
 # Initialize the Wave_function instance
 vlna = Wave_function(
     packet_type="gaussian",
+    momenta=[20],
     means=[0],
     st_deviations=[0.1],
     dim=1,  # 1D wave function
     boundaries=[(a, b)],
     N=N,
     h=0.1,
-    total_time=100
+    total_time=10
 )
 
 
 
-# Animate the wavefunction evolution
-anim = plot_1D_wavefunction_evolution(
-    x=vlna.grids[0],
-    vlna=vlna,
-    num_steps=vlna.num_steps,
-    interval=20,  # Frame interval in milliseconds
-    save_file="wavefunction_evolution.mp4",  # Optional: save the animation
-    dx=vlna.dx[0]
-)
 
+anim = plot_wave_equation_evolution(vlna, interval=20, save_file="wave_equation_evolution.mp4", N=N)
+print(anim)
 

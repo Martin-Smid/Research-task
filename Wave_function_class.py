@@ -74,7 +74,16 @@ class Simulation_parameters():
 
 
 class Wave_function(Simulation_parameters):
-    def __init__(self, packet_type="gaussian", means=[0], st_deviations=[0.1], **kwargs):
+    def __init__(self, packet_type="gaussian", momenta=[0], means=[0], st_deviations=[0.1], **kwargs):
+        """
+        Initialize a wavefunction with custom momenta for arbitrary dimensions.
+
+        Parameters:
+            packet_type (str): Type of wave packet (e.g., "gaussian").
+            momenta (list): Initial momenta along each dimension.
+            means (list): Means for the wave packet (one value per dimension).
+            st_deviations (list): Standard deviations for the wave packet (one value per dimension).
+        """
         # Call the parent (Simulation_parameters) initializer
         super().__init__(**kwargs)
 
@@ -82,22 +91,40 @@ class Wave_function(Simulation_parameters):
         self.packet_type = packet_type
         self.means = means
         self.st_deviations = st_deviations
+        self.momenta = momenta  # Added momentum parameter
         self.psi_0 = self.create_psi_0()
-        self.k_space = self.create_k_space()  # Generate the k-space
+        self.k_space = self.create_k_space()  # Generate the k-space grid
         self.psi_k = self.transform_psi_0_to_k_space()
-        self.propagator = self.compute_propagator()  # Default propagator (can be set later)
-
+        self.propagator = self.compute_propagator()  # Compute propagator (can be updated later)
 
     def compute_propagator(self, potential=None, mass=1.0):
-        """Create the time evolution propagator based on the wave's k-space."""
-        if potential is None:  # Example: Free evolution propagator
-            k_squared_sum = sum(k**2 for k in self.k_space)  # Sum of squares of all k-space dimensions
-            self.propagator = cp.exp(-1j * (self.h / 2) * (k_squared_sum) / mass)
-        else:
-            # Example: With potential (needs spatial grid)
-            k_squared_sum = sum(k**2 for k in self.k_space)  # Sum of squares of all k-space dimensions
-            self.propagator = cp.exp(-1j * self.h * (potential + (k_squared_sum) / (2 * mass)))
-        return self.propagator
+        """
+        Create the time evolution propagator based on the wave's k-space and momentum.
+
+        Parameters:
+            potential (cp.ndarray, optional): Potential energy grid for position-space evolution. Defaults to None (free evolution).
+            mass (float, optional): Particle mass. Defaults to 1.0.
+
+        Returns:
+            cp.ndarray: The time evolution propagator.
+        """
+        # Validate momentum dimensions
+        if len(self.momenta) != self.dim:
+            raise ValueError(f"Expected {self.dim} momenta in the format [p1, p2, ...], but got {len(self.momenta)}.")
+
+        # Adjust the propagator using k-space and momenta
+        k_shifted = [k + (momentum / (2 * cp.pi)) for k, momentum in zip(self.k_space, self.momenta)]
+        k_squared_sum = sum(k ** 2 for k in k_shifted)
+
+        # Create the propagator for free evolution or with a potential
+        propagator = cp.exp(-1j * (self.h / 2) * (k_squared_sum) / mass)
+
+        # Include potential if provided
+        if potential is not None:
+            propagator *= cp.exp(-1j * potential * self.h)
+
+        self.propagator = propagator  # Store the computed propagator
+        return propagator
 
     def create_psi_0(self):
         """Validates the format of the inputted means and standard deviations
@@ -146,3 +173,4 @@ class Wave_function(Simulation_parameters):
         """Performs the Fourier transform of the initial wavefunction to obtain psi_k."""
         self.psi_k = cp.fft.fftn(self.psi_0)  # N-dimensional Fourier Transform
         return self.psi_k
+

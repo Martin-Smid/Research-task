@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import cupy as cp
 import numpy as np
 from matplotlib.animation import FuncAnimation
+from scipy.special import hermite, factorial
+
 
 def gaussian_packet(x, x_0, sigma_0):
     """Function which returns gaussian packet at position x.
@@ -14,14 +16,79 @@ def normalize_wavefunction(psi, dx):
     psi /= cp.sqrt(cp.sum(cp.abs(psi) ** 2) * dx)
     return psi
 
-def quadratic_potential(*grid, omega=1.0):
+def quadratic_potential(*grid,mass = 1, omega=1.0):
     """
     Compute the potential V(r) = 1/2 * omega^2 * r^2 for arbitrary dimensions.
     """
+    # center it for the wave package x-x_0, y-y_0
     r2 = sum(g ** 2 for g in grid)  # r² = x² + y² (or higher dimensions)
-    return 0.5 * omega ** 2 * r2
+    potential = 0.5 * mass * omega ** 2 * r2
+
+    return 0.5 * mass *omega ** 2 * r2
 
 
+
+
+def plot_wave_function(wave_function_instance, time_step=None, dimension_slice=None):
+    """
+    Plots the magnitude of a wave function at a specified time step.
+
+    Parameters:
+        wave_function_instance (Wave_function): An instance of the Wave_function class.
+        time_step (int, optional): Time step index to evolve and plot (default=None, current state of wavefunction).
+        dimension_slice (tuple, optional): Used for 3D+ data. Tuple of dimension index and slice index.
+                                           Example: (2, 50) would slice the 3rd dimension at index 50.
+
+    Returns:
+        None
+    """
+    # Ensure time_step is valid
+    if time_step is not None:
+        if not isinstance(time_step, int) or time_step < 0:
+            raise ValueError("time_step must be a non-negative integer.")
+
+        # Evolve to the requested time step if necessary
+        current_step = wave_function_instance.num_steps_performed if hasattr(wave_function_instance,
+                                                                             'num_steps_performed') else 0
+        if time_step > current_step:
+            # Evolve forward from the current state
+            for _ in range(time_step - current_step):
+                wave_function_instance.psi_0 = wave_function_instance.evolve_wavefunction_split_step(
+                    wave_function_instance.psi_0)
+            # Update the number of steps performed
+            wave_function_instance.num_steps_performed = time_step
+        elif time_step < current_step:
+            raise ValueError("Cannot evolve backward. Reset the wave function, then re-evolve to the desired step.")
+
+    # Use the current wave function state (already evolved to the requested step, if any)
+    evolved_psi = wave_function_instance.psi_0
+
+    # Convert to NumPy array for plotting
+    psi_real = cp.asnumpy(np.abs(evolved_psi))  # |ψ| magnitude
+
+    # Handle dimensional slicing for 3D+ data
+    if wave_function_instance.dim > 2:
+        if dimension_slice is None:
+            raise ValueError(
+                "For dimensions higher than 2, specify dimension_slice=(index, slice_position) to reduce dimensionality."
+            )
+        dim_idx, slice_idx = dimension_slice
+        psi_real = psi_real.take(indices=slice_idx, axis=dim_idx)  # Extract slice along the provided dimension
+
+    # Create the grid in host memory (NumPy format)
+    grids = [cp.asnumpy(g) for g in wave_function_instance.grids]
+
+    # 2D (or reduced to 2D after slicing) plots
+    if wave_function_instance.dim == 2 or len(psi_real.shape) == 2:
+        plt.pcolor(grids[0], grids[1], psi_real, shading='auto')
+        plt.colorbar(label="|ψ| (Magnitude)")
+        plt.xlabel("x-axis")
+        plt.ylabel("y-axis")
+        plt.title(f"Wave Function Magnitude at Time Step {time_step}")
+    else:
+        raise ValueError("Plotting for dimensions higher than 2 requires slicing to 2D with dimension_slice.")
+
+    plt.show()
 
 
 
@@ -347,3 +414,71 @@ def plot_wave_equation_evolution(wave_function, interval, save_file=None, N=1024
             save_file=save_file,
         )
         return anim
+
+
+
+def coefficient_2d(nx, ny, m=1, omega=1, hbar=1):
+    """Calculate the normalization constant C(nx, ny)."""
+    beta = np.sqrt(m * omega / hbar)
+    factor = (beta ** 2 / np.pi) ** 0.5  # Normalization factor
+    denom = np.sqrt(2 ** (nx + ny) * factorial(nx) * factorial(ny))  # Hermite polynomial normalization
+    return factor / denom
+
+
+def energy_2d(nx, ny, omega=1, hbar=1):
+    """Calculate the energy of the 2D quantum state."""
+    return hbar * omega * (nx + ny + 1)
+
+
+def lin_harmonic_oscilator_2D(wabe_function_instance):
+    """
+    Create the wavefunction psi_0 for a 2D linear harmonic oscillator.
+
+    Parameters:
+        wabe_function_instance: Wavefunction parameters from class Wave_function.
+
+    Returns:
+        psi_0: The 2D wavefunction.
+    """
+    # Extract information from Wave_function params
+    grids = wabe_function_instance.grids  # CuPy 1D grids for x and y dimensions
+    N = wabe_function_instance.N
+    means = wabe_function_instance.means
+    st_devs = wabe_function_instance.st_deviations
+    dx = wabe_function_instance.dx
+
+    nx = 0  # Quantum number for x-axis
+    ny = 0  # Quantum number for y-axis
+
+    # Assume relevant parameters are passed from LHO initialization
+    beta = 1  # β parameter for scaling (can be tweaked)
+
+    # Shift grids and compute scaled values
+    X, Y = cp.meshgrid(grids[0], grids[1], indexing='ij')
+    X_shifted = X - means[0]
+    Y_shifted = Y - means[1]
+
+    # Convert to numpy if needed for Hermite polynomial calculation
+    X_shifted_numpy = cp.asnumpy(X_shifted)
+    Y_shifted_numpy = cp.asnumpy(Y_shifted)
+
+    # Compute Hermite polynomials using scipy.special.hermite
+    Hx = hermite(nx)(beta * X_shifted_numpy)  # Hermite polynomial for x
+    Hy = hermite(ny)(beta * Y_shifted_numpy)  # Hermite polynomial for y
+
+    # Convert Hermite polynomial results back to CuPy arrays
+    Hx = cp.array(Hx)
+    Hy = cp.array(Hy)
+
+    # Compute the Gaussian factor
+    gaussian_factor_x = cp.exp(-0.5 * (beta * X_shifted) ** 2)
+    gaussian_factor_y = cp.exp(-0.5 * (beta * Y_shifted) ** 2)
+
+    # Combine to compute the full wavefunction
+    psi_0 = Hx * Hy * gaussian_factor_x * gaussian_factor_y
+
+    # Normalize the wavefunction
+    dx_total = cp.prod(cp.array(dx))
+    psi_0 = normalize_wavefunction(psi_0, dx_total)
+
+    return psi_0

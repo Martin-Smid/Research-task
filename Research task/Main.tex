@@ -1,0 +1,289 @@
+\documentclass[a4paper,12pt]{report}
+
+% Language support
+\usepackage[english,czech]{babel} % Primary language is English
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+
+% Mathematical packages
+\usepackage{amsmath, amssymb, mathrsfs, esdiff}
+
+% Formatting and layout
+\usepackage{geometry}
+\geometry{verbose,tmargin=1.5cm,bmargin=2cm,lmargin=2cm,rmargin=2cm}
+\usepackage{indentfirst}
+\usepackage{calc}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{float}
+\usepackage{fancyhdr}
+\usepackage{mathrsfs} 
+\pagestyle{plain}
+
+% Hyperlinks
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    citecolor=blue,
+    filecolor=blue,
+    linkcolor=blue,
+    urlcolor=blue
+}
+
+% Graphics and tables
+\usepackage{graphicx, epsfig, adjustbox, svg}
+\usepackage[export]{adjustbox}
+\usepackage{caption, subcaption}
+\usepackage{booktabs}
+\captionsetup[table]{skip=10pt}
+\usepackage{multirow}
+\usepackage{siunitx}
+
+% Code highlighting
+\usepackage{listings}
+\usepackage{xcolor}
+\lstset{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    stringstyle=\color{red},
+    commentstyle=\color{gray},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    stepnumber=1,
+    numbersep=5pt,
+    backgroundcolor=\color{lightgray!20},
+    frame=single,
+    breaklines=true,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=4,
+    captionpos=b
+}
+
+% PDF inclusion
+\usepackage{pdfpages}
+
+% Customization of section titles
+\addto\captionsenglish{
+    \renewcommand{\listfigurename}{List of Figures}
+    \renewcommand{\listtablename}{List of Tables}
+    \renewcommand{\contentsname}{Contents}
+    \renewcommand{\chaptername}{Chapter}
+}
+
+% Page and paragraph formatting
+\setlength{\parindent}{15pt}
+\setlength{\parskip}{4pt}
+\frenchspacing
+
+% Optional imports for advanced functionality
+\usepackage{rotating} % Rotating objects
+\usepackage{footmisc} % Advanced footnote options
+\usepackage{gensymb}  % Degree symbol and similar
+
+% Optional: header and footer customization (remove if not needed)
+\lhead{}
+\chead{}
+\rhead{}
+\lfoot{}
+\cfoot{\thepage}
+\rfoot{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+
+
+
+%----------------------------COMMANDY----------------------------------------------
+\newcommand{\cvut}{České vysoké učení technické v Praze }
+\newcommand{\fjfi}{Fakulta jaderná a fyzikálně inženýrská}
+\newcommand{\kdaiz}{Katedra fyziky}
+\newcommand{\studijniprogram}{Jaderná a částicová fyzika}
+\newcommand{\nazeven}{Propagation of ultra-high energy cosmic rays in the Universe for the case of heavy composition of primary particles}    
+\newcommand{\nazevcz}{}  
+\newcommand{\autor}{Martin Šmíd}      
+\newcommand{\rok}{2023/2024}        
+\newcommand{\vedouci}{}     
+\newcommand{\pracoviste}{FZÚ AV ČR} 
+\newcommand{\klicova}{k}  
+\newcommand{\keyword}{U}
+\newcommand{\konzultant}{asi taky Ing. Alena Bakalová, Ph.D.} 
+\newcommand{\abstrCZ}{K } 
+
+\newcommand{\abstrEN}{Cosmic rays, discovered over a century ago, continue to be a phenomenon surrounded by unresolved questions. One of the primary questions is how these particles can be accelerated to ultra-high energy cosmic rays (UHECR), i.e. cosmic rays with $E \ge 10^{18}$~eV, and what processes contribute to their origin. To determine the sources of UHECRs, it is essential to study how cosmic rays evolve as they propagate through the universe.  It is believed that sources of UHECRs are of extragalactic origin. Therefore, they are influenced by various processes during their propagation in both galactic and extragalactic space.
+
+This work focuses on the effects of cosmic ray propagation through the universe, particularly on the energy losses that occur due to interactions with ambient photon fields. Using Monte Carlo simulations, we identify the characteristics of cosmic ray sources capable of producing the heavy primary particles observed on Earth at the highest energies. }
+\hypersetup{
+ colorlinks=false,
+ linkbordercolor={0 0 1},
+ citebordercolor={0 0 1},
+ urlbordercolor={0 0 1},
+}
+
+\newcommand{\na}[1]{\ensuremath{^{#1}}}
+
+
+\begin{document}
+	
+\thispagestyle{empty}
+%------------------------------------ÚVODNÍ STRANA------------------------------------
+\begin{center}
+  {\Large \bf \cvut\\[2mm] \fjfi\\ }
+  \vspace{3mm}
+  
+  {\large \bf \kdaiz}\\
+   \vspace{2mm} 
+%  {\bf Obor: \obor}\\
+  
+  \vspace{0mm}
+
+\begin{figure}[h]
+\begin{center}
+	\includegraphics[scale=1.5]{cvut.jpg}
+	% Je potřeba si stáhnout znak ČVUT a přidat ho k tomu souboru
+\end{center}
+\end{figure}
+
+  \vspace{5mm}
+
+%  {\LARGE \bf \nazevcz\vspace{8mm}\par \Large \nazeven}
+
+  \vspace{0mm}
+  {\Huge\textbf{Bakalářská práce}}
+
+  \vspace{15mm}
+  {\Large \textbf{\nazevcz}} \par 
+  \vspace{15mm}
+  {\Large \textbf{\nazeven}}
+  
+\end{center}
+
+  \vfill
+  {\large
+  \begin{tabular}{ll}
+  Autor: & \autor\\
+  Vedoucí: & \vedouci\\
+  Akademický rok: & \rok
+  \end{tabular}
+  }
+% \end{center}
+%-------------------------------------------------------------------------------------------------
+
+\newpage 
+\thispagestyle{empty} 
+
+
+\noindent
+
+\includepdf[pages={-}]{zadání/smid.pdf}
+
+\newpage 
+\thispagestyle{empty} 
+%---------------------------------------------------------------------------------------------
+
+\newpage 
+\thispagestyle{empty} 
+
+
+\noindent
+
+\includepdf[pages={-}]{zadání/BP_Prohlaseni_o_samostatnem_vypracovani_podepsano.pdf}
+
+\newpage 
+\thispagestyle{empty} 
+%----------------------------------------------------------------
+
+           
+              
+
+%---------------------------------------------------------------------------------------
+
+
+\newpage
+\thispagestyle{empty}
+
+{
+	\setlength{\parindent}{0pt}
+	
+	\textit{Název práce:}
+	\textbf{\nazevcz} \\
+	\textit{Autor:} \autor \\Moja bakalářka (Copy)
+	\textit{Studijní program:} \studijniprogram \\
+	
+	\textit{Druh práce:} Bakalářská práce \\
+	
+	\textit{Vedoucí práce:} \vedouci, \pracoviste \\
+	
+	
+	
+	\textit{Abstrakt:} 
+	\abstrCZ \\
+	
+	\textit{Klíčová slova:} \klicova
+}
+%----------------------------------------------------------------------------------
+\newpage
+\thispagestyle{empty}
+{
+	\setlength{\parindent}{0pt}
+\textit{Title:}
+\textbf{\nazeven} \\
+
+\textit{Author:} \autor \\
+
+\textit{Abstract:} 
+\abstrEN \\
+
+\textit{Key words:} \keyword
+}
+
+\newpage 
+\thispagestyle{empty} 
+
+
+~ 
+\vfill 
+
+{\bf \noindent Poděkování} 
+
+\vspace{0.5cm} 
+Rád bych poděkoval své vedoucí bakalářské práce, paní Ing. Aleně Bakalové, Ph.D., za její neocenitelnou pomoc, ochotu a především trpělivost, kterou mi věnovala při tvorbě této práce.
+
+
+\tableofcontents
+%-------------------------------------------------------------------------------------
+\newpage
+
+
+%------------------------------------------------------------------------------------
+\newpage
+
+
+
+\newpage  
+
+%\chapter*{Úvod}
+%  XXXXXXXXXXXXXXXXXXXXXXX
+%
+%\newpage
+
+\chapter*{Introduction}
+    \input{tex/Intro}
+
+
+%--------------------------------------------SEM NESAHAT-----------------------------
+
+
+
+
+
+
+
+
+
+\bibliographystyle{JHEP}
+\bibliography{bibliography}
+
+\end{document} 

@@ -1,8 +1,8 @@
 import cupy as cp
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
-from Schrodinger_eq_functions import *
-from Wave_function_class import *
+from resources.Schrodinger_eq_functions import *
+from resources.Wave_function_class import *
 
 
 boundaries = [(-1,1), (-1,1)]
@@ -19,12 +19,12 @@ twoD_wave_function = Wave_function(
     means=[0.0, 0.0],
     st_deviations=[0.1, 0.1],
     momenta=[0, 0],  # Zero initial momentum
-    potential=None
+    potential=quadratic_potential
 )
 
 
 
 
 
-anim = plot_wave_equation_evolution(twoD_wave_function, interval=20, save_file="Awave_equation_evolution.mp4", N=1024)
+anim = plot_wave_equation_evolution(twoD_wave_function, interval=20, save_file="anim_videos/pot_wave_equation_evolution.mp4", N=1024)
 print(anim)

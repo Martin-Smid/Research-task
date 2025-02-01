@@ -10,16 +10,16 @@ import numpy as np
 
 
 # Example Usage
-x_vals = np.linspace(-10, 10, 500)
-y_vals = np.linspace(-10, 10, 500)
+x_vals = np.linspace(-10, 10, 1024)
+y_vals = np.linspace(-10, 10, 1024)
 t = 0.5  # Time
 
 X, Y = np.meshgrid(x_vals, y_vals)
 psi_2d = Wave_function(
     dim=2,
     boundaries=[(-10, 10), (-10, 10)],
-    N=500,
-    total_time=1.0,  # Total simulation time
+    N=1024,
+    total_time=1,  # Total simulation time
     h=0.01,  # Time step
     packet_type="LHO",
     means=[0.0, 0.0],
@@ -27,9 +27,9 @@ psi_2d = Wave_function(
     momenta=[0, 0],
     potential=quadratic_potential # Free particle
 )
-T =0.01
+T =0.1
 
-psi_2d_evolved = psi_2d.psi_0 * np.exp(-1j * energy_2d(0,0,1,1)*T)
+psi_2d_evolved = psi_2d.psi_0 * np.exp(-1j * energy_nd([0,0],1,1)*T)
 
 
 
@@ -37,7 +37,7 @@ psi_2d_evolved = psi_2d.psi_0 * np.exp(-1j * energy_2d(0,0,1,1)*T)
 twoD_wave_function = Wave_function(
     dim=2,
     boundaries=[(-10, 10), (-10, 10)],
-    N=500,
+    N=1024,
     total_time=1.0,  # Total simulation time
     h=0.01,  # Time step
     packet_type="LHO",
@@ -49,7 +49,7 @@ twoD_wave_function = Wave_function(
 
 
 # Get the wavefunction value at time t = 0.01
-wave_t_001 = twoD_wave_function.wave_function_at_time(0.01)
+wave_t_001 = twoD_wave_function.wave_function_at_time(0.1)
 print(wave_t_001)
 # Print or inspect the result using CuPy arrays
 

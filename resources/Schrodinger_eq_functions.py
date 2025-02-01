@@ -174,7 +174,7 @@ def plot_1D_wavefunction_evolution(wave_function, interval=20, save_file=None):
 
     # Save the animation if a save file is specified
     if save_file:
-        anim.save(save_file, fps=10, extra_args=['-vcodec', 'libx264'])
+        anim.save(save_file, fps=20, extra_args=['-vcodec', 'libx264'])
 
     return anim
 
@@ -417,65 +417,66 @@ def plot_wave_equation_evolution(wave_function, interval, save_file=None, N=1024
 
 
 
-def coefficient_2d(nx, ny, m=1, omega=1, hbar=1):
-    """Calculate the normalization constant C(nx, ny)."""
+def coefficient_nd(n, m=1, omega=1, hbar=1):
+    """Calculate the normalization constant for N dimensions."""
     beta = np.sqrt(m * omega / hbar)
-    factor = (beta ** 2 / np.pi) ** 0.5  # Normalization factor
-    denom = np.sqrt(2 ** (nx + ny) * factorial(nx) * factorial(ny))  # Hermite polynomial normalization
+    factor = (beta ** 2 / np.pi) ** (len(n) / 2)  # Normalization factor for N dimensions
+    denom = np.sqrt(np.prod([2 ** ni * factorial(ni) for ni in n]))  # Hermite polynomial normalization
     return factor / denom
 
 
-def energy_2d(nx, ny, omega=1, hbar=1):
-    """Calculate the energy of the 2D quantum state."""
-    return hbar * omega * (nx + ny + 1)
-
-
-def lin_harmonic_oscilator_2D(wabe_function_instance):
+def energy_nd(n, omega=1, hbar=1):
     """
-    Create the wavefunction psi_0 for a 2D linear harmonic oscillator.
+    Calculate the energy of an n-dimensional quantum state.
 
     Parameters:
-        wabe_function_instance: Wavefunction parameters from class Wave_function.
+        n (list): Quantum numbers for each dimension [nx, ny, nz, ...].
+        omega (float): Oscillation frequency (default = 1).
+        hbar (float): Reduced Planck's constant (default = 1).
 
     Returns:
-        psi_0: The 2D wavefunction.
+        float: The total energy of the n-dimensional quantum state.
+    """
+    if not isinstance(n, list) or not all(isinstance(x, int) and x >= 0 for x in n):
+        raise ValueError("n must be a list of non-negative integers representing quantum numbers.")
+
+    return hbar * omega * (sum(n) + len(n) * 0.5)
+
+
+def lin_harmonic_oscillator(wave_function_instance):
+    """
+    Create the wave function psi_0 for an N-dimensional linear harmonic oscillator.
+
+    Parameters:
+        wave_function_instance: Wave function parameters from class Wave_function.
+
+    Returns:
+        psi_0: The N-dimensional wave function.
     """
     # Extract information from Wave_function params
-    grids = wabe_function_instance.grids  # CuPy 1D grids for x and y dimensions
-    N = wabe_function_instance.N
-    means = wabe_function_instance.means
-    st_devs = wabe_function_instance.st_deviations
-    dx = wabe_function_instance.dx
+    grids = wave_function_instance.grids  # CuPy 1D grids for each dimension
+    dim = wave_function_instance.dim
+    means = wave_function_instance.means
+    dx = wave_function_instance.dx
 
-    nx = 0  # Quantum number for x-axis
-    ny = 0  # Quantum number for y-axis
-
-    # Assume relevant parameters are passed from LHO initialization
+    quantum_numbers = [0] * dim  # Quantum numbers for each dimension
     beta = 1  # β parameter for scaling (can be tweaked)
 
-    # Shift grids and compute scaled values
-    X, Y = cp.meshgrid(grids[0], grids[1], indexing='ij')
-    X_shifted = X - means[0]
-    Y_shifted = Y - means[1]
+    gaussian_factors = []
+    hermite_polynomials = []
 
-    # Convert to numpy if needed for Hermite polynomial calculation
-    X_shifted_numpy = cp.asnumpy(X_shifted)
-    Y_shifted_numpy = cp.asnumpy(Y_shifted)
+    # Loop over dimensions to compute shifted grid, Hermite polynomial, and Gaussian factor
+    for i in range(dim):
+        shifted_grid = grids[i] - means[i]
+        shifted_grid_numpy = cp.asnumpy(shifted_grid)
+        H = hermite(quantum_numbers[i])(beta * shifted_grid_numpy)  # Compute Hermite polynomial
+        hermite_polynomials.append(cp.array(H))
+        gaussian_factors.append(cp.exp(-0.5 * (beta * shifted_grid) ** 2))
 
-    # Compute Hermite polynomials using scipy.special.hermite
-    Hx = hermite(nx)(beta * X_shifted_numpy)  # Hermite polynomial for x
-    Hy = hermite(ny)(beta * Y_shifted_numpy)  # Hermite polynomial for y
-
-    # Convert Hermite polynomial results back to CuPy arrays
-    Hx = cp.array(Hx)
-    Hy = cp.array(Hy)
-
-    # Compute the Gaussian factor
-    gaussian_factor_x = cp.exp(-0.5 * (beta * X_shifted) ** 2)
-    gaussian_factor_y = cp.exp(-0.5 * (beta * Y_shifted) ** 2)
-
-    # Combine to compute the full wavefunction
-    psi_0 = Hx * Hy * gaussian_factor_x * gaussian_factor_y
+    # Compute the full wavefunction as a product of Gaussian factors and Hermite polynomials
+    psi_0 = cp.ones_like(grids[0])
+    for i in range(dim):
+        psi_0 *= gaussian_factors[i] * hermite_polynomials[i]
 
     # Normalize the wavefunction
     dx_total = cp.prod(cp.array(dx))

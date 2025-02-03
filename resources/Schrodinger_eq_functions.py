@@ -13,7 +13,8 @@ def gaussian_packet(x, x_0, sigma_0):
 def normalize_wavefunction(psi, dx):
     """Normalize the wavefunction to ensure it stays normalized.
     intakes psi and dx"""
-    psi /= cp.sqrt(cp.sum(cp.abs(psi) ** 2) * dx)
+    dx_total = cp.prod(cp.array(dx))
+    psi /= cp.sqrt(cp.sum(cp.abs(psi) ** 2) * dx_total)
     return psi
 
 def quadratic_potential(*grid,mass = 1, omega=1.0):

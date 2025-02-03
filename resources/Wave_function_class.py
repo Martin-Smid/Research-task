@@ -122,7 +122,7 @@ class Wave_function(Simulation_parameters):
             # Build position-space grid to compute the potential
             grid = cp.meshgrid(*self.grids, indexing='ij')  # Handle dimensions automatically
             potential_values = potential(*grid)  # Apply the potential function to the grid
-            potential_propagator = cp.exp(-1j * self.h * potential_values)
+            potential_propagator = cp.exp(-1j * self.h * potential_values / 2)
 
         else:
             # If no potential, assume no effect (identity propagator)
@@ -168,7 +168,7 @@ class Wave_function(Simulation_parameters):
             dx_total = cp.prod(cp.array(self.dx))  # Total grid spacing in all dimensions
             psi_0 = normalize_wavefunction(psi_0, dx_total)
 
-            return psi_0  # Returns a normalized `psi_0`
+            return psi_0 + 0j  # Ensures complex128 type for `psi_0`
         if self.packet_type == "LHO":
             # Compute ψ₀ for the first dimension
             psi_0 = lin_harmonic_oscillator(self)
@@ -181,11 +181,11 @@ class Wave_function(Simulation_parameters):
             # Normalize the wavefunction over all dimensions
             dx_total = cp.prod(cp.array(self.dx))  # Total grid spacing in all dimensions
             psi_0 = normalize_wavefunction(psi_0, dx_total)
-            return psi_0
+            return psi_0 + 0j  # Ensures complex128 type for `psi_0`
 
     def create_k_space(self):
         """Creates the k-space (wave vector space) for any arbitrary number of dimensions."""
-        k_components = [cp.fft.fftfreq(self.N, d=self.dx[i]) for i in range(self.dim)]
+        k_components = [2*cp.pi*cp.fft.fftfreq(self.N, d=self.dx[i]) for i in range(self.dim)]
         k_space = cp.meshgrid(*k_components, indexing='ij')  # Create multidimensional k-space
         return k_space
 
@@ -197,7 +197,7 @@ class Wave_function(Simulation_parameters):
     def evolve_wavefunction_split_step(self, psi, mass=1.0):
         """
         Evolve the wavefunction using the split-step Fourier method, alternating
-        between kinetic and potential propagators.
+        between potential and kinetic propagators.
 
         Parameters:
             psi (cp.ndarray): Initial wave function.
@@ -206,18 +206,17 @@ class Wave_function(Simulation_parameters):
         Returns:
             cp.ndarray: Evolved wave function after one time step.
         """
-        # Apply half-step of kinetic evolution in Fourier space
-        psi_k = cp.fft.fftn(psi)  # Forward FFT
-        psi_k *= self.kinetic_propagator  # Kinetic propagator
-        psi = cp.fft.ifftn(psi_k)  # Inverse FFT back to real space
         psi *= self.potential_propagator  # Potential propagator
 
-        # Apply another half-step of kinetic evolution in Fourier space
+        # Apply kinetic evolution in Fourier space
         psi_k = cp.fft.fftn(psi)
         psi_k *= self.kinetic_propagator
         psi = cp.fft.ifftn(psi_k)
 
-        # Debug: print or log evolution steps (real and imaginary parts)
+
+        psi *= self.potential_propagator
+
+
         norm = cp.sum(cp.abs(psi) ** 2) * cp.prod(cp.array(self.dx))  # Total norm
         #print(f"Step norm: {norm}, Real Mean: {cp.mean(cp.real(psi))}, Imag Mean: {cp.mean(cp.imag(psi))}")
 

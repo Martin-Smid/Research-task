@@ -72,7 +72,6 @@ for _ in range(len(twoD_wave_function.wave_function_at_time(0))):
     diff = cp.abs(twoD_wave_function.wave_function_at_time(0)[_] - wave_t_001[_])
     print(diff)
 '''
-'''
+ 
 anim = plot_wave_equation_evolution(twoD_wave_function, interval=20, save_file="anim_videos/pot_wave_equation_evolution.mp4", N=1024)
 print(anim)
-'''

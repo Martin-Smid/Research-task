@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from resources.Wave_function_class import *
 from resources.Schrodinger_eq_functions import *
+from resources.system_fucntions import *
 
 
 # Setup parameters for the domain
@@ -19,7 +20,7 @@ vlna = Wave_function(
     boundaries=[(a, b)],
     N=N,
     h=0.01,
-    total_time=10,
+    total_time=5000,
     potential=quadratic_potential
 )
 
@@ -33,9 +34,6 @@ plt.show()
 
 
 
-# Assuming the rest of Wave_function setup is already complete
-
-# Initialize x_vals for spatial domain
 x_vals = np.linspace(a,b,N,endpoint=False)
 
 # Arrays to store results
@@ -92,7 +90,7 @@ plt.show()
 # Create the first plot: Differences in magnitude
 plt.figure(figsize=(12, 6))
 
-plt.plot(times, differences_N, c='k', label='Numerical |ψ|²', alpha=0.7)
+plt.plot(times, differences_N , c='k', label='Numerical |ψ|²', alpha=0.7)
 plt.plot(times, differences_A, c='magenta', label='Analytical |ψ|²', alpha=0.7)
 
 # Plot for the first method
@@ -103,11 +101,12 @@ plt.scatter(times, real_imag_1['imag'], c='darkgreen', label='Imaginary Part (An
 plt.plot(times, real_imag_2['real'], c='lightblue', label='Real Part (Numerical)', alpha=0.7)
 plt.plot(times, real_imag_2['imag'], c='darkblue', label='Imaginary Part (Numerical)', alpha=0.7)
 
-plt.title('Absolute value, Real and Imaginary Parts of Wave Functions Over Time at x=0.0')
+plt.title('Avolute value, Real and Imaginary Parts of Wave Functions Over Time at x=0.0')
 plt.xlabel('Time')
 plt.ylabel('Mean Value')
 plt.axhline(0, color='black', linestyle='--', linewidth=0.5)  # Reference line at 0
 plt.legend()
 plt.grid()
 plt.show()
+
 

@@ -97,8 +97,13 @@ class Wave_function(Simulation_parameters):
         self.psi_evolved = self.psi_0  # Initialize the evolved wave function
 
         self.k_space = self.create_k_space()  # Generate the k-space grid
+
+
         self.psi_k = self.transform_psi_0_to_k_space()
         self.kinetic_propagator, self.potential_propagator = self.compute_propagators(self.potential,mass=1)  # Compute propagator (can be updated later)
+
+        self.wave_values = []
+
         self.evolve()
 
     def compute_propagators(self, potential=None, mass=1.0):
@@ -115,7 +120,7 @@ class Wave_function(Simulation_parameters):
         # Kinetic propagator in Fourier space
         k_shifted = [k + (momentum / (2 * cp.pi)) for k, momentum in zip(self.k_space, self.momenta)]
         k_squared_sum = sum(k ** 2 for k in k_shifted)
-        kinetic_propagator = cp.exp(-1j * (self.h / 2) * k_squared_sum / mass)
+        kinetic_propagator = cp.exp(-1j * (self.h /2) * k_squared_sum / mass)
 
         # Potential propagator in real space
         if potential is not None:
@@ -225,20 +230,29 @@ class Wave_function(Simulation_parameters):
 
     def evolve(self):
         """
-            Perform the full time evolution for the wave function using the split-step Fourier method.
+        Perform the full time evolution for the wave function using the split-step Fourier method.
 
-            This method updates the wave function (`self.psi_0`) as it evolves in time.
+        This method updates the wave function (`self.psi_evolved`) as it evolves in time and stores
+        the wave function at each time step in `self.wave_values`.
 
-            Returns:
-                None
-            """
+        Returns:
+            None
+        """
         psi = self.psi_0  # Start with the initial wave function
-        self.psi_evolved = psi  # Start evolution from the initial wave function
+        self.psi_evolved = psi  # Start evolution with the initial state
+
+        # Store the initial state in the wave_values list
+        self.wave_values.append(self.psi_evolved.copy())
 
         for _ in range(self.num_steps):
+            # Evolve the wave function for one step
+            psi = self.evolve_wavefunction_split_step(self.psi_evolved)
 
-            psi = self.evolve_wavefunction_split_step(self.psi_evolved)  # Evolve for one step
-            self.psi_evolved = psi  # Update the evolved wave function state
+            # Update the evolved state
+            self.psi_evolved = psi
+
+            # Append the wave function at this step to the wave_values list
+            self.wave_values.append(self.psi_evolved.copy())
 
     def wave_function_at_time(self, time):
         """
@@ -254,15 +268,20 @@ class Wave_function(Simulation_parameters):
             raise ValueError("Specified time is out of bounds: must be in [0, total_time].")
 
         steps = int(time / self.h)  # Calculate the number of steps to evolve
-        psi = self.psi_0  # Start from the initial wave function
 
+        # If the wave function for the requested time has already been computed
+        if len(self.wave_values) > steps:
+            return self.wave_values[steps]  # Retrieve from the precomputed list
+
+        # Otherwise, recompute and return the wave function at the specific time
+        psi = self.psi_0  # Start with the initial wave function
         for _ in range(steps):
-            psi = self.evolve_wavefunction_split_step(psi)  # Evolve for one step
+            psi = self.evolve_wavefunction_split_step(psi)
 
-            # Always normalize the wave function after evolution step
+            # Normalize the wave function at each step
             dx_total = cp.prod(cp.array(self.dx))
             psi = normalize_wavefunction(psi, dx_total)
-        print(f"psi at a step {steps} is:{psi} with mean {cp.mean(cp.real(psi))}")
-        return psi  # Return the wave function at the specified time
+
+        return psi
 
 

@@ -36,7 +36,7 @@ def plot_wave_function(wave_function_instance, time_step=None, dimension_slice=N
 
     Parameters:
         wave_function_instance (Wave_function): An instance of the Wave_function class.
-        time_step (int, optional): Time step index to evolve and plot (default=None, current state of wavefunction).
+        time_step (int, optional): Time step index to evolve and plot (default=None, current state of wave function).
         dimension_slice (tuple, optional): Used for 3D+ data. Tuple of dimension index and slice index.
                                            Example: (2, 50) would slice the 3rd dimension at index 50.
 
@@ -125,32 +125,40 @@ def plot_1D_wavefunction_evolution(wave_function, interval=20, save_file=None):
         V_numpy = None  # No potential
 
     # Initialize the figure and plot elements
-    fig, axs = plt.subplots(3, figsize=(10, 10))
+    fig, axs = plt.subplots(2, figsize=(10, 10))  # Only 2 subplots now
     fig.suptitle("1D Wavefunction Evolution", fontsize=14)
 
     # Configure subplots
-    labels = ['|ψ|²', 'Re(ψ)', 'Im(ψ)']
-    colors = ['green', 'blue', 'red']
-    lines = []
-    for ax, label, color in zip(axs, labels, colors):
-        ax.set_xlim(x_numpy[0], x_numpy[-1])
-        ax.set_ylim(-7, 7)
-        ax.set_xlabel('x')
-        ax.set_ylabel(label)
-        line, = ax.plot([], [], color=color, label=label)
-        ax.legend()
-        lines.append(line)
 
-        # If there is a potential, plot it as a dashed line in the |ψ|² plot
-        if label == '|ψ|²' and V_numpy is not None:
-            ax.plot(x_numpy, V_numpy, color="black", linestyle="--", label="V(x)")
-            ax.legend()
+    # Plot for |ψ|² (magnitude squared)
+    axs[0].set_xlim(x_numpy[0], x_numpy[-1])
+    axs[0].set_ylim(0, 7)
+    axs[0].set_xlabel("x")
+    axs[0].set_ylabel("|ψ|²")
+    axs[0].legend()
+    abs2_line, = axs[0].plot([], [], color="green", label="|ψ|²")
+    axs[0].legend()
+
+    # If a potential is provided, plot as dashed line on the |ψ|² subplot
+    if V_numpy is not None:
+        axs[0].plot(x_numpy, V_numpy, color="black", linestyle="--", label="V(x)")
+        axs[0].legend()
+
+    # Plot for Re(ψ) and Im(ψ)
+    axs[1].set_xlim(x_numpy[0], x_numpy[-1])
+    axs[1].set_ylim(-7, 7)
+    axs[1].set_xlabel("x")
+    axs[1].set_ylabel("ψ")
+    real_line, = axs[1].plot([], [], color="blue", label="Re(ψ)")
+    imag_line, = axs[1].plot([], [], color="red", label="Im(ψ)")
+    axs[1].legend()
 
     def init():
         """Initialize the plot elements."""
-        for line in lines:
-            line.set_data([], [])
-        return lines
+        abs2_line.set_data([], [])
+        real_line.set_data([], [])
+        imag_line.set_data([], [])
+        return abs2_line, real_line, imag_line
 
     def update(step):
         """Update the plot for each frame."""
@@ -160,13 +168,15 @@ def plot_1D_wavefunction_evolution(wave_function, interval=20, save_file=None):
         psi_imag = cp.asnumpy(cp.imag(psi))
         psi_abs2 = cp.asnumpy(cp.abs(psi) ** 2)
 
-        # Update plot lines
-        lines[0].set_data(x_numpy, psi_abs2)
-        lines[1].set_data(x_numpy, psi_real)
-        lines[2].set_data(x_numpy, psi_imag)
+        # Update magnitude plot
+        abs2_line.set_data(x_numpy, psi_abs2)
+
+        # Update real and imaginary part plot
+        real_line.set_data(x_numpy, psi_real)
+        imag_line.set_data(x_numpy, psi_imag)
 
         fig.suptitle(f"1D Wavefunction Evolution - Step {step}")
-        return lines
+        return abs2_line, real_line, imag_line
 
     # Create the animation
     anim = FuncAnimation(
@@ -178,6 +188,7 @@ def plot_1D_wavefunction_evolution(wave_function, interval=20, save_file=None):
         anim.save(save_file, fps=20, extra_args=['-vcodec', 'libx264'])
 
     return anim
+
 
 
 
@@ -217,7 +228,7 @@ def plot_2D_wavefunction_evolution(wave_function, interval=20, save_file=None, N
         origin='lower',
         cmap='viridis',
         vmin=0,  # Minimum fixed at 0
-        vmax=5
+        vmax=1
     )
     fig.colorbar(im, ax=ax)
 
@@ -236,7 +247,7 @@ def plot_2D_wavefunction_evolution(wave_function, interval=20, save_file=None, N
 
         # Update the heatmap with new |ψ|² data
         im.set_data(cp.asnumpy(psi_abs2))
-        im.set_clim(vmin=0, vmax=float(5))  # Dynamically adjust vmax based on max(|ψ|²)
+        im.set_clim(vmin=0, vmax=float(1))  # Dynamically adjust vmax based on max(|ψ|²)
         fig.suptitle(f"Wavefunction Evolution - Step {step}")
         return [im]
 

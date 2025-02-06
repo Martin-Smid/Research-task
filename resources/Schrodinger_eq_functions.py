@@ -32,10 +32,15 @@ def quadratic_potential(wave_function_instance):
     mass = wave_function_instance.mass  # Mass from the wave_function instance
     dim = wave_function_instance.dim
     omega = wave_function_instance.omega
-    print(mass,dim,omega)
 
-    r2 = sum(g ** 2 for g in grids)
+    grid = cp.meshgrid(*grids, indexing='ij')
+
+    # Compute r^2 from the multidimensional grid
+    r2 = sum(g ** 2 for g in grid)
+
+    # Return the computed quadratic potential
     return 0.5 * dim * mass * omega ** 2 * r2
+
 
 
 def coefficient_nd(n, m=1, omega=1, hbar=1):

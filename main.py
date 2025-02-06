@@ -20,7 +20,7 @@ vlna = Wave_function(
     boundaries=[(a, b)],
     N=N,
     h=0.01,
-    total_time=5,
+    total_time=5000,
     potential=quadratic_potential
 )
 

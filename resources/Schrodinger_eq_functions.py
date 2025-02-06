@@ -17,17 +17,98 @@ def normalize_wavefunction(psi, dx):
     psi /= cp.sqrt(cp.sum(cp.abs(psi) ** 2) * dx_total)
     return psi
 
-def quadratic_potential(*grid,mass = 1, omega=1.0):
+def quadratic_potential(wave_function_instance):
     """
-    Compute the potential V(r) = 1/2 * omega^2 * r^2 for arbitrary dimensions.
+    Compute the potential V(r) = 1/2 * omega^2 * r^2 for arbitrary dimensions
+    using the properties of a Wave_function instance.
+
+    Parameters:
+        wave_function_instance (Wave_function): An instance of the Wave_function class.
+
+    Returns:
+        cp.ndarray: The potential computed on the spatial grid.
     """
-    # center it for the wave package x-x_0, y-y_0
-    r2 = sum(g ** 2 for g in grid)  # r² = x² + y² (or higher dimensions)
-    potential = 0.5 * mass * omega ** 2 * r2
+    grids = wave_function_instance.grids  # Grids from the wave_function instance
+    mass = wave_function_instance.mass  # Mass from the wave_function instance
+    dim = wave_function_instance.dim
+    omega = wave_function_instance.omega
+    print(mass,dim,omega)
 
-    return 0.5 * mass *omega ** 2 * r2
+    r2 = sum(g ** 2 for g in grids)
+    return 0.5 * dim * mass * omega ** 2 * r2
 
 
+def coefficient_nd(n, m=1, omega=1, hbar=1):
+    """Calculate the normalization constant for N dimensions."""
+    beta = np.sqrt(m * omega / hbar)
+    factor = (beta ** 2 / np.pi) ** (len(n) / 2)  # Normalization factor for N dimensions
+    denom = np.sqrt(np.prod([2 ** ni * factorial(ni) for ni in n]))  # Hermite polynomial normalization
+    return factor / denom
+
+
+def energy_nd(n, omega=1, hbar=1):
+    """
+    Calculate the energy of an n-dimensional quantum state.
+
+    Parameters:
+        n (list): Quantum numbers for each dimension [nx, ny, nz, ...].
+        omega (float): Oscillation frequency (default = 1).
+        hbar (float): Reduced Planck's constant (default = 1).
+
+    Returns:
+        float: The total energy of the n-dimensional quantum state.
+    """
+    if not isinstance(n, list) or not all(isinstance(x, int) and x >= 0 for x in n):
+        raise ValueError("n must be a list of non-negative integers representing quantum numbers.")
+
+    return hbar * omega * (sum(n) + len(n) * 0.5)
+
+
+def lin_harmonic_oscillator(wave_function_instance):
+    """
+    Create the wave function psi_0 for an N-dimensional linear harmonic oscillator.
+
+    Parameters:
+        wave_function_instance: Wave function parameters from class Wave_function.
+
+    Returns:
+        psi_0: The N-dimensional wave function.
+    """
+    # Extract information from Wave_function params
+    grids = wave_function_instance.grids  # CuPy 1D grids for each dimension
+    dim = wave_function_instance.dim
+    means = wave_function_instance.means
+    dx = wave_function_instance.dx
+    mass = wave_function_instance.mass
+    omega = wave_function_instance.omega
+    h_bar = 1
+
+    quantum_numbers = [0] * dim  # Quantum numbers for each dimension
+    beta = np.sqrt((mass * omega) / h_bar)
+    print(beta)
+
+    gaussian_factors = []
+    hermite_polynomials = []
+
+    # Loop over dimensions to compute shifted grid, Hermite polynomial, and Gaussian factor
+    for i in range(dim):
+        shifted_grid = grids[i] - means[i]
+        shifted_grid_numpy = cp.asnumpy(shifted_grid)  # Convert to numpy array for Hermite computation
+        H_numpy = hermite(quantum_numbers[i])(beta * shifted_grid_numpy)  # Compute Hermite polynomial
+        H = cp.array(H_numpy)  # Convert back to CuPy array
+        hermite_polynomials.append(H)
+        gaussian_factors.append(cp.exp(-0.5 * (beta * shifted_grid) ** 2))
+
+    # Compute the full wavefunction as a product of Gaussian factors and Hermite polynomials
+    psi_0 = cp.ones_like(grids[0])
+    for i in range(dim):
+        psi_0 *= gaussian_factors[i] * hermite_polynomials[i]
+
+    # Normalize the wavefunction
+    dx_total = cp.prod(cp.array(dx))
+    psi_0 = normalize_wavefunction(psi_0, dx_total)
+
+    return psi_0
 
 
 def plot_wave_function(wave_function_instance, time_step=None, dimension_slice=None):
@@ -90,10 +171,6 @@ def plot_wave_function(wave_function_instance, time_step=None, dimension_slice=N
         raise ValueError("Plotting for dimensions higher than 2 requires slicing to 2D with dimension_slice.")
 
     plt.show()
-
-
-
-
 
 
 
@@ -192,10 +269,6 @@ def plot_1D_wavefunction_evolution(wave_function, interval=20, save_file=None):
 
 
 
-
-
-
-
 def plot_2D_wavefunction_evolution(wave_function, interval=20, save_file=None, N=1024):
     """
     Animate the time evolution of the wavefunction using the evolve method from the Wave_function class.
@@ -261,8 +334,6 @@ def plot_2D_wavefunction_evolution(wave_function, interval=20, save_file=None, N
         anim.save(save_file, fps=10, extra_args=['-vcodec', 'libx264'])
 
     return anim
-
-
 
 
 
@@ -373,12 +444,6 @@ def plot_3D_wavefunction_evolution(x, y, z, psi_0, propagator_x, propagator_y, p
 
 
 
-
-
-
-
-
-
 def plot_wave_equation_evolution(wave_function, interval, save_file=None, N=1024):
     """
     Plot the evolution of a wavefunction, supporting 1D, 2D, and 3D functions.
@@ -429,69 +494,5 @@ def plot_wave_equation_evolution(wave_function, interval, save_file=None, N=1024
 
 
 
-def coefficient_nd(n, m=1, omega=1, hbar=1):
-    """Calculate the normalization constant for N dimensions."""
-    beta = np.sqrt(m * omega / hbar)
-    factor = (beta ** 2 / np.pi) ** (len(n) / 2)  # Normalization factor for N dimensions
-    denom = np.sqrt(np.prod([2 ** ni * factorial(ni) for ni in n]))  # Hermite polynomial normalization
-    return factor / denom
 
 
-def energy_nd(n, omega=1, hbar=1):
-    """
-    Calculate the energy of an n-dimensional quantum state.
-
-    Parameters:
-        n (list): Quantum numbers for each dimension [nx, ny, nz, ...].
-        omega (float): Oscillation frequency (default = 1).
-        hbar (float): Reduced Planck's constant (default = 1).
-
-    Returns:
-        float: The total energy of the n-dimensional quantum state.
-    """
-    if not isinstance(n, list) or not all(isinstance(x, int) and x >= 0 for x in n):
-        raise ValueError("n must be a list of non-negative integers representing quantum numbers.")
-
-    return hbar * omega * (sum(n) + len(n) * 0.5)
-
-
-def lin_harmonic_oscillator(wave_function_instance):
-    """
-    Create the wave function psi_0 for an N-dimensional linear harmonic oscillator.
-
-    Parameters:
-        wave_function_instance: Wave function parameters from class Wave_function.
-
-    Returns:
-        psi_0: The N-dimensional wave function.
-    """
-    # Extract information from Wave_function params
-    grids = wave_function_instance.grids  # CuPy 1D grids for each dimension
-    dim = wave_function_instance.dim
-    means = wave_function_instance.means
-    dx = wave_function_instance.dx
-
-    quantum_numbers = [0] * dim  # Quantum numbers for each dimension
-    beta = 1  # β parameter for scaling (can be tweaked)
-
-    gaussian_factors = []
-    hermite_polynomials = []
-
-    # Loop over dimensions to compute shifted grid, Hermite polynomial, and Gaussian factor
-    for i in range(dim):
-        shifted_grid = grids[i] - means[i]
-        shifted_grid_numpy = cp.asnumpy(shifted_grid)
-        H = hermite(quantum_numbers[i])(beta * shifted_grid_numpy)  # Compute Hermite polynomial
-        hermite_polynomials.append(cp.array(H))
-        gaussian_factors.append(cp.exp(-0.5 * (beta * shifted_grid) ** 2))
-
-    # Compute the full wavefunction as a product of Gaussian factors and Hermite polynomials
-    psi_0 = cp.ones_like(grids[0])
-    for i in range(dim):
-        psi_0 *= gaussian_factors[i] * hermite_polynomials[i]
-
-    # Normalize the wavefunction
-    dx_total = cp.prod(cp.array(dx))
-    psi_0 = normalize_wavefunction(psi_0, dx_total)
-
-    return psi_0

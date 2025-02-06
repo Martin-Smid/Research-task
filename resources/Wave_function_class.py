@@ -74,7 +74,7 @@ class Simulation_parameters():
 
 
 class Wave_function(Simulation_parameters):
-    def __init__(self, packet_type="gaussian", momenta=[0], means=[0], st_deviations=[0.1],potential = None, **kwargs):
+    def __init__(self, packet_type="gaussian", momenta=[0], means=[0], st_deviations=[0.1],potential = None, mass = 1, omega = 1, **kwargs):
         """
         Initialize a wave function with custom momenta for arbitrary dimensions.
 
@@ -91,22 +91,23 @@ class Wave_function(Simulation_parameters):
         self.packet_type = packet_type
         self.potential = potential
         self.means = means
+        self.mass = mass
+        self.omega = omega
         self.st_deviations = st_deviations
         self.momenta = momenta  # Added momentum parameter
         self.psi_0 = self.create_psi_0()
         self.psi_evolved = self.psi_0  # Initialize the evolved wave function
 
+
         self.k_space = self.create_k_space()  # Generate the k-space grid
 
-
-        self.psi_k = self.transform_psi_0_to_k_space()
-        self.kinetic_propagator, self.potential_propagator = self.compute_propagators(self.potential,mass=1)  # Compute propagator (can be updated later)
+        self.kinetic_propagator, self.potential_propagator = self.compute_propagators()  # Compute propagator (can be updated later)
 
         self.wave_values = []
 
         self.evolve()
 
-    def compute_propagators(self, potential=None, mass=1.0):
+    def compute_propagators(self):
         """
         Create the time evolution propagators for both kinetic and (if provided) potential energy terms.
 
@@ -117,16 +118,18 @@ class Wave_function(Simulation_parameters):
         Returns:
             tuple: Kinetic and potential propagators as separate components.
         """
+
+        potential = self.potential
         # Kinetic propagator in Fourier space
         k_shifted = [k + (momentum / (2 * cp.pi)) for k, momentum in zip(self.k_space, self.momenta)]
         k_squared_sum = sum(k ** 2 for k in k_shifted)
-        kinetic_propagator = cp.exp(-1j * (self.h /2) * k_squared_sum / mass)
+        kinetic_propagator = cp.exp(-1j * (self.h /2) * k_squared_sum / self.mass)
 
         # Potential propagator in real space
         if potential is not None:
             # Build position-space grid to compute the potential
             grid = cp.meshgrid(*self.grids, indexing='ij')  # Handle dimensions automatically
-            potential_values = potential(*grid)  # Apply the potential function to the grid
+            potential_values = potential(self)  # Apply the potential function to the grid
             potential_propagator = cp.exp(-1j * self.h * potential_values / 2)
 
         else:
@@ -194,12 +197,8 @@ class Wave_function(Simulation_parameters):
         k_space = cp.meshgrid(*k_components, indexing='ij')  # Create multidimensional k-space
         return k_space
 
-    def transform_psi_0_to_k_space(self):
-        """Performs the Fourier transform of the initial wave function to obtain psi_k."""
-        self.psi_k = cp.fft.fftn(self.psi_0)  # N-dimensional Fourier Transform
-        return self.psi_k
 
-    def evolve_wavefunction_split_step(self, psi, mass=1.0):
+    def evolve_wavefunction_split_step(self, psi):
         """
         Evolve the wavefunction using the split-step Fourier method, alternating
         between potential and kinetic propagators.
@@ -211,6 +210,7 @@ class Wave_function(Simulation_parameters):
         Returns:
             cp.ndarray: Evolved wave function after one time step.
         """
+        mass = self.mass
         psi *= self.potential_propagator  # Potential propagator
 
         # Apply kinetic evolution in Fourier space
@@ -223,9 +223,6 @@ class Wave_function(Simulation_parameters):
 
 
         norm = cp.sum(cp.abs(psi) ** 2) * cp.prod(cp.array(self.dx))  # Total norm
-        #print(f"Step norm: {norm}, Real Mean: {cp.mean(cp.real(psi))}, Imag Mean: {cp.mean(cp.imag(psi))}")
-
-        # Normalize the wave function to ensure it remains normalized
         return psi
 
     def evolve(self):

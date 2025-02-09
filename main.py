@@ -8,20 +8,20 @@ from resources.system_fucntions import *
 
 # Setup parameters for the domain
 a, b = -5, 5  # Domain boundaries
-N = 128  # Number of spatial points
+N = 1024 # Number of spatial points
 
 # Initialize the Wave_function instance
 vlna = Wave_function(
-    packet_type="LHO",
+    packet_type="gaussian",
     momenta=[0],
     means=[0],
-    st_deviations=[0.0],
+    st_deviations=[0.1],
     dim=1,  # 1D wave function
     boundaries=[(a, b)],
     N=N,
     h=0.01,
-    total_time=5000,
-    potential=quadratic_potential
+    total_time=10,
+    potential=None
 )
 
 
@@ -29,10 +29,11 @@ print("#------------------------------------------------------------------------
 
 
 # Generate and show the animation
-#anim = plot_1D_wavefunction_evolution(vlna, interval=10, save_file="1D_wave_potential.mp4")
-plt.show()
+anim = plot_1D_wavefunction_evolution(vlna, interval=10, save_file="1D_wave_potential.mp4")
+#plt.show()
 
 
+'''
 
 x_vals = np.linspace(a,b,N,endpoint=False)
 
@@ -101,12 +102,12 @@ plt.scatter(times, real_imag_1['imag'], c='darkgreen', label='Imaginary Part (An
 plt.plot(times, real_imag_2['real'], c='lightblue', label='Real Part (Numerical)', alpha=0.7)
 plt.plot(times, real_imag_2['imag'], c='darkblue', label='Imaginary Part (Numerical)', alpha=0.7)
 
-plt.title('Avolute value, Real and Imaginary Parts of Wave Functions Over Time at x=0.0')
+plt.title('Absolute value, Real and Imaginary Parts of Wave Functions Over Time at x=0.0')
 plt.xlabel('Time')
 plt.ylabel('Mean Value')
 plt.axhline(0, color='black', linestyle='--', linewidth=0.5)  # Reference line at 0
 plt.legend()
 plt.grid()
 plt.show()
-
+'''
 

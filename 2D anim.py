@@ -6,7 +6,6 @@ from resources.Schrodinger_eq_functions import energy_nd, quadratic_potential
 
 # Initialize constants
 N = 512
-
 # Initialize the 2D system
 x_vals = np.linspace(-10, 10, N)
 y_vals = np.linspace(-10, 10, N)
@@ -113,3 +112,6 @@ ax2.grid()
 plt.tight_layout()
 plt.subplots_adjust(top=0.9)  # Space for the title
 plt.show()
+
+
+

@@ -123,14 +123,14 @@ class Wave_function(Simulation_parameters):
         # Kinetic propagator in Fourier space
         k_shifted = [k + (momentum / (2 * cp.pi)) for k, momentum in zip(self.k_space, self.momenta)]
         k_squared_sum = sum(k ** 2 for k in k_shifted)
-        kinetic_propagator = cp.exp(-1j * (self.h /2) * k_squared_sum / self.mass)
+        kinetic_propagator = cp.exp(-1j * (self.h/2)  * k_squared_sum / self.mass)
 
         # Potential propagator in real space
         if potential is not None:
             # Build position-space grid to compute the potential
             grid = cp.meshgrid(*self.grids, indexing='ij')  # Handle dimensions automatically
             potential_values = potential(self)  # Apply the potential function to the grid
-            potential_propagator = cp.exp(-1j * self.h * potential_values / 2)
+            potential_propagator = cp.exp(-1j * self.h * potential_values)
 
         else:
             # If no potential, assume no effect (identity propagator)
@@ -162,6 +162,7 @@ class Wave_function(Simulation_parameters):
         # Start creating the wavefunction
         if self.packet_type == "gaussian":
             # Compute ψ₀ for the first dimension
+
             psi_0 = gaussian_packet(self.grids[0], self.means[0], self.st_deviations[0])
 
             # If more than one dimension, iteratively compute the outer product
@@ -189,6 +190,7 @@ class Wave_function(Simulation_parameters):
             # Normalize the wavefunction over all dimensions
             dx_total = cp.prod(cp.array(self.dx))  # Total grid spacing in all dimensions
             psi_0 = normalize_wavefunction(psi_0, dx_total)
+
             return psi_0 + 0j  # Ensures complex128 type for `psi_0`
 
     def create_k_space(self):
@@ -197,40 +199,51 @@ class Wave_function(Simulation_parameters):
         k_space = cp.meshgrid(*k_components, indexing='ij')  # Create multidimensional k-space
         return k_space
 
-
-    def evolve_wavefunction_split_step(self, psi):
+    def evolve_wavefunction_split_step(self, psi, step_index, total_steps):
         """
         Evolve the wavefunction using the split-step Fourier method, alternating
-        between potential and kinetic propagators.
+        between potential and kinetic propagators, adjusted for:
+        - Half potential step at the first step.
+        - Full potential steps for intermediate steps.
+        - Half potential step at the last step.
 
         Parameters:
             psi (cp.ndarray): Initial wave function.
-            mass (float, optional): Particle mass. Defaults to 1.0.
+            step_index (int): Index of the current step (starting at 0).
+            total_steps (int): Total number of steps in the simulation.
 
         Returns:
             cp.ndarray: Evolved wave function after one time step.
         """
-        mass = self.mass
-        psi *= self.potential_propagator  # Potential propagator
+        # If it's the first step, apply half the potential propagator
+        if step_index == 0:
+            psi *= cp.sqrt(self.potential_propagator)  # Half potential step at the start
 
         # Apply kinetic evolution in Fourier space
         psi_k = cp.fft.fftn(psi)
         psi_k *= self.kinetic_propagator
         psi = cp.fft.ifftn(psi_k)
 
+        # If it's the last step, apply only a half potential step
+        if step_index == total_steps - 1:
+            psi *= cp.sqrt(self.potential_propagator)  # Half potential step at the end
+        else:
+            # Intermediate steps use the full potential propagator
+            psi *= self.potential_propagator
 
-        psi *= self.potential_propagator
-
-
-        norm = cp.sum(cp.abs(psi) ** 2) * cp.prod(cp.array(self.dx))  # Total norm
+        # Normalize the wavefunction (optional but sometimes useful for numerical stability)
+        norm = cp.sum(cp.abs(psi) ** 2) * cp.prod(cp.array(self.dx))  # Total normalization factor
         return psi
 
-    def evolve(self):
+    def evolve(self, save_every=2):
         """
         Perform the full time evolution for the wave function using the split-step Fourier method.
 
         This method updates the wave function (`self.psi_evolved`) as it evolves in time and stores
-        the wave function at each time step in `self.wave_values`.
+        the wave function at every `save_every` step in `self.wave_values`.
+
+        Parameters:
+            save_every (int): Frequency of saving the wave function values. Defaults to 2 (saves every 2nd step).
 
         Returns:
             None
@@ -241,15 +254,17 @@ class Wave_function(Simulation_parameters):
         # Store the initial state in the wave_values list
         self.wave_values.append(self.psi_evolved.copy())
 
-        for _ in range(self.num_steps):
-            # Evolve the wave function for one step
-            psi = self.evolve_wavefunction_split_step(self.psi_evolved)
+        for step in range(self.num_steps):
+            psi = self.evolve_wavefunction_split_step(
+                psi, step_index=step, total_steps=self.num_steps
+            )
 
             # Update the evolved state
             self.psi_evolved = psi
 
-            # Append the wave function at this step to the wave_values list
-            self.wave_values.append(self.psi_evolved.copy())
+            # Save the wave function at every `save_every` step
+            if step % save_every == 0:
+                self.wave_values.append(self.psi_evolved.copy())
 
     def wave_function_at_time(self, time):
         """
@@ -272,8 +287,8 @@ class Wave_function(Simulation_parameters):
 
         # Otherwise, recompute and return the wave function at the specific time
         psi = self.psi_0  # Start with the initial wave function
-        for _ in range(steps):
-            psi = self.evolve_wavefunction_split_step(psi)
+        for step in range(steps):
+            psi = self.evolve_wavefunction_split_step(psi, step_index=step, total_steps=self.num_steps)
 
             # Normalize the wave function at each step
             dx_total = cp.prod(cp.array(self.dx))

@@ -39,12 +39,13 @@ def quadratic_potential(wave_function_instance):
     r2 = sum(g ** 2 for g in grid)
 
     # Return the computed quadratic potential
-    return 0.5 * dim * mass * omega ** 2 * r2
+    return 0.5*dim * mass * omega ** 2 * r2
 
 
 
 def coefficient_nd(n, m=1, omega=1, hbar=1):
     """Calculate the normalization constant for N dimensions."""
+
     beta = np.sqrt(m * omega / hbar)
     factor = (beta ** 2 / np.pi) ** (len(n) / 2)  # Normalization factor for N dimensions
     denom = np.sqrt(np.prod([2 ** ni * factorial(ni) for ni in n]))  # Hermite polynomial normalization
@@ -90,7 +91,6 @@ def lin_harmonic_oscillator(wave_function_instance):
 
     quantum_numbers = [0] * dim  # Quantum numbers for each dimension
     beta = np.sqrt((mass * omega) / h_bar)
-    print(beta)
 
     gaussian_factors = []
     hermite_polynomials = []
@@ -109,11 +109,16 @@ def lin_harmonic_oscillator(wave_function_instance):
     for i in range(dim):
         psi_0 *= gaussian_factors[i] * hermite_polynomials[i]
 
-    # Normalize the wavefunction
+    # Call coefficient_nd for normalization constant across dimensions
+    coeff = coefficient_nd(quantum_numbers, mass, omega, h_bar)
+    psi_0 *= coeff  # Apply the normalization constant to psi_0
+
+    # Normalize the wavefunction using the provided normalize_wavefunction function
     dx_total = cp.prod(cp.array(dx))
     psi_0 = normalize_wavefunction(psi_0, dx_total)
 
     return psi_0
+
 
 
 def plot_wave_function(wave_function_instance, time_step=None, dimension_slice=None):
@@ -245,7 +250,8 @@ def plot_1D_wavefunction_evolution(wave_function, interval=20, save_file=None):
     def update(step):
         """Update the plot for each frame."""
         nonlocal psi
-        psi = wave_function.evolve_wavefunction_split_step(psi)  # Evolve wavefunction
+        # Pass step (as step_index) and total number of steps from wave_function
+        psi = wave_function.evolve_wavefunction_split_step(psi, step, wave_function.num_steps)
         psi_real = cp.asnumpy(cp.real(psi))
         psi_imag = cp.asnumpy(cp.imag(psi))
         psi_abs2 = cp.asnumpy(cp.abs(psi) ** 2)

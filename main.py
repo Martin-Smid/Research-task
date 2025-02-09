@@ -13,6 +13,7 @@ N = 1024 # Number of spatial points
 # Initialize the Wave_function instance
 vlna = Wave_function(
     packet_type="gaussian",
+    gravity_potential=True,
     momenta=[0],
     means=[0],
     st_deviations=[0.1],
@@ -20,7 +21,7 @@ vlna = Wave_function(
     boundaries=[(a, b)],
     N=N,
     h=0.01,
-    total_time=10,
+    total_time=1,
     potential=None
 )
 

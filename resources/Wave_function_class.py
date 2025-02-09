@@ -73,73 +73,75 @@ class Simulation_parameters():
 #-----------------------------------------------------------------------------------------------------------------------
 
 
-class Wave_function(Simulation_parameters):
-    def __init__(self, packet_type="gaussian", momenta=[0], means=[0], st_deviations=[0.1],potential = None, mass = 1, omega = 1, **kwargs):
+class Wave_function(Simulation_parameters):  # Streamlined and unified evolution logic
+    def __init__(self, packet_type="gaussian", momenta=[0], means=[0], st_deviations=[0.1],
+                 potential=None, gravity_potential=None, mass=1, omega=1, **kwargs):
         """
-        Initialize a wave function with custom momenta for arbitrary dimensions.
+        Initialize a wave function with optional gravitational potential.
 
         Parameters:
-            packet_type (str): Type of wave packet (e.g., "gaussian").
-            momenta (list): Initial momenta along each dimension.
-            means (list): Means for the wave packet (one value per dimension).
-            st_deviations (list): Standard deviations for the wave packet (one value per dimension).
+            potential (callable, optional): A user-defined potential function.
+            gravity_potential (bool or None, optional): Whether to include dynamic gravitational potential. Defaults to None (no gravity).
+            * Other parameters as defined previously.
         """
-        # Call the parent (Simulation_parameters) initializer
         super().__init__(**kwargs)
-        #použít analytical
-        # Additional parameters specific to Wave_function
         self.packet_type = packet_type
         self.potential = potential
+        self.gravity_potential = gravity_potential
         self.means = means
+        self.st_deviations = st_deviations
         self.mass = mass
         self.omega = omega
-        self.st_deviations = st_deviations
-        self.momenta = momenta  # Added momentum parameter
+        self.momenta = momenta
+        self.k_space = self.create_k_space()  # Unified propagator logic follows
+
+        # Gravitational potential will be dynamically updated
+        # Initialize wave function
         self.psi_0 = self.create_psi_0()
-        self.psi_evolved = self.psi_0  # Initialize the evolved wave function
+        self.psi_evolved = self.psi_0
 
+        # Precompute propagators
+        self.kinetic_propagator = self.compute_kinetic_propagator()
+        self.potential_propagator = self.compute_static_potential_propagator()
+        self.dynamic_gravity_potential = None  # Updated dynamically if needed
 
-        self.k_space = self.create_k_space()  # Generate the k-space grid
-
-        self.kinetic_propagator, self.potential_propagator = self.compute_propagators()  # Compute propagator (can be updated later)
-
+        # Initialize storage for wave evolution
         self.wave_values = []
 
+        # Start evolution
+        # Streamlined evolution process
         self.evolve()
 
-    def compute_propagators(self):
-        """
-        Create the time evolution propagators for both kinetic and (if provided) potential energy terms.
+    def update_total_potential(self, psi):
+        """Compute total propagator by combining gravitational & static potential."""
+        if self.gravity_potential:
+            print("zkusím zapojit gravitaci")
+            density = self.compute_density()
+            print("hustota")
+            print(density)
+            print("konec hustoty jde se do poissona")
+            gravity_potential = self.solve_poisson(density)
+            print("#--------------------------------------------------------------#")
+            print(gravity_potential)
+            grav_potential = gravity_potential
+            print(grav_potential)
+            print("#--------------------------------------------------------------#")
+            return cp.exp(-1j * self.h * grav_potential)
+        return cp.ones_like(psi)
 
-        Parameters:
-            potential (callable, optional): A function to calculate potential energy at given spatial points.
-            mass (float, optional): Particle mass. Defaults to 1.0.
-
-        Returns:
-            tuple: Kinetic and potential propagators as separate components.
-        """
-
-        potential = self.potential
-        # Kinetic propagator in Fourier space
+    def compute_kinetic_propagator(self):
+        """Compute the kinetic propagator based on Fourier space components."""
         k_shifted = [k + (momentum / (2 * cp.pi)) for k, momentum in zip(self.k_space, self.momenta)]
         k_squared_sum = sum(k ** 2 for k in k_shifted)
-        kinetic_propagator = cp.exp(-1j * (self.h/2)  * k_squared_sum / self.mass)
+        return cp.exp(-1j * (self.h / 2) * k_squared_sum / self.mass)
 
-        # Potential propagator in real space
-        if potential is not None:
-            # Build position-space grid to compute the potential
-            grid = cp.meshgrid(*self.grids, indexing='ij')  # Handle dimensions automatically
-            potential_values = potential(self)  # Apply the potential function to the grid
-            potential_propagator = cp.exp(-1j * self.h * potential_values)
-
-        else:
-            # If no potential, assume no effect (identity propagator)
-            potential_propagator = cp.ones_like(self.psi_0)
-
-        self.kinetic_propagator = kinetic_propagator
-        self.potential_propagator = potential_propagator
-
-        return kinetic_propagator, potential_propagator
+    def compute_static_potential_propagator(self):
+        """Compute the static potential propagator."""
+        if self.potential:
+            grid = cp.meshgrid(*self.grids, indexing='ij')
+            potential_values = self.potential(self)
+            return cp.exp(-1j * self.h * potential_values)
+        return cp.ones_like(self.psi_0)
 
     def create_psi_0(self):
         """Validates the format of the inputted means and standard deviations
@@ -173,7 +175,7 @@ class Wave_function(Simulation_parameters):
             # Reshape into a proper multidimensional grid if needed
             psi_0 = psi_0.reshape([self.N] * self.dim)
 
-            # Normalize the wavefunction over all dimensions
+            # Normalize the wave function over all dimensions
             dx_total = cp.prod(cp.array(self.dx))  # Total grid spacing in all dimensions
             psi_0 = normalize_wavefunction(psi_0, dx_total)
 
@@ -187,7 +189,7 @@ class Wave_function(Simulation_parameters):
                 psi_0 = cp.outer(psi_0, psi_dim)
             # Reshape into a proper multidimensional grid if needed
             psi_0 = psi_0.reshape([self.N] * self.dim)
-            # Normalize the wavefunction over all dimensions
+            # Normalize the wave function over all dimensions
             dx_total = cp.prod(cp.array(self.dx))  # Total grid spacing in all dimensions
             psi_0 = normalize_wavefunction(psi_0, dx_total)
 
@@ -202,10 +204,8 @@ class Wave_function(Simulation_parameters):
     def evolve_wavefunction_split_step(self, psi, step_index, total_steps):
         """
         Evolve the wavefunction using the split-step Fourier method, alternating
-        between potential and kinetic propagators, adjusted for:
-        - Half potential step at the first step.
-        - Full potential steps for intermediate steps.
-        - Half potential step at the last step.
+        between potential and kinetic propagators. Adjusted to handle dynamic
+        potential updates if enabled.
 
         Parameters:
             psi (cp.ndarray): Initial wave function.
@@ -216,26 +216,34 @@ class Wave_function(Simulation_parameters):
             cp.ndarray: Evolved wave function after one time step.
         """
         # If it's the first step, apply half the potential propagator
+        gravitational_propagator = self.update_total_potential(psi)  # Dynamic propagator if gravity is enabled
+        print("----------------------------------------------------------------")
+        print("tohle je grav propag")
+        print(gravitational_propagator)
+        print("---------------------------------------------------")
         if step_index == 0:
-            psi *= cp.sqrt(self.potential_propagator)  # Half potential step at the start
+            psi *= cp.sqrt(self.potential_propagator*gravitational_propagator)
+
+        psi *= gravitational_propagator*self.potential_propagator  # Apply dynamic potential propagator
 
         # Apply kinetic evolution in Fourier space
         psi_k = cp.fft.fftn(psi)
         psi_k *= self.kinetic_propagator
         psi = cp.fft.ifftn(psi_k)
 
+
+
         # If it's the last step, apply only a half potential step
         if step_index == total_steps - 1:
-            psi *= cp.sqrt(self.potential_propagator)  # Half potential step at the end
+            psi *= cp.sqrt(self.potential_propagator*gravitational_propagator)  # Half potential step at the end
         else:
-            # Intermediate steps use the full potential propagator
-            psi *= self.potential_propagator
 
-        # Normalize the wavefunction (optional but sometimes useful for numerical stability)
-        norm = cp.sum(cp.abs(psi) ** 2) * cp.prod(cp.array(self.dx))  # Total normalization factor
+            psi *=self.potential_propagator*gravitational_propagator
+
+
         return psi
 
-    def evolve(self, save_every=2):
+    def evolve(self, save_every=5):
         """
         Perform the full time evolution for the wave function using the split-step Fourier method.
 
@@ -248,21 +256,17 @@ class Wave_function(Simulation_parameters):
         Returns:
             None
         """
-        psi = self.psi_0  # Start with the initial wave function
-        self.psi_evolved = psi  # Start evolution with the initial state
+        psi = self.psi_0  # Initial wave function
+        self.psi_evolved = psi
 
-        # Store the initial state in the wave_values list
         self.wave_values.append(self.psi_evolved.copy())
 
         for step in range(self.num_steps):
             psi = self.evolve_wavefunction_split_step(
                 psi, step_index=step, total_steps=self.num_steps
-            )
+            )  # Corrected the function call here
+            self.psi_evolved = psi  # Update evolved wave function
 
-            # Update the evolved state
-            self.psi_evolved = psi
-
-            # Save the wave function at every `save_every` step
             if step % save_every == 0:
                 self.wave_values.append(self.psi_evolved.copy())
 
@@ -295,5 +299,48 @@ class Wave_function(Simulation_parameters):
             psi = normalize_wavefunction(psi, dx_total)
 
         return psi
+
+    def compute_density(self):
+        """Calculate the density rho = m|psi|^2."""
+        return self.mass * cp.abs(self.psi_evolved) ** 2
+
+    def solve_poisson(self, density):
+        """
+        Solve the Poisson equation ∇²V = 4πGρ, ignoring the zero mode.
+
+        Parameters:
+            density (cp.ndarray): Mass density ρ = m|ψ|².
+
+        Returns:
+            cp.ndarray: Gravitational potential V.
+        """
+        k_space = self.k_space  # Use existing k-space grids
+        k_squared_sum = sum(k ** 2 for k in k_space)
+
+        # Solve Poisson in Fourier space
+        G = 1  # Gravitational constant (in arbitrary units)
+        density_k = cp.fft.fftn(density)
+
+        # Set zero mode to 0 dynamically based on dimensions
+        zero_mode_index = tuple([0] * self.dim)  # e.g., (0,) for 1D, (0, 0) for 2D, etc.
+        density_k[zero_mode_index] = 0  # Dynamically target zero mode for N dimensions
+
+        # Protect against division by zero in k^2 sum
+        k_squared_sum = cp.where(k_squared_sum == 0, 1e-10, k_squared_sum)
+
+        # Compute potential in Fourier space
+        potential_k = (4 * cp.pi * G * density_k) / k_squared_sum
+
+        # Transform back to real space
+        potential = cp.fft.ifftn(potential_k).real
+        return potential
+
+
+
+
+
+
+
+
 
 

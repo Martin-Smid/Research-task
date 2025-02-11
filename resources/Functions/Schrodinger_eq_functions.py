@@ -186,6 +186,7 @@ def plot_wave_function(wave_function_instance, time_step=None, dimension_slice=N
 
 
 
+
 def plot_1D_wavefunction_evolution(wave_function, interval=20, save_file=None):
     """
     Animate the time evolution of a 1D wavefunction (integrated with Wave_function class),
@@ -206,7 +207,7 @@ def plot_1D_wavefunction_evolution(wave_function, interval=20, save_file=None):
 
     # Compute the potential for plotting (if it's provided)
     if wave_function.potential is not None:
-        V = wave_function.potential(x)  # Potential function applied to grid
+        V = wave_function.potential(wave_function)  # Pass the correct instance
         V_numpy = cp.asnumpy(V)  # Convert potential to numpy
     else:
         V_numpy = None  # No potential
@@ -276,6 +277,7 @@ def plot_1D_wavefunction_evolution(wave_function, interval=20, save_file=None):
         anim.save(save_file, fps=20, extra_args=['-vcodec', 'libx264'])
 
     return anim
+
 
 
 

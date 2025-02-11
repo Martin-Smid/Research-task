@@ -1,8 +1,4 @@
-import matplotlib.pyplot as plt
-import cupy as cp
-import numpy as np
-from matplotlib.animation import FuncAnimation
-from resources.Schrodinger_eq_functions import *
+from resources.Functions.Schrodinger_eq_functions import *
 
 
 def calculate_errors_between_num_and_analytical_evolution(wave_function, time_step):

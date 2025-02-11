@@ -1,8 +1,4 @@
-import cupy as cp
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
-from resources.Wave_function_class import *
-from resources.Schrodinger_eq_functions import *
+from resources.Classes.Wave_function_class import *
 from resources.system_fucntions import *
 
 
@@ -13,7 +9,7 @@ N = 1024 # Number of spatial points
 # Initialize the Wave_function instance
 vlna = Wave_function(
     packet_type="gaussian",
-    gravity_potential=True,
+    gravity_potential=False,
     momenta=[0],
     means=[0],
     st_deviations=[0.1],
@@ -30,7 +26,7 @@ print("#------------------------------------------------------------------------
 
 
 # Generate and show the animation
-anim = plot_1D_wavefunction_evolution(vlna, interval=10, save_file="1D_wave_potential.mp4")
+anim = plot_1D_wavefunction_evolution(vlna, interval=10, save_file="quad1D_wave_potential.mp4")
 #plt.show()
 
 

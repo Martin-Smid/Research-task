@@ -1,72 +1,7 @@
-from venv import create
-
 import cupy as cp
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
-from resources.Schrodinger_eq_functions import *
-from resources.Errors import *
-
-class Simulation_parameters():
-    """
-        A class to manage simulation parameters.
-
-        Parameters:
-        dim (int): Number of dimensions in the simulation (default = 1).
-        boundaries (list[tuple]): List of tuples specifying the min and max for each dimension (e.g., [(-1, 1)]).
-        N (int): Number of spatial points for each dimension (default = 1024).
-        total_time (float): Total simulation time (default = 10).
-        h (float): Time step size for propagation (default = 0.1).
-        """
-
-    def __init__(
-            self,
-            dim=1,
-            boundaries=[(-1, 1)],
-            N=1024,
-            total_time=10,
-            h=0.1,
-            dx=(1 + 1) / (1024 - 1)
-            ):
-        # Setup parameters
-        self.dim = dim
-        self.boundaries = boundaries
-        self.N = N
-        self.total_time = total_time
-        self.h = h  # Propagation parameter (time step size)
-        self.num_steps = int(self.total_time / self.h)
-        self.dx = []
-        self.grids = []
-
-        # Compute dx and spatial grids for each dimension
-        self.dx, self.grids = self.unpack_boundaries()
-
-
-
-    def unpack_boundaries(self):
-        """Validates the format of the boundaries and unpacks them into dx and grids.
-            raises BoundaryFormatError if the boundaries are invalid."""
-        if len(self.boundaries) != self.dim:
-            raise BoundaryFormatError(
-                message=f"Expected boundaries for {self.dim} dimensions but got {len(self.boundaries)}",
-                tag="boundaries"
-            )
-        for i, (a, b) in enumerate(self.boundaries):
-            if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
-                raise BoundaryFormatError(
-                    message=f"Boundary {i} must be a tuple of two numbers, but got {(a, b)}",
-                    tag=f"boundary_{i}"
-                )
-            if a >= b:
-                raise BoundaryFormatError(
-                    message=f"Boundary {i} values are invalid: {a} must be less than {b}",
-                    tag=f"boundary_{i}"
-                )
-            # If the boundaries are valid, unpack them
-            dx_dim = (b - a) / (self.N - 1)
-            self.dx.append(dx_dim)
-            self.grids.append(cp.linspace(a, b, self.N))
-
-        return self.dx, self.grids
+from resources.Functions.Schrodinger_eq_functions import *
+from resources.Classes.Simulation_Class import Simulation_parameters
+from resources.Classes.Wave_Packet_Class import Packet
 
 
 
@@ -84,7 +19,17 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
             gravity_potential (bool or None, optional): Whether to include dynamic gravitational potential. Defaults to None (no gravity).
             * Other parameters as defined previously.
         """
-        super().__init__(**kwargs)
+        super().__init__(**kwargs)  # Initialize Simulation_parameters first
+        self.packet_creator = Packet(
+            packet_type=packet_type,
+            means=means,
+            st_deviations=st_deviations,
+            grids=self.grids,
+            dx=self.dx,
+            mass=mass,
+            omega=omega,
+            **kwargs)
+
         self.packet_type = packet_type
         self.potential = potential
         self.gravity_potential = gravity_potential
@@ -97,7 +42,7 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
 
         # Gravitational potential will be dynamically updated
         # Initialize wave function
-        self.psi_0 = self.create_psi_0()
+        self.psi_0 = self.packet_creator.create_psi_0()
         self.psi_evolved = self.psi_0
 
         # Precompute propagators
@@ -142,58 +87,6 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
             potential_values = self.potential(self)
             return cp.exp(-1j * self.h * potential_values)
         return cp.ones_like(self.psi_0)
-
-    def create_psi_0(self):
-        """Validates the format of the inputted means and standard deviations
-           and creates the normalized initial wave function (`psi_0`).
-
-           Raises InitWaveParamsError if the initialization parameters do not match the number of dimensions.
-        """
-        # Validation of means and standard deviations
-        if len(self.means) != self.dim:
-            raise InitWaveParamsError(
-                message=f"Expected {self.dim} means in the format [0, 1, 0.5, ...] but got {len(self.means)}",
-                tag="means"
-            )
-        if len(self.st_deviations) != self.dim:
-            raise InitWaveParamsError(
-                message=f"Expected {self.dim} standard deviations in the format [0.1, 1, 0.3, ...] but got {len(self.st_deviations)}",
-                tag="st_deviations"
-            )
-
-        # Start creating the wavefunction
-        if self.packet_type == "gaussian":
-            # Compute ψ₀ for the first dimension
-
-            psi_0 = gaussian_packet(self.grids[0], self.means[0], self.st_deviations[0])
-
-            # If more than one dimension, iteratively compute the outer product
-            for i in range(1, self.dim):
-                psi_dim = gaussian_packet(self.grids[i], self.means[i], self.st_deviations[i])
-                psi_0 = cp.outer(psi_0, psi_dim)
-
-            # Reshape into a proper multidimensional grid if needed
-            psi_0 = psi_0.reshape([self.N] * self.dim)
-
-            # Normalize the wave function over all dimensions
-            dx_total = cp.prod(cp.array(self.dx))  # Total grid spacing in all dimensions
-            psi_0 = normalize_wavefunction(psi_0, dx_total)
-
-            return psi_0 + 0j  # Ensures complex128 type for `psi_0`
-        if self.packet_type == "LHO":
-            # Compute ψ₀ for the first dimension
-            psi_0 = lin_harmonic_oscillator(self)
-            # If more than one dimension, iteratively compute the outer product
-            for i in range(1, self.dim):
-                psi_dim = lin_harmonic_oscillator(self)
-                psi_0 = cp.outer(psi_0, psi_dim)
-            # Reshape into a proper multidimensional grid if needed
-            psi_0 = psi_0.reshape([self.N] * self.dim)
-            # Normalize the wave function over all dimensions
-            dx_total = cp.prod(cp.array(self.dx))  # Total grid spacing in all dimensions
-            psi_0 = normalize_wavefunction(psi_0, dx_total)
-
-            return psi_0 + 0j  # Ensures complex128 type for `psi_0`
 
     def create_k_space(self):
         """Creates the k-space (wave vector space) for any arbitrary number of dimensions."""

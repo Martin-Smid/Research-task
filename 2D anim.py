@@ -1,8 +1,8 @@
 import numpy as np
 import cupy as cp
 import matplotlib.pyplot as plt
-from resources.Wave_function_class import Wave_function
-from resources.Schrodinger_eq_functions import energy_nd, quadratic_potential
+from resources.Classes.Wave_function_class import Wave_function
+from resources.Functions.Schrodinger_eq_functions import energy_nd, quadratic_potential
 
 # Initialize constants
 N = 512
@@ -17,7 +17,7 @@ vlna = Wave_function(
     N=N,
     total_time=10,  # Total simulation time
     h=0.01,  # Time interval
-    packet_type="LHO",
+    packet_type="gaussian",
     means=[0.0, 0.0],
     st_deviations=[0.1, 0.1],
     momenta=[0, 0],

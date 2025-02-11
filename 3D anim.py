@@ -1,8 +1,4 @@
-import cupy as cp
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
-from resources.Schrodinger_eq_functions import *
-from resources.Wave_function_class import *
+from resources.Classes.Wave_function_class import *
 
 
 

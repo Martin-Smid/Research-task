@@ -57,6 +57,18 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
         # Streamlined evolution process
         self.evolve()
 
+    def create_k_space(self):
+        """Creates the k-space (wave vector space) for any arbitrary number of dimensions."""
+        k_components = [2*cp.pi*cp.fft.fftfreq(self.N, d=self.dx[i]) for i in range(self.dim)]
+        k_space = cp.meshgrid(*k_components, indexing='ij')  # Create multidimensional k-space
+        return k_space
+
+    def compute_kinetic_propagator(self):
+        """Compute the kinetic propagator based on Fourier space components."""
+        k_shifted = [k + (momentum / (2 * cp.pi)) for k, momentum in zip(self.k_space, self.momenta)]
+        k_squared_sum = sum(k ** 2 for k in k_shifted)
+        return cp.exp(-1j * (self.h / 2) * k_squared_sum / self.mass)
+
     def update_total_potential(self, psi):
         """Compute total propagator by combining gravitational & static potential."""
         if self.gravity_potential:
@@ -74,11 +86,7 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
             return cp.exp(-1j * self.h * grav_potential)
         return cp.ones_like(psi)
 
-    def compute_kinetic_propagator(self):
-        """Compute the kinetic propagator based on Fourier space components."""
-        k_shifted = [k + (momentum / (2 * cp.pi)) for k, momentum in zip(self.k_space, self.momenta)]
-        k_squared_sum = sum(k ** 2 for k in k_shifted)
-        return cp.exp(-1j * (self.h / 2) * k_squared_sum / self.mass)
+
 
     def compute_static_potential_propagator(self):
         """Compute the static potential propagator."""
@@ -88,11 +96,7 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
             return cp.exp(-1j * self.h * potential_values)
         return cp.ones_like(self.psi_0)
 
-    def create_k_space(self):
-        """Creates the k-space (wave vector space) for any arbitrary number of dimensions."""
-        k_components = [2*cp.pi*cp.fft.fftfreq(self.N, d=self.dx[i]) for i in range(self.dim)]
-        k_space = cp.meshgrid(*k_components, indexing='ij')  # Create multidimensional k-space
-        return k_space
+
 
     def evolve_wavefunction_split_step(self, psi, step_index, total_steps):
         """

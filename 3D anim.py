@@ -3,7 +3,7 @@ from resources.Classes.Wave_function_class import *
 
 
 boundaries3D = [(-1,1), (-1,1), (-1,1)]
-N = 128
+N = 256
 
 vlna = Wave_function(
     packet_type="gaussian",
@@ -11,13 +11,13 @@ vlna = Wave_function(
     gravity_potential=True,
     means=[0, 0, 0],
     st_deviations=[0.1, 0.1, 0.1],
-    mass=1,
+    mass=2,
     omega=1,
     dim=3,
-    boundaries=[(-1, 1), (-1, 1), (-1, 1)],
+    boundaries=boundaries3D,
     N=N,
-    total_time=1000,
-    h=5,
+    total_time=10,
+    h=0.1,
 )
 
 wave_begin = cp.asnumpy(cp.abs(vlna.wave_values[0]))  # Initial snapshot

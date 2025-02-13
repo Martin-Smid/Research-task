@@ -59,23 +59,32 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
 
     def create_k_space(self):
         """Creates the k-space (wave vector space) for any arbitrary number of dimensions."""
-        k_components = [2*cp.pi*cp.fft.fftfreq(self.N, d=self.dx[i]) for i in range(self.dim)]
-        k_space = cp.meshgrid(*k_components, indexing='ij')  # Create multidimensional k-space
+        # Create k-space components with single-precision floats
+        k_components = [
+            2 * cp.pi * cp.fft.fftfreq(self.N, d=self.dx[i]).astype(cp.float32)
+            for i in range(self.dim)
+        ]
+        # Create multidimensional k-space
+        k_space = cp.meshgrid(*k_components, indexing='ij')
         return k_space
 
     def compute_kinetic_propagator(self):
         """Compute the kinetic propagator based on Fourier space components."""
-        k_shifted = [k + (momentum / (2 * cp.pi)) for k, momentum in zip(self.k_space, self.momenta)]
-        k_squared_sum = sum(k ** 2 for k in k_shifted)
-        return cp.exp(-1j * (self.h / 2) * k_squared_sum / self.mass)
+        # Use single-precision floats to save memory
+        k_shifted = [
+            cp.array(k + (momentum / (2 * cp.pi)), dtype=cp.float32)
+            for k, momentum in zip(self.k_space, self.momenta)
+        ]
+        # Compute k_squared_sum in-place to save memory
+        k_squared_sum = cp.zeros_like(k_shifted[0])
+        for k in k_shifted:
+            k_squared_sum += k ** 2
+        return cp.exp(-1j * (self.h / 2) * k_squared_sum / self.mass, dtype=cp.complex64)
 
     def update_total_potential(self, psi):
         """Compute total propagator by combining gravitational & static potential."""
         if self.gravity_potential:
-            print("zkusím zapojit gravitaci")
             density = self.compute_density()
-            print("hustota")
-            print(density)
             print("konec hustoty jde se do poissona")
             gravity_potential = self.solve_poisson(density)
             print("#--------------------------------------------------------------#")
@@ -93,9 +102,8 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
         if self.potential:
             grid = cp.meshgrid(*self.grids, indexing='ij')
             potential_values = self.potential(self)
-            return cp.exp(-1j * self.h * potential_values)
-        return cp.ones_like(self.psi_0)
-
+            return cp.exp(-1j * self.h * potential_values, dtype=cp.complex64)
+        return cp.ones_like(self.psi_0, dtype=cp.complex64)
 
 
     def evolve_wavefunction_split_step(self, psi, step_index, total_steps):
@@ -140,7 +148,7 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
 
         return psi
 
-    def evolve(self, save_every=5):
+    def evolve(self, save_every=30):
         """
         Perform the full time evolution for the wave function using the split-step Fourier method.
 
@@ -156,16 +164,27 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
         psi = self.psi_0  # Initial wave function
         self.psi_evolved = psi
 
-        self.wave_values.append(self.psi_evolved.copy())
+        self.wave_values.append(self.psi_evolved.copy())  # Save the initial state
 
         for step in range(self.num_steps):
+            # Perform the evolution step
             psi = self.evolve_wavefunction_split_step(
                 psi, step_index=step, total_steps=self.num_steps
-            )  # Corrected the function call here
+            )
             self.psi_evolved = psi  # Update evolved wave function
 
             if step % save_every == 0:
+                # Save the wavefunction copy at the current step
                 self.wave_values.append(self.psi_evolved.copy())
+
+            # Explicitly delete intermediate variables when step is not saved
+            else:
+                del psi
+                cp.get_default_memory_pool().free_all_blocks()  # Free unused data from GPU memory
+                psi = self.psi_evolved
+
+        # Free GPU memory once the evolution is complete
+        cp.get_default_memory_pool().free_all_blocks()
 
     def wave_function_at_time(self, time):
         """
@@ -199,7 +218,11 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
 
     def compute_density(self):
         """Calculate the density rho = m|psi|^2."""
-        return self.mass * cp.abs(self.psi_evolved) ** 2
+        rho = self.mass * cp.abs(self.psi_evolved).astype(cp.float32) ** 2  # Ensure float32 precision
+        #density_sum = cp.sum(rho) * (cp.prod(cp.array(self.dx, dtype=cp.float32)) ** 3)
+        # print("density sum is equal to:")
+        # print(density_sum)
+        return rho
 
     def solve_poisson(self, density):
         """
@@ -216,7 +239,8 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
 
         # Solve Poisson in Fourier space
         G = 1  # Gravitational constant (in arbitrary units)
-        density_k = cp.fft.fftn(density)
+        # Ensure density_k is computed in single precision (complex64)
+        density_k = cp.fft.fftn(density.astype(cp.complex64))
 
         # Set zero mode to 0 dynamically based on dimensions
         zero_mode_index = tuple([0] * self.dim)  # e.g., (0,) for 1D, (0, 0) for 2D, etc.
@@ -225,11 +249,11 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
         # Protect against division by zero in k^2 sum
         k_squared_sum = cp.where(k_squared_sum == 0, 1e-10, k_squared_sum)
 
-        # Compute potential in Fourier space
-        potential_k = (4 * cp.pi * G * density_k) / k_squared_sum
+        # Compute potential in Fourier space with single precision
+        potential_k = (4 * cp.pi * G * density_k) / k_squared_sum.astype(cp.complex64)
 
-        # Transform back to real space
-        potential = cp.fft.ifftn(potential_k).real
+        # Transform back to real space, cast to real32
+        potential = cp.fft.ifftn(potential_k).real.astype(cp.float32)
         return potential
 
 

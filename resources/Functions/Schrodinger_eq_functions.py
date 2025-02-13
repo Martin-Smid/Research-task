@@ -39,7 +39,7 @@ def quadratic_potential(wave_function_instance):
     r2 = sum(g ** 2 for g in grid)
 
     # Return the computed quadratic potential
-    return 0.5*dim * mass * omega ** 2 * r2
+    return  dim * mass * omega ** 2 * r2
 
 
 

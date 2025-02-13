@@ -141,14 +141,12 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
         # If it's the last step, apply only a half potential step
         if step_index == total_steps - 1:
             psi *= cp.sqrt(self.potential_propagator*gravitational_propagator)  # Half potential step at the end
-        else:
 
-            psi *=self.potential_propagator*gravitational_propagator
 
 
         return psi
 
-    def evolve(self, save_every=30):
+    def evolve(self, save_every=1):
         """
         Perform the full time evolution for the wave function using the split-step Fourier method.
 

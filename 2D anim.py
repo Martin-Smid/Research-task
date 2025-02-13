@@ -5,7 +5,7 @@ from resources.Classes.Wave_function_class import Wave_function
 from resources.Functions.Schrodinger_eq_functions import energy_nd, quadratic_potential
 
 # Initialize constants
-N = 1024
+N = 256
 # Initialize the 2D system
 x_vals = np.linspace(-10, 10, N)
 y_vals = np.linspace(-10, 10, N)
@@ -15,17 +15,17 @@ vlna = Wave_function(
     dim=2,
     boundaries=[(-10, 10), (-10, 10)],
     N=N,
-    total_time=100,  # Total simulation time
-    h=0.1,  # Time interval
-    mass=5,
-    packet_type="gaussian",
+    total_time=2,  # Total simulation time
+    h=0.01,  # Time interval
+    mass=1,
+    packet_type="LHO",
     means=[0.0, 0.0],
-    st_deviations=[0.1, 0.1],
-    gravity_potential=True,
+    st_deviations=[0.1,0.1],
+    gravity_potential=False,
     momenta=[0, 0],
     potential=quadratic_potential,  # Quadratic potential for harmonic evolution
 )
-
+'''
 # Extract wavefunction snapshots at 5 time steps: Start, 1/4, 1/2, 3/4, End
 time_steps = [0, len(vlna.wave_values) // 4, len(vlna.wave_values) // 2,
               (3 * len(vlna.wave_values)) // 4, len(vlna.wave_values) - 1]
@@ -53,10 +53,10 @@ for ax, wave, title in zip(axes, wave_snapshots, titles):
 plt.tight_layout()
 plt.show()
 
-
+'''
 
 #plotování rozdílu 2D LHO
-'''
+
 # Arrays to store results
 times = []  # Times corresponding to each calculation
 real_x_an_values, imag_x_an_values = [], []  # Real and imaginary parts of analytical wave function along x-axis
@@ -145,6 +145,6 @@ ax2.grid()
 plt.tight_layout()
 plt.subplots_adjust(top=0.9)  # Space for the title
 plt.show()
-'''
+
 
 

@@ -3,12 +3,12 @@ from resources.system_fucntions import *
 
 
 # Setup parameters for the domain
-a, b = -5, 5  # Domain boundaries
+a, b = -10, 10  # Domain boundaries
 N = 1024 # Number of spatial points
 
 # Initialize the Wave_function instance
 vlna = Wave_function(
-    packet_type="gaussian",
+    packet_type="LHO",
     gravity_potential=False,
     momenta=[0],
     means=[0],
@@ -17,8 +17,8 @@ vlna = Wave_function(
     boundaries=[(a, b)],
     N=N,
     h=0.01,
-    total_time=1,
-    potential=None
+    total_time=2*cp.pi,
+    potential=quadratic_potential
 )
 
 
@@ -26,11 +26,10 @@ print("#------------------------------------------------------------------------
 
 
 # Generate and show the animation
-anim = plot_1D_wavefunction_evolution(vlna, interval=10, save_file="quad1D_wave_potential.mp4")
+#anim = plot_1D_wavefunction_evolution(vlna, interval=10, save_file="quad1D_wave_potential.mp4")
 #plt.show()
 
 
-'''
 
 x_vals = np.linspace(a,b,N,endpoint=False)
 
@@ -106,5 +105,5 @@ plt.axhline(0, color='black', linestyle='--', linewidth=0.5)  # Reference line a
 plt.legend()
 plt.grid()
 plt.show()
-'''
+
 

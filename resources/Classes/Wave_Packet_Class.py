@@ -29,6 +29,7 @@ class Packet(Base_Wave_function):
         self.means = means if means else [0] * self.dim
         self.st_deviations = st_deviations if st_deviations else [0.1] * self.dim
         self.grids = grids  # Receive grids from parent class
+
         self.dx = dx  # Receive dx from parent class
         self.mass = mass  # New attribute for particle mass
         self.omega = omega  # New attribute for harmonic oscillator frequency
@@ -74,15 +75,9 @@ class Packet(Base_Wave_function):
             cp.ndarray: The normalized Gaussian wavefunction.
         """
         # Compute ψ₀ for the first dimension
-        psi_0 = gaussian_packet(self.grids[0], self.means[0], self.st_deviations[0])
-
-        # If more than one dimension, iteratively compute the outer product
-        for i in range(1, self.dim):
-            psi_dim = gaussian_packet(self.grids[i], self.means[i], self.st_deviations[i])
-            psi_0 = cp.outer(psi_0, psi_dim)
-
-        # Reshape into a proper multidimensional grid
-        psi_0 = psi_0.reshape([self.N] * self.dim)
+        # Compute Gaussian wave packet directly over the full meshgrid
+        psi_0 = cp.exp(-cp.sum(((self.grids - cp.array(self.means)) ** 2) /
+                               (2 * cp.array(self.st_deviations) ** 2), axis=0), dtype=cp.complex64)
 
         # Normalize the wavefunction over all dimensions
         dx_total = cp.prod(cp.array(self.dx))  # Total grid spacing in all dimensions
@@ -96,18 +91,11 @@ class Packet(Base_Wave_function):
         Returns:
             cp.ndarray: The normalized LHO wavefunction.
         """
-        psi_0 = lin_harmonic_oscillator(self)  # Use existing LHO helper function
-
-        # If more than one dimension, iteratively compute the outer product
-        for i in range(1, self.dim):
-            psi_dim = lin_harmonic_oscillator(self)
-            psi_0 = cp.outer(psi_0, psi_dim)
-
-        # Reshape into a proper multidimensional grid
-        psi_0 = psi_0.reshape([self.N] * self.dim)
+        # Compute linear harmonic oscillator wave packet over the full meshgrid
+        psi_0 = lin_harmonic_oscillator(self)
 
         # Normalize the wavefunction over all dimensions
         dx_total = cp.prod(cp.array(self.dx))  # Total grid spacing in all dimensions
         psi_0 = normalize_wavefunction(psi_0, dx_total)
-        return psi_0 + 0j  # Ensure complex128 type for `psi_0`
+        return psi_0 + 0j
 

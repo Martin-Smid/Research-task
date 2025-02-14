@@ -95,16 +95,13 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
             return cp.exp(-1j * self.h * grav_potential)
         return cp.ones_like(psi)
 
-
-
     def compute_static_potential_propagator(self):
         """Compute the static potential propagator."""
         if self.potential:
-            grid = cp.meshgrid(*self.grids, indexing='ij')
+
             potential_values = self.potential(self)
             return cp.exp(-1j * self.h * potential_values, dtype=cp.complex64)
         return cp.ones_like(self.psi_0, dtype=cp.complex64)
-
 
     def evolve_wavefunction_split_step(self, psi, step_index, total_steps):
         """

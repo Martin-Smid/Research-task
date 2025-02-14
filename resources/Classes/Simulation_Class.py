@@ -1,6 +1,7 @@
 from resources.Errors.Errors import *
 import cupy as cp
 
+
 class Simulation_parameters():
     """
         A class to manage simulation parameters.
@@ -11,7 +12,7 @@ class Simulation_parameters():
         N (int): Number of spatial points for each dimension (default = 1024).
         total_time (float): Total simulation time (default = 10).
         h (float): Time step size for propagation (default = 0.1).
-        """
+    """
 
     def __init__(
             self,
@@ -21,7 +22,7 @@ class Simulation_parameters():
             total_time=10,
             h=0.1,
             dx=(1 + 1) / (1024 - 1)
-            ):
+    ):
         # Setup parameters
         self.dim = dim
         self.boundaries = boundaries
@@ -35,11 +36,11 @@ class Simulation_parameters():
         # Compute dx and spatial grids for each dimension
         self.dx, self.grids = self.unpack_boundaries()
 
-
-
     def unpack_boundaries(self):
-        """Validates the format of the boundaries and unpacks them into dx and grids.
-            raises BoundaryFormatError if the boundaries are invalid."""
+        """
+        Validates the format of the boundaries and unpacks them into dx and multidimensional grids.
+        Raises BoundaryFormatError if the boundaries are invalid.
+        """
         if len(self.boundaries) != self.dim:
             raise BoundaryFormatError(
                 message=f"Expected boundaries for {self.dim} dimensions but got {len(self.boundaries)}",
@@ -60,5 +61,6 @@ class Simulation_parameters():
             dx_dim = (b - a) / (self.N - 1)
             self.dx.append(dx_dim)
             self.grids.append(cp.linspace(a, b, self.N))
-
-        return self.dx, self.grids
+        # Generate multidimensional grids
+        mesh = cp.meshgrid(*self.grids, indexing="ij")
+        return self.dx, mesh

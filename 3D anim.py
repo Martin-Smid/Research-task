@@ -3,7 +3,7 @@ from resources.Classes.Wave_function_class import *
 
 
 boundaries3D = [(-1,1), (-1,1), (-1,1)]
-N = 256
+N = 128
 
 vlna = Wave_function(
     packet_type="gaussian",
@@ -16,7 +16,7 @@ vlna = Wave_function(
     dim=3,
     boundaries=boundaries3D,
     N=N,
-    total_time=10,
+    total_time=1,
     h=0.1,
 )
 

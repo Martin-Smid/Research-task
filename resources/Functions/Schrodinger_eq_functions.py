@@ -27,19 +27,17 @@ def quadratic_potential(wave_function_instance):
 
     Returns:
         cp.ndarray: The potential computed on the spatial grid.
+        cp.ndarray: The potential computed on the spatial grid.
     """
-    grids = wave_function_instance.grids  # Grids from the wave_function instance
+    grids = wave_function_instance.grids  # Grids (already meshgrids) from the wave_function instance
     mass = wave_function_instance.mass  # Mass from the wave_function instance
     dim = wave_function_instance.dim
     omega = wave_function_instance.omega
 
-    grid = cp.meshgrid(*grids, indexing='ij')
-
     # Compute r^2 from the multidimensional grid
-    r2 = sum(g ** 2 for g in grid)
-
+    r2 = sum(g ** 2 for g in grids)
     # Return the computed quadratic potential
-    return  dim * mass * omega ** 2 * r2
+    return  0.5 * mass * omega ** 2 * r2
 
 
 
@@ -81,7 +79,7 @@ def lin_harmonic_oscillator(wave_function_instance):
         psi_0: The N-dimensional wave function.
     """
     # Extract information from Wave_function params
-    grids = wave_function_instance.grids  # CuPy 1D grids for each dimension
+    grids = wave_function_instance.grids  # CuPy meshgrids for each dimension
     dim = wave_function_instance.dim
     means = wave_function_instance.means
     dx = wave_function_instance.dx
@@ -98,10 +96,8 @@ def lin_harmonic_oscillator(wave_function_instance):
     # Loop over dimensions to compute shifted grid, Hermite polynomial, and Gaussian factor
     for i in range(dim):
         shifted_grid = grids[i] - means[i]
-        shifted_grid_numpy = cp.asnumpy(shifted_grid)  # Convert to numpy array for Hermite computation
-        H_numpy = hermite(quantum_numbers[i])(beta * shifted_grid_numpy)  # Compute Hermite polynomial
-        H = cp.array(H_numpy)  # Convert back to CuPy array
-        hermite_polynomials.append(H)
+        H_numpy = hermite(quantum_numbers[i])(beta * cp.asnumpy(shifted_grid))  # Hermite polynomial
+        hermite_polynomials.append(cp.array(H_numpy))  # Convert numpy result back to CuPy array
         gaussian_factors.append(cp.exp(-0.5 * (beta * shifted_grid) ** 2))
 
     # Compute the full wavefunction as a product of Gaussian factors and Hermite polynomials

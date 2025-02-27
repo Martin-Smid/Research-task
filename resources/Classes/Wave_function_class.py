@@ -87,7 +87,6 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
         """Compute total propagator by combining gravitational & static potential."""
         if self.gravity_potential:
             density = self.compute_density()
-
             gravity_potential = self.solve_poisson(density)
 
 
@@ -118,8 +117,10 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
         """
         # If it's the first step, apply half the potential propagator
         gravitational_propagator = self.update_total_potential(psi)  # Dynamic propagator if gravity is enabled
-
-
+        print("----------------------------------------------------------------")
+        print("tohle je grav propag")
+        print(gravitational_propagator)
+        print("---------------------------------------------------")
         if step_index == 0:
             psi *= cp.sqrt(self.potential_propagator*gravitational_propagator)
 
@@ -229,24 +230,22 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
         k_space = self.k_space  # Use existing k-space grids
         k_squared_sum = sum(k ** 2 for k in k_space)
 
-        # Solve Poisson in Fourier space
-        G = 1  # Gravitational constant (in arbitrary units)
-        # Ensure density_k is computed in single precision (complex64)
+
+        G = 1  # Gravitational constant
         density_k = cp.fft.fftn(density.astype(cp.complex64))
 
         # Set zero mode to 0 dynamically based on dimensions
-        zero_mode_index = tuple([0] * self.dim)  # e.g., (0,) for 1D, (0, 0) for 2D, etc.
-        density_k -= cp.mean(density_k)  # Dynamically target zero mode for N dimensions
+        zero_mode_index = tuple([0] * self.dim)
+        density_k -= cp.mean(density_k)
 
         # Protect against division by zero in k^2 sum
-        k_squared_sum = cp.where(k_squared_sum == 0, 1e-15, k_squared_sum)
+        k_squared_sum = cp.where(k_squared_sum == 0, 1e-12, k_squared_sum)
 
         # Compute potential in Fourier space with single precision
         potential_k = (4 * cp.pi * G * density_k) / k_squared_sum.astype(cp.complex64)
 
         # Transform back to real space, cast to real32
         potential = cp.fft.ifftn(potential_k).real.astype(cp.float32)
-
         return potential
 
 

@@ -16,12 +16,20 @@ The simulations aim to advance our understanding of the properties and cosmologi
 
 
 **Phase 0.5:**
-- making 3D waves possible
-- adding error handeling into wave function class
-- Unifying functions for 1D,2D,3D animation
+- making 3D waves possible ✓
+- adding error handling into wave function class X
+- Unifying functions for 1D,2D,3D animation X
 
 **Phase 1:**
-- solving Schrödinger equation with harmonic potential
-- monitoring the errors
-  - the error of my solution from the analytical one
-  - the error of time propagation of the probability density 
+- solving Schrödinger equation with harmonic potential ✓
+- monitoring the errors ✓ 
+  - the error of my solution from the analytical one ✓
+  - the error of time propagation of the probability density  ✓
+  
+**Phase 2**
+
+- Poisson-Schrödinger System implemented using the split-step method
+- Implementation is based on https://arxiv.org/pdf/2101.01828.
+- Adding a chance to include gravitational potential in Wave function ✓
+- Calculating the density of the wave function in given time of space -> transforming it to k_space and using it to solve the poisson equation using cuda fft ✓
+- using the resulting potential to evolve the wave function in split step methode ✓

@@ -9,26 +9,26 @@ from resources.Classes.Simulation_Class import Simulation_class
 
 
 # Initialize the 2D system
-x_vals = np.linspace(-10, 10, 128)
-y_vals = np.linspace(-10, 10, 128)
+x_vals = np.linspace(-10, 10, 256)
+y_vals = np.linspace(-10, 10, 256)
 X, Y = np.meshgrid(x_vals, y_vals)
 
 sim = Simulation_class(
     dim=2,
     boundaries=[(-10, 10), (-10, 10)],
-    N=128,
-    total_time=2,
-    h=0.01,
+    N=256,
+    total_time=5,
+    h=0.001,
 )
 
 vlna = Wave_function(
     simulation=sim,
     mass=1.5,
     packet_type="gaussian",
-    means=[5.0, 5.0],
-    st_deviations=[5,5],
+    means=[0, 0.0],
+    st_deviations=[0.5,0.5],
     gravity_potential=True,
-    momenta=[0, 0],
+    momenta=[2, 20],
     potential=quadratic_potential,  # Quadratic potential for harmonic evolution
 )
 
@@ -178,5 +178,6 @@ ax2.grid()
 plt.tight_layout()
 plt.subplots_adjust(top=0.9)  # Space for the title
 plt.show()
+#plt.savefig('plots/wave_function_comparison.png', dpi=300)
 
 

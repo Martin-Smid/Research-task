@@ -22,7 +22,7 @@ print(f"sim dim je {sim.dim}")
 
 wave = Wave_function(
     packet_type="gaussian",
-    means=[],
+    means=[0],
     st_deviations=[0.1, 0.1],
     simulation=sim,
     mass=1,

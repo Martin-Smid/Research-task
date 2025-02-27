@@ -4,21 +4,26 @@ from resources.system_fucntions import *
 
 # Setup parameters for the domain
 a, b = -10, 10  # Domain boundaries
-N = 3 * 1024  # Number of spatial points
+N = 1024  # Number of spatial points
 
 # Initialize the Wave_function instance
+
+oneD_sim = Simulation_class(
+    dim=1,
+    boundaries=[(a,b)],
+    N=1024,
+    total_time=2,
+    h=0.01,
+)
+
 vlna = Wave_function(
+    simulation=oneD_sim,
     packet_type="gaussian",
     gravity_potential=True,
     momenta=[0],
     means=[0],
     mass=1,
     st_deviations=[5],
-    dim=1,  # 1D wave function
-    boundaries=[(a, b)],
-    N=N,
-    h=0.1,
-    total_time=20,
     potential=None
 )
 
@@ -40,7 +45,7 @@ titles = ["Wavefunction at Start", "Wavefunction at 1/4 Time",
           "Wavefunction at End"]
 
 for ax, wave, title in zip(axes, wave_snapshots, titles):
-    ax.plot(x, np.abs(wave[0, 0])**2)
+    ax.plot(x, np.abs(wave)**2)
     ax.set_title(title)
     ax.set_xlabel("x")
     ax.set_ylabel("|ψ|^2")

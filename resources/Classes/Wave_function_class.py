@@ -86,7 +86,7 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
     def update_total_potential(self, psi):
         """Compute total propagator by combining gravitational & static potential."""
         if self.gravity_potential:
-            density = self.compute_density()
+            density = self.compute_density(psi)
             gravity_potential = self.solve_poisson(density)
 
 
@@ -123,8 +123,8 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
         print("---------------------------------------------------")
         if step_index == 0:
             psi *= cp.sqrt(self.potential_propagator*gravitational_propagator)
-
-        psi *= gravitational_propagator*self.potential_propagator  # Apply dynamic potential propagator
+        else:
+            psi *= gravitational_propagator*self.potential_propagator  # Apply dynamic potential propagator
 
         # Apply kinetic evolution in Fourier space
         psi_k = cp.fft.fftn(psi)
@@ -141,7 +141,7 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
 
         return psi
 
-    def evolve(self, save_every=20):
+    def evolve(self, save_every=1):
         """
         Perform the full time evolution for the wave function using the split-step Fourier method.
 
@@ -209,9 +209,9 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
 
         return psi
 
-    def compute_density(self):
+    def compute_density(self,psi):
         """Calculate the density rho = m|psi|^2."""
-        rho = self.mass * cp.abs(self.psi_evolved).astype(cp.float32) ** 2  # Ensure float32 precision
+        rho = self.mass * cp.abs(psi).astype(cp.float32) ** 2  # Ensure float32 precision
         #density_sum = cp.sum(rho) * (cp.prod(cp.array(self.dx, dtype=cp.float32)) ** 3)
         # print("density sum is equal to:")
         # print(density_sum)
@@ -236,7 +236,7 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
 
         # Set zero mode to 0 dynamically based on dimensions
         zero_mode_index = tuple([0] * self.dim)
-        density_k -= cp.mean(density_k) #TODO: ask about this, shouldnt it be squared, doe it wokr
+        density_k -= cp.mean(density_k)
 
 
         # Protect against division by zero in k^2 sum

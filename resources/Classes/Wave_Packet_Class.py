@@ -80,11 +80,15 @@ class Packet(Base_Wave_function):
         st_deviations_arr = cp.array(self.st_deviations)
 
         # Stack grids for proper broadcasting
-        grids_stacked = cp.stack(self.grids, axis=0)
+        #grids_stacked = cp.stack(self.grids, axis=0)
+        psi_0 = cp.ones_like(self.grids[0])
+        for i in range(len(self.grids)):
 
-        psi_0 = cp.exp(-cp.sum(((grids_stacked - means_arr[:, np.newaxis, np.newaxis, np.newaxis]) ** 2) /
+            psi_0 *= gaussian_packet(self.grids[i], means_arr[i], st_deviations_arr[i])
+
+        '''psi_0 = cp.exp(-cp.sum(((grids_stacked - means_arr[:, np.newaxis, np.newaxis, np.newaxis]) ** 2) /
                                (2 * st_deviations_arr[:, np.newaxis, np.newaxis, np.newaxis] ** 2), axis=0),
-                       dtype=cp.complex128)
+                       dtype=cp.complex128)        '''
 
         # Normalize the wavefunction over all dimensions
         dx_total = cp.prod(cp.array(self.dx))  # Total grid spacing in all dimensions

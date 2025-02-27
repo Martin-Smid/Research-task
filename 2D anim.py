@@ -15,27 +15,31 @@ X, Y = np.meshgrid(x_vals, y_vals)
 
 vlna = Wave_function(
     dim=2,
-    boundaries=[(-10, 10), (-10, 10)],
+    boundaries=[(-20, 20), (-20, 20)],
     N=N,
-    total_time=2000,  # Total simulation time
-    h=10,  # Time interval
-    mass=1000000,
+    total_time=2,  # Total simulation time
+    h=0.001,  # Time interval
+    mass=1.5,
     packet_type="gaussian",
-    means=[0.0, 0.0],
+    means=[5.0, 5.0],
     st_deviations=[5,5],
     gravity_potential=True,
-    momenta=[0, 0],
-    potential=None,  # Quadratic potential for harmonic evolution
+    momenta=[5, 5],
+    potential=quadratic_potential,  # Quadratic potential for harmonic evolution
 )
+
+#TODO add second wave function and make them interact - sum operator to the wave function - maybe add momentum to force collapse
+#TODO is implement the minimal time step requirement    eq 21 in Volker paper with a = 1
+
 
 time_steps = [0, len(vlna.wave_values) // 4, len(vlna.wave_values) // 2,
               (3 * len(vlna.wave_values)) // 4, len(vlna.wave_values) - 1]
-wave_snapshots = [cp.asnumpy(cp.abs(vlna.wave_values[step])) for step in time_steps]
+wave_snapshots = [cp.asnumpy((vlna.wave_values[step])) for step in time_steps]
 
 # Directly create x and y using vlna.boundaries and vlna.N
 x = np.linspace(vlna.boundaries[0][0], vlna.boundaries[0][1], vlna.N)
 y = np.linspace(vlna.boundaries[1][0], vlna.boundaries[1][1], vlna.N)
-
+xy = np.meshgrid(x,y, indexing='ij')
 # Plot the wavefunction at the selected time steps
 fig, axes = plt.subplots(1, 5, figsize=(24, 6))
 titles = ["Wavefunction at Start", "Wavefunction at 1/4 Time",
@@ -43,8 +47,8 @@ titles = ["Wavefunction at Start", "Wavefunction at 1/4 Time",
           "Wavefunction at End"]
 
 for ax, wave, title in zip(axes, wave_snapshots, titles):
-
-    im = ax.pcolormesh(x, y, np.abs(wave[0]**2 + wave[1]**2), shading='auto', cmap='viridis')
+    print(wave)
+    im = ax.contourf(xy[0],xy[1], np.abs(wave), shading='auto', cmap='viridis', levels = 100)
     ax.set_title(title)
     ax.set_xlabel("x")
     ax.set_ylabel("y")
@@ -76,7 +80,7 @@ ani.save("2devolution.mp4")
 plt.show()
 
 '''
-'''
+
 #plotování rozdílu 2D LHO
 
 # Arrays to store results
@@ -169,5 +173,3 @@ plt.subplots_adjust(top=0.9)  # Space for the title
 plt.show()
 
 
-
-'''

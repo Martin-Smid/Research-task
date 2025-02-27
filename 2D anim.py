@@ -5,28 +5,35 @@ from resources.Classes.Wave_function_class import Wave_function
 from resources.Functions.Schrodinger_eq_functions import energy_nd, quadratic_potential
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
+from resources.Classes.Simulation_Class import Simulation_class
 
-# Initialize constants
-N = 256
+
 # Initialize the 2D system
-x_vals = np.linspace(-10, 10, N)
-y_vals = np.linspace(-10, 10, N)
+x_vals = np.linspace(-10, 10, 128)
+y_vals = np.linspace(-10, 10, 128)
 X, Y = np.meshgrid(x_vals, y_vals)
 
-vlna = Wave_function(
+sim = Simulation_class(
     dim=2,
-    boundaries=[(-20, 20), (-20, 20)],
-    N=N,
-    total_time=2,  # Total simulation time
-    h=0.001,  # Time interval
+    boundaries=[(-10, 10), (-10, 10)],
+    N=128,
+    total_time=2,
+    h=0.01,
+)
+
+vlna = Wave_function(
+    simulation=sim,
     mass=1.5,
     packet_type="gaussian",
     means=[5.0, 5.0],
     st_deviations=[5,5],
     gravity_potential=True,
-    momenta=[5, 5],
+    momenta=[0, 0],
     potential=quadratic_potential,  # Quadratic potential for harmonic evolution
 )
+
+
+print(f"{vlna.N}  {vlna.boundaries}")
 
 #TODO add second wave function and make them interact - sum operator to the wave function - maybe add momentum to force collapse
 #TODO is implement the minimal time step requirement    eq 21 in Volker paper with a = 1
@@ -107,18 +114,18 @@ for step in np.arange(0, time_steps, time_steps // 25):  # We don't need all tim
 
     # Calculate real and imaginary parts along the middle slice (x-axis and y-axis)
     # Real and imaginary parts along the central column (x-axis)
-    real_x_an = np.real(psi_2d_evolved[:, N // 2])  # Analytical real part along x-axis
-    imag_x_an = np.imag(psi_2d_evolved[:, N // 2])  # Analytical imaginary part along x-axis
+    real_x_an = np.real(psi_2d_evolved[:, vlna.N // 2])  # Analytical real part along x-axis
+    imag_x_an = np.imag(psi_2d_evolved[:, vlna.N // 2])  # Analytical imaginary part along x-axis
 
-    real_x_num = np.real(wave_at_time_t[:, N // 2])  # Numerical real part along x-axis
-    imag_x_num = np.imag(wave_at_time_t[:, N // 2])  # Numerical imaginary part along x-axis
+    real_x_num = np.real(wave_at_time_t[:, vlna.N // 2])  # Numerical real part along x-axis
+    imag_x_num = np.imag(wave_at_time_t[:, vlna.N// 2])  # Numerical imaginary part along x-axis
 
     # Real and imaginary parts along the central row (y-axis)
-    real_y_an = np.real(psi_2d_evolved[N // 2, :])  # Analytical real part along y-axis
-    imag_y_an = np.imag(psi_2d_evolved[N // 2, :])  # Analytical imaginary part along y-axis
+    real_y_an = np.real(psi_2d_evolved[vlna.N// 2, :])  # Analytical real part along y-axis
+    imag_y_an = np.imag(psi_2d_evolved[vlna.N // 2, :])  # Analytical imaginary part along y-axis
 
-    real_y_num = np.real(wave_at_time_t[N // 2, :])  # Numerical real part along y-axis
-    imag_y_num = np.imag(wave_at_time_t[N // 2, :])  # Numerical imaginary part along y-axis
+    real_y_num = np.real(wave_at_time_t[vlna.N // 2, :])  # Numerical real part along y-axis
+    imag_y_num = np.imag(wave_at_time_t[vlna.N// 2, :])  # Numerical imaginary part along y-axis
 
     # Store the calculated values for plotting
     real_x_an_values.append(real_x_an)

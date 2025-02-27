@@ -2,7 +2,7 @@ from resources.Errors.Errors import *
 import cupy as cp
 
 
-class Simulation_parameters():
+class Simulation_class():
     """
         A class to manage simulation parameters.
 

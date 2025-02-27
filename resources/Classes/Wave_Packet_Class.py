@@ -1,16 +1,15 @@
-from resources.Classes.Base_Wave_Function import Base_Wave_function
 from resources.Functions.Schrodinger_eq_functions import *
 from resources.Errors.Errors import *
 import cupy as cp
 
 
-class Packet(Base_Wave_function):
+class Packet():
     """
     A class for wave packet initialization. Inherits from Wave_function and handles
     the creation of the initial wavefunction, based on the selected packet type.
     """
 
-    def __init__(self, packet_type="gaussian", means=None, st_deviations=None, grids=None, dx=None, mass=1, omega=1,
+    def __init__(self, packet_type="gaussian",dim =1, boundaries=None, potential=None, means=None, st_deviations=None, grids=None, dx=None, mass=1, omega=1,
                  *args, **kwargs):
         """
         Initialize a Packet instance.
@@ -24,15 +23,18 @@ class Packet(Base_Wave_function):
             mass (float): Mass of the particle in the wave packet.
             omega (float): Frequency of the harmonic oscillator.
         """
-        super().__init__(*args, **kwargs)  # Call the parent initializer
+
+        self.dim = dim  # Number of dimensions
         self.packet_type = packet_type
         self.means = means if means else [0] * self.dim
         self.st_deviations = st_deviations if st_deviations else [0.1] * self.dim
         self.grids = grids  # Receive grids from parent class
-
+        self.potential = potential  # Potential function
         self.dx = dx  # Receive dx from parent class
         self.mass = mass  # New attribute for particle mass
         self.omega = omega  # New attribute for harmonic oscillator frequency
+        print(self.grids)
+        print(self.dim)
 
         if self.grids is None or len(self.grids) != self.dim:
             raise ValueError("Grids must be provided for each dimension.")

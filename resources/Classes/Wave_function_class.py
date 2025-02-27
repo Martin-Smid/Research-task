@@ -2,7 +2,7 @@ import cupy as cp
 from scipy.constants import gravitational_constant
 
 from resources.Functions.Schrodinger_eq_functions import *
-from resources.Classes.Simulation_Class import Simulation_parameters
+from resources.Classes.Simulation_Class import Simulation_class
 from resources.Classes.Wave_Packet_Class import Packet
 
 
@@ -10,8 +10,8 @@ from resources.Classes.Wave_Packet_Class import Packet
 #-----------------------------------------------------------------------------------------------------------------------
 
 
-class Wave_function(Simulation_parameters):  # Streamlined and unified evolution logic
-    def __init__(self, packet_type="gaussian", momenta=[0], means=[0], st_deviations=[0.1],
+class Wave_function():  # Streamlined and unified evolution logic
+    def __init__(self,simulation,packet_type="gaussian", momenta=[0], means=[0], st_deviations=[0.1],
                  potential=None, gravity_potential=None, mass=1, omega=1, **kwargs):
         """
         Initialize a wave function with optional gravitational potential.
@@ -19,9 +19,20 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
         Parameters:
             potential (callable, optional): A user-defined potential function.
             gravity_potential (bool or None, optional): Whether to include dynamic gravitational potential. Defaults to None (no gravity).
-            * Other parameters as defined previously.
+            **kwargs: Additional keyword arguments.
         """
-        super().__init__(**kwargs)  # Initialize Simulation_parameters first
+        self.simulation = simulation
+        self.dim = simulation.dim
+        print(f"sim dim ve vln fci je {simulation.dim} a self. dim je {self.dim}")
+        self.boundaries = simulation.boundaries
+        self.N = simulation.N
+        self.total_time = simulation.total_time
+        self.h = simulation.h
+        self.num_steps = int(self.total_time / self.h)
+        self.dx = simulation.dx
+        self.grids = simulation.grids
+
+
         self.packet_creator = Packet(
             packet_type=packet_type,
             means=means,
@@ -30,7 +41,7 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
             dx=self.dx,
             mass=mass,
             omega=omega,
-            **kwargs)
+            dim=self.dim,)
 
         self.packet_type = packet_type
         self.potential = potential

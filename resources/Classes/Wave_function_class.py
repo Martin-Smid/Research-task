@@ -1,4 +1,6 @@
 import cupy as cp
+from scipy.constants import gravitational_constant
+
 from resources.Functions.Schrodinger_eq_functions import *
 from resources.Classes.Simulation_Class import Simulation_parameters
 from resources.Classes.Wave_Packet_Class import Packet
@@ -85,14 +87,11 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
         """Compute total propagator by combining gravitational & static potential."""
         if self.gravity_potential:
             density = self.compute_density()
-            print("konec hustoty jde se do poissona")
+
             gravity_potential = self.solve_poisson(density)
-            print("#--------------------------------------------------------------#")
-            print(gravity_potential)
-            grav_potential = gravity_potential
-            print(grav_potential)
-            print("#--------------------------------------------------------------#")
-            return cp.exp(-1j * self.h * grav_potential)
+
+
+            return cp.exp(-1j * self.h * gravity_potential)
         return cp.ones_like(psi)
 
     def compute_static_potential_propagator(self):
@@ -119,10 +118,8 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
         """
         # If it's the first step, apply half the potential propagator
         gravitational_propagator = self.update_total_potential(psi)  # Dynamic propagator if gravity is enabled
-        print("----------------------------------------------------------------")
-        print("tohle je grav propag")
-        print(gravitational_propagator)
-        print("---------------------------------------------------")
+
+
         if step_index == 0:
             psi *= cp.sqrt(self.potential_propagator*gravitational_propagator)
 
@@ -143,7 +140,7 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
 
         return psi
 
-    def evolve(self, save_every=1):
+    def evolve(self, save_every=20):
         """
         Perform the full time evolution for the wave function using the split-step Fourier method.
 
@@ -239,16 +236,17 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
 
         # Set zero mode to 0 dynamically based on dimensions
         zero_mode_index = tuple([0] * self.dim)  # e.g., (0,) for 1D, (0, 0) for 2D, etc.
-        density_k[zero_mode_index] = 0  # Dynamically target zero mode for N dimensions
+        density_k -= cp.mean(density_k)  # Dynamically target zero mode for N dimensions
 
         # Protect against division by zero in k^2 sum
-        k_squared_sum = cp.where(k_squared_sum == 0, 1e-10, k_squared_sum)
+        k_squared_sum = cp.where(k_squared_sum == 0, 1e-15, k_squared_sum)
 
         # Compute potential in Fourier space with single precision
         potential_k = (4 * cp.pi * G * density_k) / k_squared_sum.astype(cp.complex64)
 
         # Transform back to real space, cast to real32
         potential = cp.fft.ifftn(potential_k).real.astype(cp.float32)
+
         return potential
 
 

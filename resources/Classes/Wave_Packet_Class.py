@@ -67,22 +67,29 @@ class Packet(Base_Wave_function):
                 message=f"The packet type '{self.packet_type}' is not recognized.",
                 packet_type=self.packet_type
             )
+
     def _create_gaussian_packet(self):
         """
-        Creates a Gaussian wave packet based on the provided means and standard deviations.
+            Creates a Gaussian wave packet based on the provided means and standard deviations.
 
-        Returns:
-            cp.ndarray: The normalized Gaussian wavefunction.
-        """
-        # Compute ψ₀ for the first dimension
-        # Compute Gaussian wave packet directly over the full meshgrid
-        psi_0 = cp.exp(-cp.sum(((self.grids - cp.array(self.means)) ** 2) /
-                               (2 * cp.array(self.st_deviations) ** 2), axis=0), dtype=cp.complex64)
+            Returns:
+                cp.ndarray: The normalized Gaussian wavefunction.
+            """
+        # Convert means and st_deviations to cupy arrays
+        means_arr = cp.array(self.means)
+        st_deviations_arr = cp.array(self.st_deviations)
+
+        # Stack grids for proper broadcasting
+        grids_stacked = cp.stack(self.grids, axis=0)
+
+        psi_0 = cp.exp(-cp.sum(((grids_stacked - means_arr[:, np.newaxis, np.newaxis, np.newaxis]) ** 2) /
+                               (2 * st_deviations_arr[:, np.newaxis, np.newaxis, np.newaxis] ** 2), axis=0),
+                       dtype=cp.complex128)
 
         # Normalize the wavefunction over all dimensions
         dx_total = cp.prod(cp.array(self.dx))  # Total grid spacing in all dimensions
         psi_0 = normalize_wavefunction(psi_0, dx_total)
-        return psi_0 + 0j  # Ensure complex128 type for `psi_0`
+        return psi_0 + 0j
 
     def _create_LHO_packet(self):
         """

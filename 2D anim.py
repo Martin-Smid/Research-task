@@ -3,6 +3,8 @@ import cupy as cp
 import matplotlib.pyplot as plt
 from resources.Classes.Wave_function_class import Wave_function
 from resources.Functions.Schrodinger_eq_functions import energy_nd, quadratic_potential
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
 
 # Initialize constants
 N = 256
@@ -18,33 +20,31 @@ vlna = Wave_function(
     total_time=2,  # Total simulation time
     h=0.01,  # Time interval
     mass=1,
-    packet_type="LHO",
+    packet_type="gaussian",
     means=[0.0, 0.0],
-    st_deviations=[0.1,0.1],
-    gravity_potential=False,
+    st_deviations=[5,5],
+    gravity_potential=True,
     momenta=[0, 0],
-    potential=quadratic_potential,  # Quadratic potential for harmonic evolution
+    potential=None,  # Quadratic potential for harmonic evolution
 )
-'''
-# Extract wavefunction snapshots at 5 time steps: Start, 1/4, 1/2, 3/4, End
+
 time_steps = [0, len(vlna.wave_values) // 4, len(vlna.wave_values) // 2,
               (3 * len(vlna.wave_values)) // 4, len(vlna.wave_values) - 1]
-
 wave_snapshots = [cp.asnumpy(cp.abs(vlna.wave_values[step])) for step in time_steps]
 
-# Create a uniform grid based on the 2D boundaries
-x, y = np.linspace(vlna.boundaries[0][0], vlna.boundaries[0][1], vlna.N), \
-    np.linspace(vlna.boundaries[1][0], vlna.boundaries[1][1], vlna.N)
-X, Y = np.meshgrid(x, y)
+# Directly create x and y using vlna.boundaries and vlna.N
+x = np.linspace(vlna.boundaries[0][0], vlna.boundaries[0][1], vlna.N)
+y = np.linspace(vlna.boundaries[1][0], vlna.boundaries[1][1], vlna.N)
 
-# Plot the wavefunction at the 5 selected time steps
+# Plot the wavefunction at the selected time steps
 fig, axes = plt.subplots(1, 5, figsize=(24, 6))
 titles = ["Wavefunction at Start", "Wavefunction at 1/4 Time",
           "Wavefunction at Half Time", "Wavefunction at 3/4 Time",
           "Wavefunction at End"]
 
 for ax, wave, title in zip(axes, wave_snapshots, titles):
-    im = ax.pcolormesh(X, Y, wave, shading='auto', cmap='viridis')
+
+    im = ax.pcolormesh(x, y, np.abs(wave[0]**2 + wave[1]**2), shading='auto', cmap='viridis')
     ax.set_title(title)
     ax.set_xlabel("x")
     ax.set_ylabel("y")
@@ -55,6 +55,28 @@ plt.show()
 
 '''
 
+fig, ax = plt.subplots()
+
+# Convert the initial wavefunction to a NumPy array and take its magnitude
+initial_wave = np.abs(vlna.wave_values[0][0].get())
+
+im = ax.pcolormesh(X, Y, initial_wave, shading='auto', cmap='viridis')
+
+
+def animate(i):
+    # Convert the current wavefunction to a NumPy array and take its magnitude
+    wave = np.abs(vlna.wave_values[i][0].get())
+
+    im.set_array(wave.ravel())
+    return im,
+
+
+ani = FuncAnimation(fig, animate, frames=len(vlna.wave_values), interval=50, blit=False)
+ani.save("2devolution.mp4")
+plt.show()
+
+'''
+'''
 #plotování rozdílu 2D LHO
 
 # Arrays to store results
@@ -148,3 +170,4 @@ plt.show()
 
 
 
+'''

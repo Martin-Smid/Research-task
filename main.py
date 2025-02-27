@@ -4,25 +4,52 @@ from resources.system_fucntions import *
 
 # Setup parameters for the domain
 a, b = -10, 10  # Domain boundaries
-N = 1024 # Number of spatial points
+N = 3 * 1024  # Number of spatial points
 
 # Initialize the Wave_function instance
 vlna = Wave_function(
-    packet_type="LHO",
-    gravity_potential=False,
+    packet_type="gaussian",
+    gravity_potential=True,
     momenta=[0],
     means=[0],
-    st_deviations=[0.1],
+    mass=10000,
+    st_deviations=[5],
     dim=1,  # 1D wave function
     boundaries=[(a, b)],
     N=N,
-    h=0.01,
-    total_time=2*cp.pi,
-    potential=quadratic_potential
+    h=0.1,
+    total_time=20,
+    potential=None
 )
 
 
 print("#--------------------------------------------------------------------------#")
+
+
+time_steps = [0, len(vlna.wave_values) // 4, len(vlna.wave_values) // 2,
+              (3 * len(vlna.wave_values)) // 4, len(vlna.wave_values) - 1]
+wave_snapshots = [cp.asnumpy(cp.abs(vlna.wave_values[step])) for step in time_steps]
+
+# Directly create x using vlna.boundaries and vlna.N
+x = np.linspace(vlna.boundaries[0][0], vlna.boundaries[0][1], vlna.N)
+
+# Plot the wavefunction at the selected time steps
+fig, axes = plt.subplots(1, 5, figsize=(24, 6))
+titles = ["Wavefunction at Start", "Wavefunction at 1/4 Time",
+          "Wavefunction at Half Time", "Wavefunction at 3/4 Time",
+          "Wavefunction at End"]
+
+for ax, wave, title in zip(axes, wave_snapshots, titles):
+    ax.plot(x, np.abs(wave[0, 0])**2)
+    ax.set_title(title)
+    ax.set_xlabel("x")
+    ax.set_ylabel("|ψ|^2")
+
+plt.tight_layout()
+plt.show()
+
+
+
 
 
 # Generate and show the animation
@@ -30,7 +57,7 @@ print("#------------------------------------------------------------------------
 #plt.show()
 
 
-
+'''
 x_vals = np.linspace(a,b,N,endpoint=False)
 
 # Arrays to store results
@@ -105,5 +132,5 @@ plt.axhline(0, color='black', linestyle='--', linewidth=0.5)  # Reference line a
 plt.legend()
 plt.grid()
 plt.show()
-
+'''
 

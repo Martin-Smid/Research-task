@@ -236,7 +236,8 @@ class Wave_function(Simulation_parameters):  # Streamlined and unified evolution
 
         # Set zero mode to 0 dynamically based on dimensions
         zero_mode_index = tuple([0] * self.dim)
-        density_k -= cp.mean(density_k)
+        density_k -= cp.mean(density_k) #TODO: ask about this, shouldnt it be squared, doe it wokr
+
 
         # Protect against division by zero in k^2 sum
         k_squared_sum = cp.where(k_squared_sum == 0, 1e-12, k_squared_sum)

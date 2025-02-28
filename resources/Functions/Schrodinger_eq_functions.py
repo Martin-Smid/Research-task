@@ -30,9 +30,9 @@ def quadratic_potential(wave_function_instance):
         cp.ndarray: The potential computed on the spatial grid.
     """
     grids = wave_function_instance.grids  # Grids (already meshgrids) from the wave_function instance
-    mass = wave_function_instance.mass  # Mass from the wave_function instance
+    mass = wave_function_instance.total_mass  # Mass from the wave_function instance
     dim = wave_function_instance.dim
-    omega = wave_function_instance.omega
+    omega = 1
 
     # Compute r^2 from the multidimensional grid
     r2 = sum(g ** 2 for g in grids)

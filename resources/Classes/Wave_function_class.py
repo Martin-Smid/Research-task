@@ -23,7 +23,6 @@ class Wave_function():  # Streamlined and unified evolution logic
         """
         self.simulation = simulation
         self.dim = simulation.dim
-        print(f"sim dim ve vln fci je {simulation.dim} a self. dim je {self.dim}")
         self.boundaries = simulation.boundaries
         self.N = simulation.N
         self.total_time = simulation.total_time
@@ -31,8 +30,9 @@ class Wave_function():  # Streamlined and unified evolution logic
         self.num_steps = int(self.total_time / self.h)
         self.dx = simulation.dx
         self.grids = simulation.grids
-
-
+        self.momenta = momenta
+        self.mass = mass
+        self.omega = omega
         self.packet_creator = Packet(
             packet_type=packet_type,
             means=means,
@@ -41,35 +41,24 @@ class Wave_function():  # Streamlined and unified evolution logic
             dx=self.dx,
             mass=mass,
             omega=omega,
-            dim=self.dim,)
-
-        self.packet_type = packet_type
+            dim=self.dim, )
+        self.psi = self.packet_creator.create_psi_0()
         self.potential = potential
         self.gravity_potential = gravity_potential
-        self.means = means
-        self.st_deviations = st_deviations
-        self.mass = mass
-        self.omega = omega
-        self.momenta = momenta
-        self.k_space = self.create_k_space()  # Unified propagator logic follows
+        #self.k_space = self.create_k_space()  # Unified propagator logic follows
 
-        # Gravitational potential will be dynamically updated
-        # Initialize wave function
-        self.psi_0 = self.packet_creator.create_psi_0()
-        self.psi_evolved = self.psi_0
 
         # Precompute propagators
-        self.kinetic_propagator = self.compute_kinetic_propagator()
-        self.potential_propagator = self.compute_static_potential_propagator()
-        self.dynamic_gravity_potential = None  # Updated dynamically if needed
+        #self.kinetic_propagator = self.compute_kinetic_propagator()
+        #self.potential_propagator = self.compute_static_potential_propagator()
+        #self.dynamic_gravity_potential = None
 
         # Initialize storage for wave evolution
-        self.wave_values = []
+        #self.wave_functions = []
 
-        # Start evolution
-        # Streamlined evolution process
-        self.evolve()
 
+        #self.evolve()
+    '''
     def create_k_space(self):
         """Creates the k-space (wave vector space) for any arbitrary number of dimensions."""
         # Create k-space components with single-precision floats
@@ -259,7 +248,7 @@ class Wave_function():  # Streamlined and unified evolution logic
         # Transform back to real space, cast to real32
         potential = cp.fft.ifftn(potential_k).real.astype(cp.float32)
         return potential
-
+'''
 
 
 

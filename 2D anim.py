@@ -19,15 +19,15 @@ sim = Simulation_class(
     N=N,
     total_time=5,
     h=0.001,
-    static_potential=quadratic_potential,
-    use_gravity=False,
+    static_potential=None,
+    use_gravity=True,
 )
 
 vlna = Wave_function(
     simulation=sim,
-    mass=1.5,
-    packet_type="LHO",
-    means=[0, 0.0],
+    mass=500,
+    packet_type="gaussian",
+    means=[5, 5.0],
     st_deviations=[0.1,0.1],
     momenta=[0, 0],
       # Quadratic potential for harmonic evolution
@@ -35,20 +35,21 @@ vlna = Wave_function(
 
 vlna2 = Wave_function(
     simulation=sim,
-    mass=1.5,
-    packet_type="LHO",
-    means=[-5, 5.0],
+    mass=500,
+    packet_type="gaussian",
+    means=[-5, -5.0],
     st_deviations=[0.1,0.1],
     momenta=[0, 0],
       # Quadratic potential for harmonic evolution
 )
 
 sim.add_wave_function(vlna)
-
+sim.add_wave_function(vlna2)
 
 sim.evolve(save_every=500)
 
 
+'''
 x_vals = np.linspace(-10, 10, N)
 y_vals = np.linspace(-10, 10, N)
 X, Y = np.meshgrid(x_vals, y_vals)
@@ -89,39 +90,135 @@ for time in sim.accessible_times:
 
 plt.tight_layout()
 plt.show()
-
+'''
 
 #TODO add second wave function and make them interact - sum operator to the wave function - maybe add momentum to force collapse
 #TODO is implement the minimal time step requirement    eq 21 in Volker paper with a = 1
 
-'''
-time_steps = [0, len(vlna.wave_values) // 4, len(vlna.wave_values) // 2,
-              (3 * len(vlna.wave_values)) // 4, len(vlna.wave_values) - 1]
-wave_snapshots = [cp.asnumpy((vlna.wave_values[step])) for step in time_steps]
+
+wave_snapshots = [cp.asnumpy(sim.get_wave_function_at_time(time)) for time in sim.accessible_times]
 
 # Directly create x and y using vlna.boundaries and vlna.N
 x = np.linspace(vlna.boundaries[0][0], vlna.boundaries[0][1], vlna.N)
 y = np.linspace(vlna.boundaries[1][0], vlna.boundaries[1][1], vlna.N)
 xy = np.meshgrid(x,y, indexing='ij')
-# Plot the wavefunction at the selected time steps
-fig, axes = plt.subplots(1, 5, figsize=(24, 6))
-titles = ["Wavefunction at Start", "Wavefunction at 1/4 Time",
-          "Wavefunction at Half Time", "Wavefunction at 3/4 Time",
-          "Wavefunction at End"]
 
-for ax, wave, title in zip(axes, wave_snapshots, titles):
-    print(wave)
+# Calculate the number of rows and columns for the subplots
+n_plots = len(wave_snapshots)
+n_cols = int(np.ceil(np.sqrt(n_plots)))
+n_rows = int(np.ceil(n_plots / n_cols))
+
+# Plot the wavefunction at the selected time steps
+fig, axes = plt.subplots(n_rows, n_cols, figsize=(n_cols*6, n_rows*6))
+titles = [f"Wavefunction at Time {time}" for time in sim.accessible_times]
+
+for ax, wave, title in zip(axes.flat, wave_snapshots, titles):
+
     im = ax.contourf(xy[0],xy[1], np.abs(wave), shading='auto', cmap='viridis', levels = 100)
     ax.set_title(title)
     ax.set_xlabel("x")
     ax.set_ylabel("y")
     fig.colorbar(im, ax=ax, orientation="vertical", label="|ψ|")
 
+# Hide any unused subplots
+for ax in axes.flat[len(wave_snapshots):]:
+    ax.axis('off')
+
 plt.tight_layout()
 plt.show()
 
+'''
+def plot_combined_wave_functions(sim, combine_method='sum', cmap='viridis'):
+    """
+    Plot all wave functions combined into a single plot for each timestep.
+
+    Parameters:
+        sim: Simulation object with evolved wave functions
+        combine_method: How to combine the wave functions ('sum' or 'density_sum')
+                       'sum': Add the wave functions directly (ψ₁ + ψ₂ + ...)
+                       'density_sum': Add the densities (|ψ₁|² + |ψ₂|² + ...)
+        cmap: Colormap to use for the plots
+    """
+    # Get the number of time steps to plot
+    n_times = len(sim.accessible_times)
+
+    # Calculate the number of rows and columns for the subplots
+    n_cols = min(3, n_times)  # Max 3 columns
+    n_rows = int(np.ceil(n_times / n_cols))
+
+    # Get grid information from the simulation
+    x = np.linspace(sim.boundaries[0][0], sim.boundaries[0][1], sim.N)
+    y = np.linspace(sim.boundaries[1][0], sim.boundaries[1][1], sim.N)
+    xy = np.meshgrid(x, y, indexing='ij')
+
+    # Create figure and axes for the subplots
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(n_cols * 6, n_rows * 5), squeeze=False)
+
+    # Maximum value for consistent color scale
+    max_val = 0
+
+    # Get the combined wave functions at all times
+    combined_waves = []
+    for time in sim.accessible_times:
+        # Get all wave functions at this time
+        all_waves = sim.get_wave_function_at_time(time)
+
+        if combine_method == 'sum':
+            # Sum the wave functions directly
+            combined = sum(cp.asnumpy(wave) for wave in all_waves)
+            combined_waves.append(combined)
+            # Update max value based on density
+            max_val = max(max_val, np.max(np.abs(combined) ** 2))
+        else:  # density_sum
+            # Sum the densities
+            combined_density = sum(cp.asnumpy(np.abs(wave) ** 2) for wave in all_waves)
+            combined_waves.append(combined_density)
+            # Update max value
+            max_val = max(max_val, np.max(combined_density))
+
+    # Plot each timestep
+    for idx, (time, wave) in enumerate(zip(sim.accessible_times, combined_waves)):
+        row = idx // n_cols
+        col = idx % n_cols
+        ax = axes[row, col]
+
+        if combine_method == 'sum':
+            # Plot the density of the combined wave function
+            density = np.abs(wave) ** 2
+            title = f"Combined Wave Functions (t = {time:.2f})"
+            label = "|ψ₁ + ψ₂ + ...|²"
+        else:
+            # Plot the sum of densities
+            density = wave  # already the sum of densities
+            title = f"Sum of Densities (t = {time:.2f})"
+            label = "|ψ₁|² + |ψ₂|² + ..."
+
+        im = ax.contourf(xy[0], xy[1], density,
+                         shading='auto', cmap=cmap, levels=100,
+                         vmin=0, vmax=max_val)
+
+        ax.set_title(title)
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        plt.colorbar(im, ax=ax, orientation="vertical", label=label)
+
+    # Hide any unused subplots
+    for ax in axes.flat[n_times:]:
+        ax.axis('off')
+
+    plt.tight_layout()
+    plt.show()
+
+    return fig
 
 
+# Example usage:
+plot_combined_wave_functions(sim, combine_method='sum')  # Plot sum of wave functions
+
+
+'''
+
+'''
 fig, ax = plt.subplots()
 
 # Convert the initial wavefunction to a NumPy array and take its magnitude
@@ -142,96 +239,6 @@ ani = FuncAnimation(fig, animate, frames=len(vlna.wave_values), interval=50, bli
 ani.save("2devolution.mp4")
 plt.show()
 
-#plotování rozdílu 2D LHO
 
-# Arrays to store results
-times = []  # Times corresponding to each calculation
-real_x_an_values, imag_x_an_values = [], []  # Real and imaginary parts of analytical wave function along x-axis
-real_x_num_values, imag_x_num_values = [], []  # Real and imaginary parts of numerical wave function along x-axis
-
-real_y_an_values, imag_y_an_values = [], []  # Real and imaginary parts of analytical wave function along y-axis
-real_y_num_values, imag_y_num_values = [], []  # Real and imaginary parts of numerical wave function along y-axis
-
-# Time steps
-time_steps = int(vlna.total_time / vlna.h)
-
-# Iterate over reduced time steps for better visualization
-for step in np.arange(0, time_steps, time_steps // 25):  # We don't need all time steps
-    t = step * vlna.h  # Equivalent time for the given step
-    times.append(t)
-
-    # Analytical solution (complex array for current time step)
-    psi_2d_evolved = cp.asnumpy(vlna.psi_0 * cp.exp(-1j * energy_nd([0, 0], omega=1, hbar=1) * t))
-
-    # Numerical wave function evolved at the current time
-    wave_at_time_t = cp.asnumpy(vlna.wave_function_at_time(t))
-
-    # Calculate real and imaginary parts along the middle slice (x-axis and y-axis)
-    # Real and imaginary parts along the central column (x-axis)
-    real_x_an = np.real(psi_2d_evolved[:, vlna.N // 2])  # Analytical real part along x-axis
-    imag_x_an = np.imag(psi_2d_evolved[:, vlna.N // 2])  # Analytical imaginary part along x-axis
-
-    real_x_num = np.real(wave_at_time_t[:, vlna.N // 2])  # Numerical real part along x-axis
-    imag_x_num = np.imag(wave_at_time_t[:, vlna.N// 2])  # Numerical imaginary part along x-axis
-
-    # Real and imaginary parts along the central row (y-axis)
-    real_y_an = np.real(psi_2d_evolved[vlna.N// 2, :])  # Analytical real part along y-axis
-    imag_y_an = np.imag(psi_2d_evolved[vlna.N // 2, :])  # Analytical imaginary part along y-axis
-
-    real_y_num = np.real(wave_at_time_t[vlna.N // 2, :])  # Numerical real part along y-axis
-    imag_y_num = np.imag(wave_at_time_t[vlna.N// 2, :])  # Numerical imaginary part along y-axis
-
-    # Store the calculated values for plotting
-    real_x_an_values.append(real_x_an)
-    imag_x_an_values.append(imag_x_an)
-    real_x_num_values.append(real_x_num)
-    imag_x_num_values.append(imag_x_num)
-
-    real_y_an_values.append(real_y_an)
-    imag_y_an_values.append(imag_y_an)
-    real_y_num_values.append(real_y_num)
-    imag_y_num_values.append(imag_y_num)
-
-# Plotting the Comparison Along x-axis and y-axis
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12))
-fig.suptitle('Comparison of Real and Imaginary Parts of Wave Functions', fontsize=14)
-
-# Iterate over the stored values to plot
-for i, t in enumerate(times):
-    # Plot analytical and numerical real/imaginary parts for the x-axis
-    ax1.plot(x_vals, real_x_an_values[i], color='blue', alpha=0.6, label=r'Re $\psi_{An}$' if i == 0 else "")
-    ax1.plot(x_vals, imag_x_an_values[i], color='red', alpha=0.6, label=r'Im $\psi_{An}$' if i == 0 else "")
-    ax1.plot(x_vals, real_x_num_values[i], color='green', alpha=0.4, linestyle='--',
-             label=r'Re $\psi_{Num}$' if i == 0 else "")
-    ax1.plot(x_vals, imag_x_num_values[i], color='orange', alpha=0.4, linestyle='--',
-             label=r'Im $\psi_{Num}$' if i == 0 else "")
-
-    # Plot analytical and numerical real/imaginary parts for the y-axis
-    ax2.plot(y_vals, real_y_an_values[i], color='blue', alpha=0.6, label=r'Re $\psi_{An}$' if i == 0 else "")
-    ax2.plot(y_vals, imag_y_an_values[i], color='red', alpha=0.6, label=r'Im $\psi_{An}$' if i == 0 else "")
-    ax2.plot(y_vals, real_y_num_values[i], color='green', alpha=0.4, linestyle='--',
-             label=r'Re $\psi_{Num}$' if i == 0 else "")
-    ax2.plot(y_vals, imag_y_num_values[i], color='orange', alpha=0.4, linestyle='--',
-             label=r'Im $\psi_{Num}$' if i == 0 else "")
-
-# Customize plots for x-axis comparison
-ax1.set_title('Real and Imaginary Parts Along x-axis (central column)')
-ax1.set_xlabel('x-axis')
-ax1.set_ylabel('ψ')
-ax1.legend(fontsize=10, loc='upper right')
-ax1.grid()
-
-# Customize plots for y-axis comparison
-ax2.set_title('Real and Imaginary Parts Along y-axis (central row)')
-ax2.set_xlabel('y-axis')
-ax2.set_ylabel('ψ')
-ax2.legend(fontsize=10, loc='upper right')
-ax2.grid()
-
-# Adjust layout and display plots
-plt.tight_layout()
-plt.subplots_adjust(top=0.9)  # Space for the title
-plt.show()
-#plt.savefig('plots/wave_function_comparison.png', dpi=300)
 
 '''

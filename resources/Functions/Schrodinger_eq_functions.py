@@ -17,22 +17,23 @@ def normalize_wavefunction(psi, dx):
     psi /= cp.sqrt(cp.sum(cp.abs(psi) ** 2) * dx_total)
     return psi
 
-def quadratic_potential(wave_function_instance):
+def quadratic_potential(simulation_instance):
     """
     Compute the potential V(r) = 1/2 * omega^2 * r^2 for arbitrary dimensions
     using the properties of a Wave_function instance.
 
     Parameters:
-        wave_function_instance (Wave_function): An instance of the Wave_function class.
+        simulation_instance (Wave_function): An instance of the Wave_function class.
 
     Returns:
         cp.ndarray: The potential computed on the spatial grid.
         cp.ndarray: The potential computed on the spatial grid.
     """
-    grids = wave_function_instance.grids  # Grids (already meshgrids) from the wave_function instance
-    mass = wave_function_instance.total_mass  # Mass from the wave_function instance
-    dim = wave_function_instance.dim
-    omega = 1
+    grids = simulation_instance.grids  # Grids (already meshgrids) from the wave_function instance
+
+    mass = simulation_instance.total_mass  # Mass from the wave_function instance
+    dim = simulation_instance.dim
+    omega = simulation_instance.total_omega
 
     # Compute r^2 from the multidimensional grid
     r2 = sum(g ** 2 for g in grids)

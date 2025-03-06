@@ -1,44 +1,99 @@
 import numpy as np
 import cupy as cp
 import matplotlib.pyplot as plt
+from scipy.constants import gravitational_constant
+
 from resources.Classes.Wave_function_class import Wave_function
 from resources.Functions.Schrodinger_eq_functions import energy_nd, quadratic_potential
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from resources.Classes.Simulation_Class import Simulation_class
 
-
+N = 256
 # Initialize the 2D system
-x_vals = np.linspace(-10, 10, 256)
-y_vals = np.linspace(-10, 10, 256)
+x_vals = np.linspace(-10, 10, N)
+y_vals = np.linspace(-10, 10, N)
 X, Y = np.meshgrid(x_vals, y_vals)
 
 sim = Simulation_class(
     dim=2,
     boundaries=[(-10, 10), (-10, 10)],
-    N=256,
+    N=N,
     total_time=5,
     h=0.001,
+    static_potential=quadratic_potential,
+    use_gravity=False,
 )
 
 vlna = Wave_function(
     simulation=sim,
     mass=1.5,
-    packet_type="gaussian",
+    packet_type="LHO",
     means=[0, 0.0],
-    st_deviations=[0.5,0.5],
-    gravity_potential=True,
-    momenta=[2, 20],
-    potential=quadratic_potential,  # Quadratic potential for harmonic evolution
+    st_deviations=[0.1,0.1],
+    momenta=[0, 0],
+      # Quadratic potential for harmonic evolution
 )
 
+vlna2 = Wave_function(
+    simulation=sim,
+    mass=1.5,
+    packet_type="LHO",
+    means=[-5, 5.0],
+    st_deviations=[0.1,0.1],
+    momenta=[0, 0],
+      # Quadratic potential for harmonic evolution
+)
 
-print(f"{vlna.N}  {vlna.boundaries}")
+sim.add_wave_function(vlna)
+
+
+sim.evolve(save_every=500)
+
+
+# Create the plots
+plt.figure(figsize=(10, 6))
+plt.subplot(1, 2, 1)
+plt.title('X-axis')
+plt.legend(['Analytical real', 'Numerical real', 'Analytical imag', 'Numerical imag'], loc='upper right')
+
+plt.subplot(1, 2, 2)
+plt.title('Y-axis')
+plt.legend(['Analytical real', 'Numerical real', 'Analytical imag', 'Numerical imag'], loc='upper right')
+
+for time in sim.accessible_times:
+
+    an_psi = cp.asnumpy(cp.abs(vlna.psi  * cp.exp(-1j * energy_nd([0, 0], omega=1, hbar=1) * time))**2)
+    an_psi_real = cp.asnumpy(cp.real(vlna.psi  * cp.exp(-1j * energy_nd([0, 0], omega=1, hbar=1) * time)))
+    an_psi_imag = cp.asnumpy(cp.imag(vlna.psi  * cp.exp(-1j * energy_nd([0, 0], omega=1, hbar=1) * time)))
+
+    num_psi = sim.get_wave_function_at_time(time)
+    num_psi = cp.asnumpy(num_psi)
+    num_psi_real = cp.asnumpy(cp.real(num_psi))
+    num_psi_imag = cp.asnumpy(cp.imag(num_psi))
+
+    # Plot x-axis
+    plt.subplot(1, 2, 1)
+    plt.plot(x_vals, an_psi_real[:, x_vals.shape[0]//2], color='red', alpha=0.5)
+    plt.plot(x_vals, num_psi_real[:, x_vals.shape[0]//2], color='green', linestyle='--', alpha=0.5)
+    plt.plot(x_vals, an_psi_imag[:, x_vals.shape[0]//2], color='blue', alpha=0.5)
+    plt.plot(x_vals, num_psi_imag[:, x_vals.shape[0]//2], color='#FFC0CB', linestyle='--', alpha=0.5)
+
+    # Plot y-axis
+    plt.subplot(1, 2, 2)
+    plt.plot(y_vals, an_psi_real[x_vals.shape[0]//2, :], color='red', alpha=0.5)
+    plt.plot(y_vals, num_psi_real[x_vals.shape[0]//2, :], color='green', linestyle='--', alpha=0.5)
+    plt.plot(y_vals, an_psi_imag[x_vals.shape[0]//2, :], color='blue', alpha=0.5)
+    plt.plot(y_vals, num_psi_imag[x_vals.shape[0]//2, :], color='#FFC0CB', linestyle='--', alpha=0.5)
+
+plt.tight_layout()
+plt.show()
+
 
 #TODO add second wave function and make them interact - sum operator to the wave function - maybe add momentum to force collapse
 #TODO is implement the minimal time step requirement    eq 21 in Volker paper with a = 1
 
-
+'''
 time_steps = [0, len(vlna.wave_values) // 4, len(vlna.wave_values) // 2,
               (3 * len(vlna.wave_values)) // 4, len(vlna.wave_values) - 1]
 wave_snapshots = [cp.asnumpy((vlna.wave_values[step])) for step in time_steps]
@@ -64,7 +119,7 @@ for ax, wave, title in zip(axes, wave_snapshots, titles):
 plt.tight_layout()
 plt.show()
 
-'''
+
 
 fig, ax = plt.subplots()
 
@@ -85,8 +140,6 @@ def animate(i):
 ani = FuncAnimation(fig, animate, frames=len(vlna.wave_values), interval=50, blit=False)
 ani.save("2devolution.mp4")
 plt.show()
-
-'''
 
 #plotování rozdílu 2D LHO
 
@@ -180,4 +233,4 @@ plt.subplots_adjust(top=0.9)  # Space for the title
 plt.show()
 #plt.savefig('plots/wave_function_comparison.png', dpi=300)
 
-
+'''

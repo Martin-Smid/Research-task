@@ -41,7 +41,7 @@ vlna2 = Wave_function(
     momenta=[0],
 )
 sim.add_wave_function(vlna)
-sim.add_wave_function(vlna2)
+#sim.add_wave_function(vlna2)
 
 
 sim.evolve(save_every=50)
@@ -49,18 +49,20 @@ sim.evolve(save_every=50)
 
 
 x_vals = np.linspace(a, b, N, endpoint=False)
-'''
-controlled_times = [0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.5,7,7.5,8,8.5,9,9.5,10]
-for time, index in zip(controlled_times, range(len(controlled_times))):
+
+#controlled_times = [0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.5,7,7.5,8,8.5,9,9.5,10]
+for time in sim.accessible_times:
     print(f"Time: {time}")
     print(f"Psi: {vlna.psi  * cp.exp(-1j * energy_nd([0], omega=1, hbar=1) * time)}")
     an_psi = asnumpy(cp.abs(vlna.psi  * cp.exp(-1j * energy_nd([0], omega=1, hbar=1) * time))**2)
     an_psi_real = asnumpy(cp.real(vlna.psi  * cp.exp(-1j * energy_nd([0], omega=1, hbar=1) * time)))
     an_psi_imag = asnumpy(cp.imag(vlna.psi  * cp.exp(-1j * energy_nd([0], omega=1, hbar=1) * time)))
-    print(f"Wave values: {sim.wave_values[index]}")
-    num_psi = asnumpy(cp.abs(sim.wave_values[index]) ** 2)
-    num_psi_real = asnumpy(cp.real(sim.wave_values[index]))
-    num_psi_imag = asnumpy(cp.imag(sim.wave_values[index]))
+
+    num_psi = sim.get_wave_function_at_time(time)
+    num_psi = asnumpy(num_psi)
+    num_psi_real = asnumpy(cp.real(num_psi))
+    num_psi_imag = asnumpy(cp.imag(num_psi))
+
     plt.plot(x_vals, an_psi_real, color='red')
     plt.plot(x_vals, num_psi_real, color='green', linestyle='--')
     plt.plot(x_vals, an_psi_imag, color='blue')
@@ -68,7 +70,7 @@ for time, index in zip(controlled_times, range(len(controlled_times))):
 
 plt.legend(['Analytical real', 'Numerical real', 'Analytical imag', 'Numerical imag'], loc='upper right')
 plt.show()
-'''
+
 print(sim.wave_values[0])
 print(sim.get_wave_function_at_time(0.4))
 print("#--------------------------------------------------------------------------#")

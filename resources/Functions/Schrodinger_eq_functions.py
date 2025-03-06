@@ -68,23 +68,23 @@ def energy_nd(n, omega=1, hbar=1):
     return hbar * omega * (sum(n) + len(n) * 0.5)
 
 
-def lin_harmonic_oscillator(wave_function_instance):
+def lin_harmonic_oscillator(simulation_instance):
     """
     Create the wave function psi_0 for an N-dimensional linear harmonic oscillator.
 
     Parameters:
-        wave_function_instance: Wave function parameters from class Wave_function.
+        simulation_instance: Wave function parameters from class Wave_function.
 
     Returns:
         psi_0: The N-dimensional wave function.
     """
     # Extract information from Wave_function params
-    grids = wave_function_instance.grids  # CuPy meshgrids for each dimension
-    dim = wave_function_instance.dim
-    means = wave_function_instance.means
-    dx = wave_function_instance.dx
-    mass = wave_function_instance.mass
-    omega = wave_function_instance.omega
+    grids = simulation_instance.grids  # CuPy meshgrids for each dimension
+    dim = simulation_instance.dim
+    means = simulation_instance.means
+    dx = simulation_instance.dx
+    mass = simulation_instance.mass
+    omega = simulation_instance.omega
     h_bar = 1
 
     quantum_numbers = [0] * dim  # Quantum numbers for each dimension

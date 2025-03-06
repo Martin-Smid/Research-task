@@ -118,11 +118,16 @@ class Simulation_class:
         self.wave_functions = []  # List to store Wave_function instances
         self.wave_masses = []  # List to store corresponding masses
         self.wave_momenta = []  # List to store corresponding momenta
+        self.wave_omegas = []
 
         # Evolution data storage
         self.total_mass = 0  # Will be updated when wave functions are added
+        self.total_omega = 0
         self.combined_psi = None  # Will be initialized when evolution starts
         self.wave_values = []  # To store evolution snapshots
+
+
+        self.accessible_times = []
 
         # Will be computed before evolution starts
         self.static_potential_propagator = None
@@ -182,7 +187,9 @@ class Simulation_class:
         self.wave_functions.append(wave_function)
         self.wave_masses.append(wave_function.mass)
         self.wave_momenta.append(wave_function.momenta)
+        self.wave_omegas.append(wave_function.omega)
         self.total_mass += wave_function.mass
+        self.total_omega += wave_function.omega
 
         # Log that a wave function was added
         print(f"Added wave function with mass {wave_function.mass}. Total mass: {self.total_mass}")
@@ -313,21 +320,31 @@ class Simulation_class:
 
         return psi
 
-    def evolve(self, save_every=1):
+    def evolve(self, save_every=0):
         """
         Perform the full time evolution for the combined wave function.
 
         Parameters:
-            save_every (int): Frequency of saving the wave function values. Defaults to 1 (saves every step).
+            save_every (int): Frequency of saving the wave function values. Defaults to 0 (saves every step).
 
         Returns:
             None
         """
+
+        if save_every == 0:
+            save_every = 1
+        elif save_every < 0:
+            raise ValueError("save_every must be a non-negative integer. Raised in Simulation.evolve().")
+        elif save_every > 1:
+            save_every = int(save_every)
+
+
         # Make sure simulation is initialized
         if self.combined_psi is None:
             self.initialize_simulation()
 
         psi = self.combined_psi.copy()  # Work with a copy of the initial state
+        self.accessible_times.append(0)
 
         for step in range(self.num_steps):
             # Perform the evolution step
@@ -335,22 +352,48 @@ class Simulation_class:
                 psi, step_index=step, total_steps=self.num_steps
             )
 
-            # Save the wavefunction at the specified intervals
+            # Save the wave_function at the specified intervals
             if step % save_every == 0 and step > 0:  # Skip step 0 as it was saved during initialization
                 self.wave_values.append(psi.copy())
+                self.accessible_times.append(step * self.h)  # Update the accessible times list
 
             # Free memory when possible
             if step % save_every != 0:
                 cp.get_default_memory_pool().free_all_blocks()
 
-        # Update the final state
+            # Update the final state
         self.combined_psi = psi
 
         # Ensure the last state is saved if it wasn't already
         if (self.num_steps - 1) % save_every != 0:
             self.wave_values.append(psi.copy())
+            self.accessible_times.append(self.total_time)  # Add the final time to the list
 
         # Free GPU memory once the evolution is complete
         cp.get_default_memory_pool().free_all_blocks()
 
         print(f"Evolution completed with {len(self.wave_values)} saved states")
+        print(f"Saved times are {self.accessible_times}")
+
+    def get_wave_function_at_time(self, time):
+        """
+        Retrieve the wave function values at a given time.
+
+        Parameters:
+            time (float): The time at which to retrieve the wave function values.
+
+        Returns:
+            cp.ndarray: The wave function values at the given time.
+
+        Raises:
+            ValueError: If the input time is outside the range of accessible times.
+        """
+        # Check if the input time is within the range of accessible times
+        if time < self.accessible_times[0] or time > self.accessible_times[-1]:
+            raise ValueError("Input time is outside the range of accessible times")
+
+        # Find the closest time in the accessible times list
+        closest_time_index = min(range(len(self.accessible_times)), key=lambda i: abs(self.accessible_times[i] - time))
+
+        # Return the corresponding wave function value
+        return self.wave_values[closest_time_index]

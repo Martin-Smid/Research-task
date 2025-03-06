@@ -24,7 +24,7 @@ sim = Simulation_class(
 
 vlna = Wave_function(
     packet_type="LHO",
-    means=[-5],
+    means=[0],
     st_deviations=[0.1],
     simulation=sim,
     mass=1,
@@ -41,7 +41,7 @@ vlna2 = Wave_function(
     momenta=[0],
 )
 sim.add_wave_function(vlna)
-
+sim.add_wave_function(vlna2)
 
 
 sim.evolve(save_every=50)
@@ -49,7 +49,7 @@ sim.evolve(save_every=50)
 
 
 x_vals = np.linspace(a, b, N, endpoint=False)
-
+'''
 controlled_times = [0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.5,7,7.5,8,8.5,9,9.5,10]
 for time, index in zip(controlled_times, range(len(controlled_times))):
     print(f"Time: {time}")
@@ -67,8 +67,10 @@ for time, index in zip(controlled_times, range(len(controlled_times))):
     plt.plot(x_vals, num_psi_imag, color='#FFC0CB', linestyle='--')
 
 plt.legend(['Analytical real', 'Numerical real', 'Analytical imag', 'Numerical imag'], loc='upper right')
-plt.savefig(r'plots/LHO_comparison_evolution_in_simulation.png')
-
+plt.show()
+'''
+print(sim.wave_values[0])
+print(sim.get_wave_function_at_time(0.4))
 print("#--------------------------------------------------------------------------#")
 
 '''

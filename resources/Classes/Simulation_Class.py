@@ -230,7 +230,6 @@ class Simulation_class:
 
     '''
 
-
     def compute_kinetic_propagator_for_wf(self, wf_index):
         """Compute the kinetic propagator for a specific wave function based on its mass and momentum."""
         mass = self.wave_masses[wf_index]
@@ -595,3 +594,5 @@ class Simulation_class:
 
         # Return the corresponding wave function value
         return self.wave_values[closest_time_index]
+        
+

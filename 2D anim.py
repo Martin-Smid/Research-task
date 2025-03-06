@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from resources.Classes.Simulation_Class import Simulation_class
 
-N = 256
+N = 512
 # Initialize the 2D system
 
 
@@ -17,36 +17,57 @@ sim = Simulation_class(
     dim=2,
     boundaries=[(-10, 10), (-10, 10)],
     N=N,
-    total_time=5,
-    h=0.001,
+    total_time=50,
+    h=0.0001,
     static_potential=None,
     use_gravity=True,
 )
 
 vlna = Wave_function(
     simulation=sim,
-    mass=500,
+    mass=50,
     packet_type="gaussian",
-    means=[5, 5.0],
+    means=[0.3, 0.3],
     st_deviations=[0.1,0.1],
     momenta=[0, 0],
-      # Quadratic potential for harmonic evolution
+
+)
+
+vlna3 = Wave_function(
+    simulation=sim,
+    mass=50,
+    packet_type="gaussian",
+    means=[0.3, -0.3],
+    st_deviations=[0.1,0.1],
+    momenta=[0, 0],
+
+)
+
+vlna4 = Wave_function(
+    simulation=sim,
+    mass=50,
+    packet_type="gaussian",
+    means=[-0.3, 0.3],
+    st_deviations=[0.1,0.1],
+    momenta=[0, 0],
+
 )
 
 vlna2 = Wave_function(
     simulation=sim,
-    mass=500,
+    mass=50,
     packet_type="gaussian",
-    means=[-5, -5.0],
+    means=[-0.3, -0.3],
     st_deviations=[0.1,0.1],
     momenta=[0, 0],
-      # Quadratic potential for harmonic evolution
+
 )
 
 sim.add_wave_function(vlna)
 sim.add_wave_function(vlna2)
-
-sim.evolve(save_every=500)
+sim.add_wave_function(vlna3)
+sim.add_wave_function(vlna4)
+sim.evolve(save_every=50000)
 
 
 '''
@@ -126,6 +147,7 @@ for ax in axes.flat[len(wave_snapshots):]:
 
 plt.tight_layout()
 plt.show()
+
 
 '''
 def plot_combined_wave_functions(sim, combine_method='sum', cmap='viridis'):
@@ -212,11 +234,11 @@ def plot_combined_wave_functions(sim, combine_method='sum', cmap='viridis'):
     return fig
 
 
-# Example usage:
+
 plot_combined_wave_functions(sim, combine_method='sum')  # Plot sum of wave functions
 
-
 '''
+
 
 '''
 fig, ax = plt.subplots()

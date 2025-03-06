@@ -11,9 +11,7 @@ from resources.Classes.Simulation_Class import Simulation_class
 
 N = 256
 # Initialize the 2D system
-x_vals = np.linspace(-10, 10, N)
-y_vals = np.linspace(-10, 10, N)
-X, Y = np.meshgrid(x_vals, y_vals)
+
 
 sim = Simulation_class(
     dim=2,
@@ -51,6 +49,9 @@ sim.add_wave_function(vlna)
 sim.evolve(save_every=500)
 
 
+x_vals = np.linspace(-10, 10, N)
+y_vals = np.linspace(-10, 10, N)
+X, Y = np.meshgrid(x_vals, y_vals)
 # Create the plots
 plt.figure(figsize=(10, 6))
 plt.subplot(1, 2, 1)

@@ -3,6 +3,7 @@ import cupy as cp
 import matplotlib.pyplot as plt
 from resources.Classes.Wave_function_class import Wave_function
 from resources.Functions.Schrodinger_eq_functions import energy_nd, quadratic_potential
+from resources.Classes.Simulation_Class import Simulation_class
 
 # Initialize constants
 N = 128  # Reduced for 3D computation
@@ -12,123 +13,85 @@ y_vals = np.linspace(-10, 10, N)
 z_vals = np.linspace(-10, 10, N)
 X, Y, Z = np.meshgrid(x_vals, y_vals, z_vals)
 
-vlna = Wave_function(
-    dim=3,  # Changed to 3D
-    boundaries=[(-10, 10), (-10, 10), (-10, 10)],  # 3D boundaries
+sim = Simulation_class(
+    dim=3,
+    boundaries=[(-10, 10), (-10, 10),(-10, 10)],
     N=N,
-    total_time=2,
-    h=0.01,
-    mass=1,
-    packet_type="gaussian",
-    means=[0.0, 0.0, 0.0],  # 3D means
-    st_deviations=[0.1, 0.1, 0.1],  # 3D standard deviations
-    gravity_potential=True,
-    momenta=[0, 0, 0],  # 3D momenta
-    potential=None  # Quadratic potential
+    total_time=5,
+    h=0.001,
+    static_potential=quadratic_potential,
+    use_gravity=False,
 )
 
+vlna = Wave_function(
+    simulation=sim,
+    mass=1.5,
+    packet_type="LHO",
+    means=[0, 0.0,0],
+    st_deviations=[0.1,0.1,0.1],
+    momenta=[0, 0,0],
+      # Quadratic potential for harmonic evolution
+)
 # Iterate over reduced time steps for better visualization
 
+sim.add_wave_function(vlna)
 
-times = []
-real_x_an_values, imag_x_an_values = [], []
-real_x_num_values, imag_x_num_values = [], []
 
-real_y_an_values, imag_y_an_values = [], []
-real_y_num_values, imag_y_num_values = [], []
+sim.evolve(save_every=500)
 
-real_z_an_values, imag_z_an_values = [], []
-real_z_num_values, imag_z_num_values = [], []
 
-time_steps = int(vlna.total_time / vlna.h)
+x_vals = np.linspace(-10, 10, N)
+y_vals = np.linspace(-10, 10, N)
+z_vals = np.linspace(-10, 10, N)
+X, Y, Z = np.meshgrid(x_vals, y_vals, z_vals)
 
-for step in np.arange(0, time_steps, time_steps // 25):
-    t = step * vlna.h
-    times.append(t)
+# Create the plots
+plt.figure(figsize=(15, 6))
+plt.subplot(1, 3, 1)
+plt.title('X-axis')
+plt.legend(['Analytical real', 'Numerical real', 'Analytical imag', 'Numerical imag'], loc='upper right')
 
-    psi_3d_evolved = cp.asnumpy(vlna.psi_0 * cp.exp(-1j * energy_nd([0, 0, 0], omega=1, hbar=1) * t))
-    wave_at_time_t = cp.asnumpy(vlna.wave_function_at_time(t))
+plt.subplot(1, 3, 2)
+plt.title('Y-axis')
+plt.legend(['Analytical real', 'Numerical real', 'Analytical imag', 'Numerical imag'], loc='upper right')
 
-    real_x_an = np.real(psi_3d_evolved[:, N // 2, N // 2])
-    imag_x_an = np.imag(psi_3d_evolved[:, N // 2, N // 2])
+plt.subplot(1, 3, 3)
+plt.title('Z-axis')
+plt.legend(['Analytical real', 'Numerical real', 'Analytical imag', 'Numerical imag'], loc='upper right')
 
-    real_x_num = np.real(wave_at_time_t[:, N // 2, N // 2])
-    imag_x_num = np.imag(wave_at_time_t[:, N // 2, N // 2])
+for time in sim.accessible_times:
 
-    real_x_an_values.append(real_x_an)
-    imag_x_an_values.append(imag_x_an)
-    real_x_num_values.append(real_x_num)
-    imag_x_num_values.append(imag_x_num)
+    an_psi = cp.asnumpy(cp.abs(vlna.psi  * cp.exp(-1j * energy_nd([0, 0, 0], omega=1, hbar=1) * time))**2)
+    an_psi_real = cp.asnumpy(cp.real(vlna.psi  * cp.exp(-1j * energy_nd([0, 0, 0], omega=1, hbar=1) * time)))
+    an_psi_imag = cp.asnumpy(cp.imag(vlna.psi  * cp.exp(-1j * energy_nd([0, 0, 0], omega=1, hbar=1) * time)))
 
-    real_y_an = np.real(psi_3d_evolved[N // 2, :, N // 2])
-    imag_y_an = np.imag(psi_3d_evolved[N // 2, :, N // 2])
+    num_psi = sim.get_wave_function_at_time(time)
+    num_psi = cp.asnumpy(num_psi)
+    num_psi_real = cp.asnumpy(cp.real(num_psi))
+    num_psi_imag = cp.asnumpy(cp.imag(num_psi))
 
-    real_y_num = np.real(wave_at_time_t[N // 2, :, N // 2])
-    imag_y_num = np.imag(wave_at_time_t[N // 2, :, N // 2])
+    # Plot x-axis
+    plt.subplot(1, 3, 1)
+    plt.plot(x_vals, an_psi_real[:, x_vals.shape[0]//2, z_vals.shape[0]//2], color='red', alpha=0.5)
+    plt.plot(x_vals, num_psi_real[:, x_vals.shape[0]//2, z_vals.shape[0]//2], color='green', linestyle='--', alpha=0.5)
+    plt.plot(x_vals, an_psi_imag[:, x_vals.shape[0]//2, z_vals.shape[0]//2], color='blue', alpha=0.5)
+    plt.plot(x_vals, num_psi_imag[:, x_vals.shape[0]//2, z_vals.shape[0]//2], color='#FFC0CB', linestyle='--', alpha=0.5)
 
-    real_y_an_values.append(real_y_an)
-    imag_y_an_values.append(imag_y_an)
-    real_y_num_values.append(real_y_num)
-    imag_y_num_values.append(imag_y_num)
+    # Plot y-axis
+    plt.subplot(1, 3, 2)
+    plt.plot(y_vals, an_psi_real[x_vals.shape[0]//2, :, z_vals.shape[0]//2], color='red', alpha=0.5)
+    plt.plot(y_vals, num_psi_real[x_vals.shape[0]//2, :, z_vals.shape[0]//2], color='green', linestyle='--', alpha=0.5)
+    plt.plot(y_vals, an_psi_imag[x_vals.shape[0]//2, :, z_vals.shape[0]//2], color='blue', alpha=0.5)
+    plt.plot(y_vals, num_psi_imag[x_vals.shape[0]//2, :, z_vals.shape[0]//2], color='#FFC0CB', linestyle='--', alpha=0.5)
 
-    real_z_an = np.real(psi_3d_evolved[N // 2, N // 2, :])
-    imag_z_an = np.imag(psi_3d_evolved[N // 2, N // 2, :])
-
-    real_z_num = np.real(wave_at_time_t[N // 2, N // 2, :])
-    imag_z_num = np.imag(wave_at_time_t[N // 2, N // 2, :])
-
-    real_z_an_values.append(real_z_an)
-    imag_z_an_values.append(imag_z_an)
-    real_z_num_values.append(real_z_num)
-    imag_z_num_values.append(imag_z_num)
-
-fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(10, 18))
-fig.suptitle('Comparison of Real and Imaginary Parts of Wave Functions', fontsize=14)
-
-for i, t in enumerate(times):
-    ax1.plot(x_vals, real_x_an_values[i], color='blue', alpha=0.6, label=r'Re $\psi_{An}$' if i == 0 else "")
-    ax1.plot(x_vals, imag_x_an_values[i], color='red', alpha=0.6, label=r'Im $\psi_{An}$' if i == 0 else "")
-    ax1.plot(x_vals, real_x_num_values[i], color='green', alpha=0.4, linestyle='--',
-             label=r'Re $\psi_{Num}$' if i == 0 else "")
-    ax1.plot(x_vals, imag_x_num_values[i], color='orange', alpha=0.4, linestyle='--',
-             label=r'Im $\psi_{Num}$' if i == 0 else "")
-
-ax1.set_title('Real and Imaginary Parts Along x-axis (central column)')
-ax1.set_xlabel('x-axis')
-ax1.set_ylabel('ψ')
-ax1.legend(fontsize=10, loc='upper right')
-ax1.grid()
-
-for i, t in enumerate(times):
-    ax2.plot(y_vals, real_y_an_values[i], color='blue', alpha=0.6, label=r'Re $\psi_{An}$' if i == 0 else "")
-    ax2.plot(y_vals, imag_y_an_values[i], color='red', alpha=0.6, label=r'Im $\psi_{An}$' if i == 0 else "")
-    ax2.plot(y_vals, real_y_num_values[i], color='green', alpha=0.4, linestyle='--',
-             label=r'Re $\psi_{Num}$' if i == 0 else "")
-    ax2.plot(y_vals, imag_y_num_values[i], color='orange', alpha=0.4, linestyle='--',
-             label=r'Im $\psi_{Num}$' if i == 0 else "")
-
-ax2.set_title('Real and Imaginary Parts Along y-axis (central column)')
-ax2.set_xlabel('y-axis')
-ax2.set_ylabel('ψ')
-ax2.legend(fontsize=10, loc='upper right')
-ax2.grid()
-
-for i, t in enumerate(times):
-    ax3.plot(z_vals, real_z_an_values[i], color='blue', alpha=0.6, label=r'Re $\psi_{An}$' if i == 0 else "")
-    ax3.plot(z_vals, imag_z_an_values[i], color='red', alpha=0.6, label=r'Im $\psi_{An}$' if i == 0 else "")
-    ax3.plot(z_vals, real_z_num_values[i], color='green', alpha=0.4, linestyle='--',
-             label=r'Re $\psi_{Num}$' if i == 0 else "")
-    ax3.plot(z_vals, imag_z_num_values[i], color='orange', alpha=0.4, linestyle='--',
-             label=r'Im $\psi_{Num}$' if i == 0 else "")
-
-ax3.set_title('Real and Imaginary Parts Along z-axis (central column)')
-ax3.set_xlabel('z-axis')
-ax3.set_ylabel('ψ')
-ax3.legend(fontsize=10, loc='upper right')
-ax3.grid()
+    # Plot z-axis
+    plt.subplot(1, 3, 3)
+    plt.plot(z_vals, an_psi_real[x_vals.shape[0]//2, y_vals.shape[0]//2, :], color='red', alpha=0.5)
+    plt.plot(z_vals, num_psi_real[x_vals.shape[0]//2, y_vals.shape[0]//2, :], color='green', linestyle='--', alpha=0.5)
+    plt.plot(z_vals, an_psi_imag[x_vals.shape[0]//2, y_vals.shape[0]//2, :], color='blue', alpha=0.5)
+    plt.plot(z_vals, num_psi_imag[x_vals.shape[0]//2, y_vals.shape[0]//2, :], color='#FFC0CB', linestyle='--', alpha=0.5)
 
 plt.tight_layout()
-plt.subplots_adjust(top=0.9)
 plt.show()
 
 

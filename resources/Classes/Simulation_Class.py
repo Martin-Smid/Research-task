@@ -69,14 +69,14 @@ def parameter_check(*types):
     return decorator
 
 
-#TODO: make a reliable way to pull wave function values at a given time
+
 #TODO: make the plotting work for 2D and 3D
-#TODO: figure out weher omega should go
+
 #TODO: implement limit fo h
 #TODO: make better descriptions of the methodes
 #TODO: a lot more to check gravity function
-#TODO: implement saving only certain snapshots in time
-#TODO: check what happens when you include one more wave function on plot
+
+
 
 class Simulation_class:
     """
@@ -372,7 +372,7 @@ class Simulation_class:
         # Free GPU memory once the evolution is complete
         cp.get_default_memory_pool().free_all_blocks()
 
-        print(f"Evolution completed with {len(self.wave_values)} saved states")
+
         print(f"Saved times are {self.accessible_times}")
 
     def get_wave_function_at_time(self, time):

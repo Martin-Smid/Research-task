@@ -17,7 +17,7 @@ sim = Simulation_class(
     dim=2,
     boundaries=[(-10, 10), (-10, 10)],
     N=N,
-    total_time=50,
+    total_time=5,
     h=0.0001,
     static_potential=None,
     use_gravity=True,
@@ -117,6 +117,8 @@ plt.show()
 #TODO is implement the minimal time step requirement    eq 21 in Volker paper with a = 1
 
 
+#uncomment this section for plotting wavefunction snapshots when not treated individually
+'''
 wave_snapshots = [cp.asnumpy(sim.get_wave_function_at_time(time)) for time in sim.accessible_times]
 
 # Directly create x and y using vlna.boundaries and vlna.N
@@ -148,8 +150,8 @@ for ax in axes.flat[len(wave_snapshots):]:
 plt.tight_layout()
 plt.show()
 
-
 '''
+
 def plot_combined_wave_functions(sim, combine_method='sum', cmap='viridis'):
     """
     Plot all wave functions combined into a single plot for each timestep.
@@ -237,7 +239,7 @@ def plot_combined_wave_functions(sim, combine_method='sum', cmap='viridis'):
 
 plot_combined_wave_functions(sim, combine_method='sum')  # Plot sum of wave functions
 
-'''
+
 
 
 '''

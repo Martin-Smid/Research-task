@@ -228,7 +228,7 @@ class Simulation_class:
         potential = cp.fft.ifftn(potential_k).real.astype(cp.float32)
         return potential
 
-    '''
+#-------------------comment from her to disable individual treatment of wave functions--------------------------------
 
     def compute_kinetic_propagator_for_wf(self, wf_index):
         """Compute the kinetic propagator for a specific wave function based on its mass and momentum."""
@@ -415,9 +415,9 @@ class Simulation_class:
             return self.wave_values[wf_index][closest_time_index]
         else:
             return [wf_values[closest_time_index] for wf_values in self.wave_values]
+#-----------comment up till here to disable individual treatment of wave functions-----------------------------------
 
-
-
+#------------------from here on down it treats all waves as one ------- uses plotting script starting at 120 in 2D anim
 
 '''
     def evolve(self, save_every=0):
@@ -596,3 +596,4 @@ class Simulation_class:
         return self.wave_values[closest_time_index]
         
 
+'''

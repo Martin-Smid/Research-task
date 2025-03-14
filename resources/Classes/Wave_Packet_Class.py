@@ -9,7 +9,7 @@ class Packet():
     the creation of the initial wavefunction, based on the selected packet type.
     """
 
-    def __init__(self, packet_type="gaussian",dim =1, boundaries=None, potential=None, means=None, st_deviations=None, grids=None, dx=None, mass=1, omega=1,
+    def __init__(self, packet_type="gaussian",dim =1, boundaries=None, potential=None, means=None, st_deviations=None, grids=None, dx=None, mass=1, omega=1,momenta = [0],
                  *args, **kwargs):
         """
         Initialize a Packet instance.
@@ -25,6 +25,8 @@ class Packet():
         """
 
         self.dim = dim  # Number of dimensions
+        print("packet created")
+        self.momenta = momenta
         self.packet_type = packet_type
         self.means = means if means else [0] * self.dim
         self.st_deviations = st_deviations if st_deviations else [0.1] * self.dim
@@ -35,9 +37,23 @@ class Packet():
         self.omega = omega  # New attribute for harmonic oscillator frequency
         print(self.grids)
         print(self.dim)
+        self.momentum_propagator = self.compute_momentum_propagator()
+
 
         if self.grids is None or len(self.grids) != self.dim:
             raise ValueError("Grids must be provided for each dimension.")
+
+    def compute_momentum_propagator(self):
+        """Compute the kinetic propagator based on Fourier space components."""
+        # Use single-precision floats to save memory
+        momenta = [
+            -1j * cp.array( (momentum / 1) * grid, dtype=cp.float32)
+            for  momentum, grid in zip(self.momenta,self.grids)]
+        summed_momenta = cp.zeros_like(momenta[0])
+        for momentum in momenta:
+            summed_momenta += momentum
+
+        return cp.exp( summed_momenta)
 
 
     def create_psi_0(self):
@@ -61,7 +77,9 @@ class Packet():
 
         # Start creating the wavefunction
         if self.packet_type == "gaussian":
-            return self._create_gaussian_packet()
+            wave_packet = self._create_gaussian_packet()
+            wave_packet *= self.momentum_propagator
+            return wave_packet
         elif self.packet_type == "LHO":
             return self._create_LHO_packet()
         else:
@@ -94,7 +112,7 @@ class Packet():
 
         # Normalize the wavefunction over all dimensions
         dx_total = cp.prod(cp.array(self.dx))  # Total grid spacing in all dimensions
-        psi_0 = normalize_wavefunction(psi_0, dx_total)
+        #psi_0 = normalize_wavefunction(psi_0, dx_total)
         return psi_0 + 0j
 
     def _create_LHO_packet(self):
@@ -109,6 +127,6 @@ class Packet():
 
         # Normalize the wavefunction over all dimensions
         dx_total = cp.prod(cp.array(self.dx))  # Total grid spacing in all dimensions
-        psi_0 = normalize_wavefunction(psi_0, dx_total)
+        #psi_0 = normalize_wavefunction(psi_0, dx_total)
         return psi_0 + 0j
 

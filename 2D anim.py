@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from resources.Classes.Simulation_Class import Simulation_class
 
-N = 512
+N = 1024
 # Initialize the 2D system
 
 
@@ -17,28 +17,30 @@ sim = Simulation_class(
     dim=2,
     boundaries=[(-10, 10), (-10, 10)],
     N=N,
-    total_time=5,
-    h=0.0001,
+    total_time=200,
+    h=0.01,
     static_potential=None,
     use_gravity=True,
 )
+
+st_dev = 0.5
 
 vlna = Wave_function(
     simulation=sim,
     mass=50,
     packet_type="gaussian",
-    means=[0.3, 0.3],
-    st_deviations=[0.1,0.1],
+    means=[3, 3],
+    st_deviations=[st_dev,st_dev],
     momenta=[0, 0],
 
 )
-
+'''
 vlna3 = Wave_function(
     simulation=sim,
     mass=50,
     packet_type="gaussian",
-    means=[0.3, -0.3],
-    st_deviations=[0.1,0.1],
+    means=[1, -1],
+    st_deviations=[st_dev,st_dev],
     momenta=[0, 0],
 
 )
@@ -47,27 +49,26 @@ vlna4 = Wave_function(
     simulation=sim,
     mass=50,
     packet_type="gaussian",
-    means=[-0.3, 0.3],
-    st_deviations=[0.1,0.1],
+    means=[-1, 1],
+    st_deviations=[st_dev,st_dev],
     momenta=[0, 0],
 
 )
-
+'''
 vlna2 = Wave_function(
     simulation=sim,
     mass=50,
     packet_type="gaussian",
-    means=[-0.3, -0.3],
-    st_deviations=[0.1,0.1],
+    means=[-3, -3],
+    st_deviations=[st_dev,st_dev],
     momenta=[0, 0],
 
 )
 
 sim.add_wave_function(vlna)
 sim.add_wave_function(vlna2)
-sim.add_wave_function(vlna3)
-sim.add_wave_function(vlna4)
-sim.evolve(save_every=50000)
+
+sim.evolve(save_every=2000)
 
 
 '''
@@ -118,7 +119,7 @@ plt.show()
 
 
 #uncomment this section for plotting wavefunction snapshots when not treated individually
-'''
+
 wave_snapshots = [cp.asnumpy(sim.get_wave_function_at_time(time)) for time in sim.accessible_times]
 
 # Directly create x and y using vlna.boundaries and vlna.N
@@ -150,8 +151,8 @@ for ax in axes.flat[len(wave_snapshots):]:
 plt.tight_layout()
 plt.show()
 
-'''
 
+'''
 def plot_combined_wave_functions(sim, combine_method='sum', cmap='viridis'):
     """
     Plot all wave functions combined into a single plot for each timestep.
@@ -238,7 +239,7 @@ def plot_combined_wave_functions(sim, combine_method='sum', cmap='viridis'):
 
 
 plot_combined_wave_functions(sim, combine_method='sum')  # Plot sum of wave functions
-
+'''
 
 
 

@@ -35,6 +35,7 @@ class Wave_function():  # Streamlined and unified evolution logic
         self.omega = omega
         self.packet_creator = Packet(
             packet_type=packet_type,
+            momenta=self.momenta,
             means=means,
             st_deviations=st_deviations,
             grids=self.grids,

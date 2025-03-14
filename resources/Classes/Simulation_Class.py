@@ -121,7 +121,7 @@ class Simulation_class:
         self.wave_omegas = []
 
         # Evolution data storage
-        self.total_mass = 0  # Will be updated when wave functions are added
+        self.total_mass = 1  # Will be updated when wave functions are added
         self.total_omega = 0
         self.combined_psi = None  # Will be initialized when evolution starts
         self.wave_values = []  # To store evolution snapshots
@@ -188,7 +188,7 @@ class Simulation_class:
         self.wave_masses.append(wave_function.mass)
         self.wave_momenta.append(wave_function.momenta)
         self.wave_omegas.append(wave_function.omega)
-        self.total_mass += wave_function.mass
+        #self.total_mass += wave_function.mass
         self.total_omega += wave_function.omega
 
         # Log that a wave function was added
@@ -217,209 +217,24 @@ class Simulation_class:
         # Set zero mode to 0 dynamically based on dimensions
         zero_mode_index = tuple([0] * self.dim)
         density_k -= cp.mean(density_k)
-
-        # Protect against division by zero in k^2 sum
-        k_squared_sum = cp.where(k_squared_sum == 0, 1e-12, k_squared_sum)
+        mask = k_squared_sum == 0
+        k_squared_sum[mask] = 1
 
         # Compute potential in Fourier space with single precision
         potential_k = (4 * cp.pi * G * density_k) / k_squared_sum.astype(cp.complex64)
+        potential_k[mask] = 0
+
+        #TODO: change it so when the k_squared_sum is 0 set k_squared_sum to 1 and then set potential_k to 0 after division
+        # Protect against division by zero in k^2 sum
+
 
         # Transform back to real space, cast to real32
         potential = cp.fft.ifftn(potential_k).real.astype(cp.float32)
         return potential
 
-#-------------------comment from her to disable individual treatment of wave functions--------------------------------
 
-    def compute_kinetic_propagator_for_wf(self, wf_index):
-        """Compute the kinetic propagator for a specific wave function based on its mass and momentum."""
-        mass = self.wave_masses[wf_index]
-        momenta = self.wave_momenta[wf_index]
 
-        # Use single-precision floats to save memory
-        k_shifted = [
-            cp.array(k + (momentum / (2 * cp.pi)), dtype=cp.float32)
-            for k, momentum in zip(self.k_space, momenta)
-        ]
 
-        # Compute k_squared_sum in-place to save memory
-        k_squared_sum = cp.zeros_like(k_shifted[0])
-        for k in k_shifted:
-            k_squared_sum += k ** 2
-
-        return cp.exp(-1j * (self.h / 2) * k_squared_sum / mass, dtype=cp.complex64)
-
-    def compute_total_density(self, psi_list):
-        """Calculate the total density from all wave functions."""
-        total_density = cp.zeros_like(psi_list[0], dtype=cp.float32)
-
-        for i, psi in enumerate(psi_list):
-            density = self.wave_masses[i] * cp.abs(psi).astype(cp.float32) ** 2
-            total_density += density
-
-        return total_density
-
-    def compute_static_potential_for_wf(self, wf_index):
-        """Compute static potential for a specific wave function."""
-        if self.static_potential:
-            # You might need to modify this depending on how your static_potential function works
-            # This assumes it can accept a wave function index or will apply generically
-            potential_values = self.static_potential(self, wf_index)
-            return potential_values
-        return cp.zeros_like(self.wave_functions[wf_index].psi, dtype=cp.float32)
-
-    def evolve_wavefunction_split_step(self, psi, wf_index, step_index, total_steps, gravity_potential=None):
-        """
-        Evolve a single wavefunction using the split-step Fourier method.
-
-        Parameters:
-            psi (cp.ndarray): Wave function to evolve.
-            wf_index (int): Index of the wave function in the simulation.
-            step_index (int): Index of the current time step.
-            total_steps (int): Total number of steps in the simulation.
-            gravity_potential (cp.ndarray, optional): Pre-computed gravitational potential.
-
-        Returns:
-            cp.ndarray: Evolved wave function after one time step.
-        """
-        mass = self.wave_masses[wf_index]
-
-        # Apply static potential if available
-        static_propagator = cp.ones_like(psi, dtype=cp.complex64)
-        if self.static_potential:
-            static_pot = self.compute_static_potential_for_wf(wf_index)
-            static_propagator = cp.exp(-1j * self.h * static_pot, dtype=cp.complex64)
-
-        # Apply gravity potential if available
-        gravity_propagator = cp.ones_like(psi, dtype=cp.complex64)
-        if gravity_potential is not None and self.use_gravity:
-            gravity_propagator = cp.exp(-1j * self.h * gravity_potential, dtype=cp.complex64)
-
-        # First half-step with potential
-        if step_index == 0:
-            # For first step, apply only half potential
-            psi *= cp.sqrt(static_propagator * gravity_propagator)
-        else:
-            psi *= static_propagator * gravity_propagator
-
-        # Apply kinetic evolution in Fourier space
-        kinetic_propagator = self.compute_kinetic_propagator_for_wf(wf_index)
-        psi_k = cp.fft.fftn(psi)
-        psi_k *= kinetic_propagator
-        psi = cp.fft.ifftn(psi_k)
-
-        # For last step, apply only half potential
-        if step_index == total_steps - 1:
-            psi *= cp.sqrt(static_propagator * gravity_propagator)
-
-        return psi
-
-    def evolve(self, save_every=0):
-        """
-        Perform time evolution for all wave functions separately, allowing them to interact.
-
-        Parameters:
-            save_every (int): Frequency of saving the wave function values.
-                              Defaults to 0 (saves every step).
-        """
-        if save_every <= 0:
-            save_every = 1
-        elif save_every > 1:
-            save_every = int(save_every)
-
-        # Initialize storage for each wave function's evolution
-        num_wf = len(self.wave_functions)
-        if num_wf == 0:
-            raise ValueError("No wave functions added to the simulation")
-
-        # Create separate lists for each wave function's evolution
-        self.wave_values = [[] for _ in range(num_wf)]
-        self.accessible_times = [0]  # Common time points for all wave functions
-
-        # Initialize with copies of the current wave functions
-        psi_list = [wf.psi.copy() for wf in self.wave_functions]
-
-        # Save initial states
-        for i, psi in enumerate(psi_list):
-            self.wave_values[i].append(psi.copy())
-
-        for step in range(self.num_steps):
-            # Calculate gravity potential once per step if enabled
-            gravity_potential = None
-            if self.use_gravity:
-                total_density = self.compute_total_density(psi_list)
-                gravity_potential = self.solve_poisson(total_density)
-
-            # Evolve each wave function separately
-            for i in range(num_wf):
-                psi_list[i] = self.evolve_wavefunction_split_step(
-                    psi_list[i],
-                    wf_index=i,
-                    step_index=step,
-                    total_steps=self.num_steps,
-                    gravity_potential=gravity_potential
-                )
-
-            # Save states at specified intervals
-            if step % save_every == 0 and step > 0:
-                for i, psi in enumerate(psi_list):
-                    self.wave_values[i].append(psi.copy())
-                self.accessible_times.append(step * self.h)
-
-                # Free memory when possible
-                cp.get_default_memory_pool().free_all_blocks()
-
-        # Ensure the last state is saved if it wasn't already
-        if (self.num_steps - 1) % save_every != 0:
-            for i, psi in enumerate(psi_list):
-                self.wave_values[i].append(psi.copy())
-            self.accessible_times.append(self.total_time)
-
-        # Update the final states in the wave_functions list
-        for i, psi in enumerate(psi_list):
-            self.wave_functions[i].psi = psi
-
-        # Free GPU memory once the evolution is complete
-        cp.get_default_memory_pool().free_all_blocks()
-
-        print(f"Saved times are {self.accessible_times}")
-
-    def get_wave_function_at_time(self, time, wf_index=None):
-        """
-        Retrieve the wave function values at a given time.
-
-        Parameters:
-            time (float): The time at which to retrieve the wave function values.
-            wf_index (int, optional): Index of the specific wave function to retrieve.
-                                      If None, returns all wave functions.
-
-        Returns:
-            cp.ndarray or list: The wave function value(s) at the given time.
-
-        Raises:
-            ValueError: If the input time is outside the range of accessible times.
-        """
-        # Check if the input time is within the range of accessible times
-        if time < self.accessible_times[0] or time > self.accessible_times[-1]:
-            raise ValueError("Input time is outside the range of accessible times")
-
-        # Find the closest time in the accessible times list
-        closest_time_index = min(
-            range(len(self.accessible_times)),
-            key=lambda i: abs(self.accessible_times[i] - time)
-        )
-
-        # Return either a specific wave function or all of them
-        if wf_index is not None:
-            if wf_index < 0 or wf_index >= len(self.wave_functions):
-                raise ValueError(f"Wave function index {wf_index} is out of range")
-            return self.wave_values[wf_index][closest_time_index]
-        else:
-            return [wf_values[closest_time_index] for wf_values in self.wave_values]
-#-----------comment up till here to disable individual treatment of wave functions-----------------------------------
-
-#------------------from here on down it treats all waves as one ------- uses plotting script starting at 120 in 2D anim
-
-'''
     def evolve(self, save_every=0):
         """
         Perform the full time evolution for the combined wave function.
@@ -454,6 +269,7 @@ class Simulation_class:
 
             # Save the wave_function at the specified intervals
             if step % save_every == 0 and step > 0:  # Skip step 0 as it was saved during initialization
+                print(f"still_working im at a step {step} out of {self.num_steps}")
                 self.wave_values.append(psi.copy())
                 self.accessible_times.append(step * self.h)  # Update the accessible times list
 
@@ -557,13 +373,8 @@ class Simulation_class:
     def compute_kinetic_propagator(self):
         """Compute the kinetic propagator based on Fourier space components."""
         # Use single-precision floats to save memory
-        k_shifted = [
-            cp.array(k + (momentum / (2 * cp.pi)), dtype=cp.float32)
-            for k, momentum in zip(self.k_space, self.combined_momenta)
-        ]
-        # Compute k_squared_sum in-place to save memory
-        k_squared_sum = cp.zeros_like(k_shifted[0])
-        for k in k_shifted:
+        k_squared_sum = cp.zeros_like(self.k_space[0], dtype=cp.float32)
+        for k in self.k_space:
             k_squared_sum += k ** 2
         return cp.exp(-1j * (self.h / 2) * k_squared_sum / self.total_mass, dtype=cp.complex64)
 
@@ -596,4 +407,3 @@ class Simulation_class:
         return self.wave_values[closest_time_index]
         
 
-'''

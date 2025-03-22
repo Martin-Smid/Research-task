@@ -121,7 +121,7 @@ class Simulation_class:
         self.wave_omegas = []
 
         # Evolution data storage
-        self.total_mass = 1  # Will be updated when wave functions are added
+        self.total_mass = 1  # wont be updated when wave functions are added
         self.total_omega = 0
         self.combined_psi = None  # Will be initialized when evolution starts
         self.wave_values = []  # To store evolution snapshots
@@ -224,8 +224,6 @@ class Simulation_class:
         potential_k = (4 * cp.pi * G * density_k) / k_squared_sum.astype(cp.complex64)
         potential_k[mask] = 0
 
-        #TODO: change it so when the k_squared_sum is 0 set k_squared_sum to 1 and then set potential_k to 0 after division
-        # Protect against division by zero in k^2 sum
 
 
         # Transform back to real space, cast to real32

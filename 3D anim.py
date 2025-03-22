@@ -6,7 +6,7 @@ from resources.Functions.Schrodinger_eq_functions import energy_nd, quadratic_po
 from resources.Classes.Simulation_Class import Simulation_class
 
 # Initialize constants
-N = 128  # Reduced for 3D computation
+N = 256  # Reduced for 3D computation
 # Initialize the 3D system
 x_vals = np.linspace(-10, 10, N)
 y_vals = np.linspace(-10, 10, N)

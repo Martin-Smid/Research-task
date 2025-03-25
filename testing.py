@@ -43,8 +43,7 @@ plt.legend()
 plt.show()
 '''
 
-import matplotlib.pyplot as plt
-
+'''
 # Choose a slice in the Z direction (middle of the grid)
 z_index = sim.grids[2].shape[0] // 2  # Middle z-plane
 
@@ -63,6 +62,46 @@ for time in sim.accessible_times:
     plt.xlabel("X")
     plt.ylabel("Y")
     plt.show()
+'''
+rho = cp.abs(sim.get_wave_function_at_time(0)) ** 2
+
+
+rho_xy = cp.asnumpy(rho.sum(axis=2))  # Summing over Z → XY plane
+rho_zx = cp.asnumpy(rho.sum(axis=1))  # Summing over Y → ZX plane
+rho_yz = cp.asnumpy(rho.sum(axis=0))  # Summing over X → YZ plane
+
+
+x_min, x_max = sim.grids[0].min().get(), sim.grids[0].max().get()
+y_min, y_max = sim.grids[1].min().get(), sim.grids[1].max().get()
+z_min, z_max = sim.grids[2].min().get(), sim.grids[2].max().get()
+
+
+fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+
+im1 = axes[0].imshow(rho_xy, extent=[x_min, x_max, y_min, y_max], origin="lower", cmap="inferno")
+axes[0].set_title("XY Projection ")
+axes[0].set_xlabel("X")
+axes[0].set_ylabel("Y")
+plt.colorbar(im1, ax=axes[0])
+
+# ZX Projection
+im2 = axes[1].imshow(rho_zx, extent=[z_min, z_max, x_min, x_max], origin="lower", cmap="inferno")
+axes[1].set_title("ZX Projection ")
+axes[1].set_xlabel("Z")
+axes[1].set_ylabel("X")
+plt.colorbar(im2, ax=axes[1])
+
+# YZ Projection
+im3 = axes[2].imshow(rho_yz, extent=[z_min, z_max, y_min, y_max], origin="lower", cmap="inferno")
+axes[2].set_title("YZ Projection")
+axes[2].set_xlabel("Z")
+axes[2].set_ylabel("Y")
+plt.colorbar(im3, ax=axes[2])
+
+plt.tight_layout()
+plt.show()
+
 
 #TODO make it so that its possible to include Ground state as a wave_packet option, r is sphereical coordinate and must be calcllated from means with phi as the real_part of wave function values at radius r
 #TODO make it so that you can create different dim wave from the simulation, maybe make dim a wave_function class attribute and if not given take it from sim

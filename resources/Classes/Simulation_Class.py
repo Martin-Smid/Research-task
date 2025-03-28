@@ -408,5 +408,98 @@ class Simulation_class:
 
         # Return the corresponding wave function value
         return self.wave_values[closest_time_index]
-        
 
+
+    def calculate_ground_state(self, omega, a_s=None, r_max=10, num_points=1000):
+        """
+        Calculate the ground state wave function using spherical symmetry and
+        the proposed differential equation system.
+
+        Parameters:
+        -----------
+        omega : float
+            Oscillation frequency parameter
+        a_s : float, optional
+            Scattering length (if not provided, use class attribute or default)
+        r_max : float, optional
+            Maximum radial distance to integrate (default: 10)
+        num_points : int, optional
+            Number of radial points to use (default: 1000)
+
+        Returns:
+        --------
+        dict: A dictionary containing:
+            - 'r': Radial coordinates
+            - 'psi': Wave function values
+            - 'density': Density profile
+        """
+
+        from scipy.integrate import solve_ivp
+
+        # Use class-level scattering length if not provided
+        if a_s is None:
+            a_s = getattr(self, 'scattering_length', 1.0)
+
+
+        def du_dr(r, y):
+            """
+            Differential equation system for ground state calculation
+
+            y = [Phi, U, A, B]
+            Phi: Wave function
+            U: Potential
+            A: d(Phi)/dr
+            B: d(U)/dr
+            """
+            Phi, U, A, B = y
+
+            if r == 0:
+                # Special case at origin
+                dydr = [
+                    A,
+                    B,
+                    2 * (U + a_s * Phi ** 2 - omega) * Phi / 3,
+                    4 * np.pi * Phi ** 2 / 3
+                ]
+            else:
+                dydr = [
+                    A,
+                    B,
+                    2 * (U + a_s * Phi ** 2 - omega) * Phi - (2 / r) * A,
+                    4 * np.pi * Phi ** 2 - (2 / r) * B
+                ]
+
+            return dydr
+
+
+        # Initial conditions at r = 0
+        y0 = [0, 0, 1, 0]
+
+        # Solve the differential equation
+        sol = solve_ivp(
+            du_dr,
+            [0, r_max],
+            y0,
+            method='Radau',  # Good for stiff problems
+            dense_output=True
+        )
+
+        # Extract radial coordinates and wave function
+        r = np.linspace(0, r_max, num_points)
+        psi = sol.sol(r)[0]
+
+        # Normalize the wave function
+        norm = np.trapz(psi ** 2 * r ** 2, r)
+        psi /= np.sqrt(norm)
+
+        # Compute density profile
+        density = psi ** 2
+
+        # Convert to CuPy arrays for consistency with the simulation
+        import cupy as cp
+
+        return {
+            'r': cp.asarray(r),
+            'psi': cp.asarray(psi),
+            'density': cp.asarray(density)
+        }

@@ -160,7 +160,7 @@ class Simulation_class:
             # If the boundaries are valid, unpack them
             dx_dim = (b - a) / (self.N - 1)
             dx_values.append(dx_dim)
-            grids.append(cp.linspace(a, b, self.N))
+            grids.append(cp.linspace(a, b, self.N, endpoint=False))
 
         # Generate multidimensional grids
         mesh = cp.meshgrid(*grids, indexing="ij")
@@ -223,13 +223,24 @@ class Simulation_class:
         k_squared_sum[mask] = 1
 
         # Compute potential in Fourier space with single precision
-        potential_k = (4 * cp.pi * G * density_k) / k_squared_sum.astype(cp.complex64)
+        potential_k = (-4 * cp.pi * G * density_k) / k_squared_sum.astype(cp.complex64)
         potential_k[mask] = 0
 
 
 
         # Transform back to real space, cast to real32
         potential = cp.fft.ifftn(potential_k).real.astype(cp.float32)
+        '''
+        print(type(potential))
+        potential_2 = cp.fft.fftn(potential)
+        potential_2 *= k_squared_sum
+        potential_2 = cp.fft.ifftn(potential_2).real
+
+        density_calcled = potential_2/(4*cp.pi)
+        print(f"denstity: after {density_calcled}")
+        print(f"diff: {cp.sum(cp.abs(density - density_calcled))}")
+        '''
+
         return potential
 
 
@@ -323,7 +334,7 @@ class Simulation_class:
         if step_index == total_steps - 1:
 
             psi *= cp.sqrt(self.static_potential_propagator * gravity_propagator)
-
+        print(abs(psi).max())
         return psi
         
     def update_gravity_potential(self, psi):
@@ -354,14 +365,11 @@ class Simulation_class:
             self.combined_psi += wave_func.psi
 
         # Normalize the combined wave function
-        norm = cp.sqrt(cp.sum(cp.abs(self.combined_psi) ** 2) * cp.prod(cp.array(self.dx)))
-        self.combined_psi /= norm
+        #norm = cp.sqrt(cp.sum(cp.abs(self.combined_psi) ** 2) * cp.prod(cp.array(self.dx)))
+        #self.combined_psi /= norm
 
         # Calculate combined momentum (weighted average)
-        self.combined_momenta = []
-        for i in range(self.dim):
-            weighted_momentum = sum(wf.momenta[i] * wf.mass for wf in self.wave_functions) / self.total_mass
-            self.combined_momenta.append(weighted_momentum)
+
 
         # Compute kinetic and static potential propagators
         self.kinetic_propagator = self.compute_kinetic_propagator()

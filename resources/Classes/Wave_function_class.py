@@ -44,6 +44,7 @@ class Wave_function():  # Streamlined and unified evolution logic
             omega=omega,
             dim=self.dim, )
         self.psi = self.packet_creator.create_psi_0()
+
         self.potential = potential
         self.gravity_potential = gravity_potential
         #self.k_space = self.create_k_space()  # Unified propagator logic follows

@@ -50,7 +50,7 @@ class Packet():
         summed_momenta = cp.zeros_like(momenta[0])
         for momentum in momenta:
             summed_momenta += momentum
-        print("tu dobrý")
+
 
         return cp.exp(summed_momenta)
 
@@ -83,13 +83,20 @@ class Packet():
                 raise FileNotFoundError(
                     f"Could not find the specified wave function file '{file_path}'. Raised from Wave_Packet_Class.py")
             wave_packet = self.create_ground_state(file_path)
+            print(abs(wave_packet).max())
+            print("---------------------------------------------------------------------------------")
             wave_packet *= self.momentum_propagator
+            print(abs(wave_packet).max())
+            print("--------------------------------------------------------------------------------")
             return wave_packet
 
         # Start creating the wavefunction
         if self.packet_type == "gaussian":
+
             wave_packet = self._create_gaussian_packet()
+
             wave_packet *= self.momentum_propagator
+
             return wave_packet
         elif self.packet_type == "LHO":
             return self._create_LHO_packet()
@@ -156,6 +163,7 @@ class Packet():
 
         # Assign phi_values based on the found indices
         psi_0 = phi_values[closest_r_indices]
+        print(abs(psi_0).max())
 
         return psi_0.astype(cp.complex64)
 

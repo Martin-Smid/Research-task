@@ -27,7 +27,7 @@ vlna = Wave_function(
     means=[0],
     st_deviations=[0.1],
     simulation=sim,
-    mass=10,
+    mass=1,
     omega=1,
     momenta=[0],
 )

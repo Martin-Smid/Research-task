@@ -12,10 +12,10 @@ from resources.Classes.Simulation_Class import Simulation_class
 
 sim = Simulation_class(
     dim=3,                             # 2D simulation
-    boundaries=[(-10, 10),(-10, 10),(-10, 10)], # Spatial boundaries
+    boundaries=[(-20, 20),(-20, 20),(-20, 20)], # Spatial boundaries
     N=256,                             # Grid resolution
     total_time=10.0,                   # Total simulation time
-    h=0.01,                            # Time step
+    h=0.001,                            # Time step
     use_gravity=True , # Enable gravitational effects
     static_potential=None,
 )
@@ -32,7 +32,7 @@ vlna = Wave_function(
 
 sim.add_wave_function(vlna)
 
-sim.evolve(save_every=250)
+sim.evolve(save_every=2500)
 
 '''1D
 plt.figure()
@@ -43,7 +43,7 @@ plt.legend()
 plt.show()
 '''
 
-'''
+
 # Choose a slice in the Z direction (middle of the grid)
 z_index = sim.grids[2].shape[0] // 2  # Middle z-plane
 
@@ -62,6 +62,7 @@ for time in sim.accessible_times:
     plt.xlabel("X")
     plt.ylabel("Y")
     plt.show()
+
 '''
 rho = cp.abs(sim.get_wave_function_at_time(0)) ** 2
 
@@ -101,7 +102,6 @@ plt.colorbar(im3, ax=axes[2])
 
 plt.tight_layout()
 plt.show()
+'''
 
-
-#TODO make it so that its possible to include Ground state as a wave_packet option, r is sphereical coordinate and must be calcllated from means with phi as the real_part of wave function values at radius r
 #TODO make it so that you can create different dim wave from the simulation, maybe make dim a wave_function class attribute and if not given take it from sim

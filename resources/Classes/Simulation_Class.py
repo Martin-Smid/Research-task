@@ -212,11 +212,13 @@ class Simulation_class:
         k_squared_sum = sum(k ** 2 for k in k_space)
 
         G = 1  # Gravitational constant
+        density -= cp.mean(density)
+
         density_k = cp.fft.fftn(density.astype(cp.complex64))
 
         # Set zero mode to 0 dynamically based on dimensions
         zero_mode_index = tuple([0] * self.dim)
-        density_k -= cp.mean(density_k)
+        #density_k -= cp.mean(density_k)
         mask = k_squared_sum == 0
         k_squared_sum[mask] = 1
 
@@ -308,6 +310,7 @@ class Simulation_class:
         # If it's the first step, apply half the potential propagator
         if step_index == 0:
             psi *= cp.sqrt(self.static_potential_propagator * gravity_propagator)
+
         else:
             psi *= self.static_potential_propagator * gravity_propagator
 
@@ -318,6 +321,7 @@ class Simulation_class:
 
         # If it's the last step, apply only a half potential step
         if step_index == total_steps - 1:
+
             psi *= cp.sqrt(self.static_potential_propagator * gravity_propagator)
 
         return psi
@@ -332,7 +336,8 @@ class Simulation_class:
 
     def compute_density(self, psi):
         """Calculate the density rho = m|psi|^2."""
-        rho = self.total_mass * cp.abs(psi).astype(cp.float32) ** 2  # Ensure float32 precision
+        #rho = self.total_mass * cp.abs(psi).astype(cp.float32) ** 2  # Ensure float32 precision
+        rho = cp.abs(psi).astype(cp.float32) ** 2
         return rho
         
     def initialize_simulation(self):
@@ -365,7 +370,7 @@ class Simulation_class:
         else:
             self.static_potential_propagator = cp.ones_like(self.combined_psi, dtype=cp.complex64)
 
-        # Save initial state
+
         self.wave_values = [self.combined_psi.copy()]
 
     def compute_kinetic_propagator(self):

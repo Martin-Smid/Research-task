@@ -27,7 +27,7 @@ st_dev = 0.5
 
 vlna = Wave_function(
     simulation=sim,
-    mass=50,
+    mass=1,
     packet_type="gaussian",
     means=[3, 3],
     st_deviations=[st_dev,st_dev],
@@ -57,7 +57,7 @@ vlna4 = Wave_function(
 '''
 vlna2 = Wave_function(
     simulation=sim,
-    mass=50,
+    mass=10,
     packet_type="gaussian",
     means=[-3, -3],
     st_deviations=[st_dev,st_dev],
@@ -114,7 +114,7 @@ plt.tight_layout()
 plt.show()
 '''
 
-#TODO add second wave function and make them interact - sum operator to the wave function - maybe add momentum to force collapse
+
 #TODO is implement the minimal time step requirement    eq 21 in Volker paper with a = 1
 
 

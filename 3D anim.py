@@ -18,14 +18,14 @@ sim = Simulation_class(
     boundaries=[(-10, 10), (-10, 10),(-10, 10)],
     N=N,
     total_time=5,
-    h=0.001,
+    h=0.01,
     static_potential=quadratic_potential,
     use_gravity=False,
 )
 
 vlna = Wave_function(
     simulation=sim,
-    mass=1.5,
+    mass=1,
     packet_type="LHO",
     means=[0, 0.0,0],
     st_deviations=[0.1,0.1,0.1],
@@ -37,7 +37,7 @@ vlna = Wave_function(
 sim.add_wave_function(vlna)
 
 
-sim.evolve(save_every=500)
+sim.evolve(save_every=50)
 
 
 x_vals = np.linspace(-10, 10, N)

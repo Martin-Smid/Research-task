@@ -7,6 +7,8 @@ import sys
 import inspect
 import functools
 import os
+import datetime
+import numpy as np
 
 from resources.system_fucntions import plot_max_values_on_N
 
@@ -248,12 +250,10 @@ class Simulation_class:
 
         return potential
 
-
-
-
     def evolve(self, save_every=0):
         """
-        Perform the full time evolution for the combined wave function.
+        Perform the full time evolution for the combined wave function,
+        saving snapshots to files instead of memory.
 
         Parameters:
             save_every (int): Frequency of saving the wave function values. Defaults to 0 (saves every step).
@@ -262,6 +262,7 @@ class Simulation_class:
             None
         """
 
+
         if save_every == 0:
             save_every = 1
         elif save_every < 0:
@@ -269,13 +270,25 @@ class Simulation_class:
         elif save_every > 1:
             save_every = int(save_every)
 
-
         # Make sure simulation is initialized
         if self.combined_psi is None:
             self.initialize_simulation()
 
+        # Create directory for saving snapshots
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        save_dir = f"resources/data/simulation_{timestamp}"
+        os.makedirs(save_dir, exist_ok=True)
+
+        # Store the directory path
+        self.snapshot_directory = save_dir
+
         psi = self.combined_psi.copy()  # Work with a copy of the initial state
         self.accessible_times.append(0)
+
+        # Save the initial state
+        initial_path = f"{save_dir}/wave_snapshot_at_time_0.npy"
+        np.save(initial_path, cp.asnumpy(psi))
+        self.wave_values = [initial_path]  # Store paths instead of arrays
 
         for step in range(self.num_steps):
             # Perform the evolution step
@@ -286,22 +299,75 @@ class Simulation_class:
             # Save the wave_function at the specified intervals
             if step % save_every == 0 and step > 0:  # Skip step 0 as it was saved during initialization
                 print(f"still_working im at a step {step} out of {self.num_steps}")
-                self.wave_values.append(psi.copy())
-                self.accessible_times.append(step * self.h)  # Update the accessible times list
 
-            # Free memory when possible
-            if step % save_every != 0:
-                cp.get_default_memory_pool().free_all_blocks()
+                # Calculate current time
+                current_time = step * self.h
 
-            # Update the final state
+                # Create filename and path
+                snapshot_path = f"{save_dir}/wave_snapshot_at_time_{current_time:.6f}.npy"
+
+                # Save to disk (convert from cupy to numpy array)
+                np.save(snapshot_path, cp.asnumpy(psi))
+
+                # Store the path instead of the array
+                self.wave_values.append(snapshot_path)
+                self.accessible_times.append(current_time)
+
+            # Free memory
+            cp.get_default_memory_pool().free_all_blocks()
+
+        # Update the final state
         self.combined_psi = psi
 
         # Ensure the last state is saved if it wasn't already
         if (self.num_steps - 1) % save_every != 0:
-            self.wave_values.append(psi.copy())
-            self.accessible_times.append(self.total_time)  # Add the final time to the list
+            final_time = self.total_time
+            final_path = f"{save_dir}/wave_snapshot_at_time_{final_time:.6f}.npy"
+            np.save(final_path, cp.asnumpy(psi))
+            self.wave_values.append(final_path)
+            self.accessible_times.append(final_time)
+
+        # Save a metadata file with the times
+        with open(f"{save_dir}/metadata.txt", "w") as f:
+            f.write(f"Total steps: {self.num_steps}\n")
+            f.write(f"Time step: {self.h}\n")
+            f.write(f"Total time: {self.total_time}\n")
+            f.write("Accessible times:\n")
+            f.write(",".join([str(t) for t in self.accessible_times]))
 
         self.end_evolution()
+
+    def get_wave_function_at_time(self, time):
+        """
+        Retrieve the wave function values at a given time.
+        Loads data from disk instead of memory.
+
+        Parameters:
+            time (float): The time at which to retrieve the wave function values.
+
+        Returns:
+            cp.ndarray: The wave function values at the given time.
+
+        Raises:
+            ValueError: If the input time is outside the range of accessible times.
+        """
+        import numpy as np
+
+        # Check if the input time is within the range of accessible times
+        if time < self.accessible_times[0] or time > self.accessible_times[-1]:
+            raise ValueError("Input time is outside the range of accessible times")
+
+        # Find the closest time in the accessible times list
+        closest_time_index = min(range(len(self.accessible_times)),
+                                 key=lambda i: abs(self.accessible_times[i] - time))
+
+        # Get the file path for the closest time
+        file_path = self.wave_values[closest_time_index]
+
+        # Load the wave function from disk and convert to cupy array
+        wave_function = cp.array(np.load(file_path))
+
+        return wave_function
 
 
 
@@ -392,8 +458,8 @@ class Simulation_class:
         if step_index == total_steps - 1:
 
             psi *= cp.sqrt(self.static_potential_propagator * gravity_propagator)
-
-        self.max_wave_vals_during_evolution[step_index] = float(abs(psi).max())
+        if self.save_max_vals:
+            self.max_wave_vals_during_evolution[step_index] = float(abs(psi).max())
         return psi
         
     def update_gravity_potential(self, psi):
@@ -456,7 +522,7 @@ class Simulation_class:
         potential_values = self.static_potential(self)
         return cp.exp(-1j * self.h * potential_values, dtype=cp.complex64)
     
-    def get_wave_function_at_time(self, time):
+    '''def get_wave_function_at_time(self, time):
         """
         Retrieve the wave function values at a given time.
 
@@ -477,7 +543,7 @@ class Simulation_class:
         closest_time_index = min(range(len(self.accessible_times)), key=lambda i: abs(self.accessible_times[i] - time))
 
         # Return the corresponding wave function value
-        return self.wave_values[closest_time_index]
+        return self.wave_values[closest_time_index]'''
 
     def check_time_step_restriction(self):
         """

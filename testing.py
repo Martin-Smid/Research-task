@@ -15,7 +15,7 @@ sim = Simulation_class(
     boundaries=[(-50, 50),(-50, 50),(-50, 50)], # Spatial boundaries
     N=256,                             # Grid resolution
     total_time=1,                   # Total simulation time
-    h=0.01,                            # Time step
+    h=0.3,                            # Time step
     use_gravity=True , # Enable gravitational effects
     static_potential=None,
     save_max_vals=False,
@@ -72,7 +72,7 @@ x_mesh = cp.asnumpy(sim.grids[0][:,:,0])
 y_mesh = cp.asnumpy(sim.grids[1][:,:,0])
 
 
-#TDOD: test convergence by recording max value of density and plotting it for different N values
+
 
 
 # Choose a slice in the Z direction (middle of the grid)

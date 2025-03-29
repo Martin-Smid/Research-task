@@ -418,6 +418,9 @@ class Simulation_class:
         if not self.wave_functions:
             raise ValueError("No wave functions added to the simulation")
 
+        if not self.check_time_step_restriction():
+            return
+
         # Combine all wave functions into one
         self.combined_psi = cp.zeros_like(self.wave_functions[0].psi, dtype=cp.complex64)
         for wave_func in self.wave_functions:
@@ -476,5 +479,70 @@ class Simulation_class:
         # Return the corresponding wave function value
         return self.wave_values[closest_time_index]
 
+    def check_time_step_restriction(self):
+        """
+        Check if the time step satisfies the stability criteria from the fuzzy dark matter paper.
+        If not, give the user the option to continue with the given time step or end the code.
 
+        Returns:
+            bool: True if the time step is valid or user chooses to continue, False otherwise
+        """
+        dx_values = self.dx
 
+        # Get the minimum Δx (most restrictive)
+        min_dx = min(dx_values)
+
+        # Get the mass parameter (assuming the first wave function's mass is representative)
+        # In natural units where ħ = 1
+        m = self.total_mass
+        hbar = 1.0
+
+        # First constraint: 4π/3π · m/ħ · a²Δx²
+        # a is typically 1 in comoving coordinates
+        a = 1.0
+        first_constraint = (4 * cp.pi) / (3 * cp.pi) * (m / hbar) * a ** 2 * min_dx ** 2
+
+        # Second constraint: 2π · ħ/m · 1/|Φₑ|ₘₐₓ
+        # Need to calculate the maximum absolute value of the potential
+        if self.static_potential is not None:
+            potential_values = self.static_potential(self)
+            phi_max = cp.abs(potential_values).max()
+        else:
+            phi_max = 1e-10  # Small value if no potential is set
+
+        # If gravity is used, also consider the gravitational potential
+        if self.use_gravity and hasattr(self, 'combined_psi') and self.combined_psi is not None:
+            density = self.compute_density(self.combined_psi)
+            gravity_potential = self.solve_poisson(density)
+            phi_grav_max = cp.abs(gravity_potential).max()
+            phi_max = max(phi_max, phi_grav_max)
+
+        # Avoid division by zero
+        if phi_max < 1e-10:
+            phi_max = 1e-10
+
+        second_constraint = 2 * cp.pi * (hbar / m) * (1 / phi_max)
+
+        # The maximum allowed time step is the minimum of the two constraints
+        max_allowed_dt = min(float(first_constraint), float(second_constraint))
+
+        # Check if the current time step exceeds the maximum allowed
+        if self.h > max_allowed_dt:
+            print(f"\nWARNING: Current time step h = {self.h} exceeds the stability criterion.")
+            print(f"Maximum allowed time step: {max_allowed_dt}")
+            print(f"  - From dispersion relation: {float(first_constraint)}")
+            print(f"  - From potential term: {float(second_constraint)}")
+
+            # Give user the option to continue
+            user_choice = input("Do you want to continue with the current time step anyway? (y/n): ")
+
+            if user_choice.lower() != 'y':
+                print("Simulation aborted due to time step restriction.")
+                sys.exit(0)
+                return False
+            else:
+                print("Continuing with user-specified time step despite stability concerns.")
+        else:
+            print(f"Time step h = {self.h} satisfies stability criterion (max allowed: {max_allowed_dt}).")
+
+        return True

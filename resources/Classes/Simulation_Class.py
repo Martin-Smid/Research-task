@@ -1,11 +1,14 @@
 from resources.Errors.Errors import *
 import cupy as cp
 from resources.Functions.Schrodinger_eq_functions import *
-
+import pandas as pd
 import functools
 import sys
 import inspect
 import functools
+import os
+
+from resources.system_fucntions import plot_max_values_on_N
 
 
 def parameter_check(*types):
@@ -92,8 +95,8 @@ class Simulation_class:
         static_potential (callable, optional): Function that returns static potential values.
     """
 
-    @parameter_check(int, list, int, (int, float), (int, float), bool, object)
-    def __init__(self, dim, boundaries, N, total_time, h, use_gravity=False, static_potential=None):
+    @parameter_check(int, list, int, (int, float), (int, float), bool, object,bool)
+    def __init__(self, dim, boundaries, N, total_time, h, use_gravity=False, static_potential=None,save_max_vals = False):
         # Setup parameters
         self.dim = dim
         self.boundaries = boundaries
@@ -127,7 +130,9 @@ class Simulation_class:
         self.wave_values = []  # To store evolution snapshots
 
 
+        self.save_max_vals = save_max_vals
         self.accessible_times = []
+        self.max_wave_vals_during_evolution = {}
 
         # Will be computed before evolution starts
         self.static_potential_propagator = None
@@ -191,8 +196,8 @@ class Simulation_class:
         #self.total_mass += wave_function.mass
         self.total_omega += wave_function.omega
 
-        # Log that a wave function was added
-        print(f"Added wave function with mass {wave_function.mass}. Total mass: {self.total_mass}")
+
+
 
 
 
@@ -296,13 +301,66 @@ class Simulation_class:
             self.wave_values.append(psi.copy())
             self.accessible_times.append(self.total_time)  # Add the final time to the list
 
-        # Free GPU memory once the evolution is complete
+        self.end_evolution()
+
+
+
+
+    def end_evolution(self):
+        if self.save_max_vals:
+            self.save_max_values()
+            plot_y_or_n = input("Should I plot these values? (y/n/del): ")
+            if plot_y_or_n == "y":
+                plot_max_values_on_N(self)
+            elif plot_y_or_n == "del":
+                if os.path.exists(self.max_vals_filename):
+                    os.remove(self.max_vals_filename)
+                    print(f"File '{self.max_vals_filename}' has been deleted.")
+                else:
+                    print(f"File '{self.max_vals_filename}' does not exist.")
+            else:
+                pass
+        print("code ran with no errors \n")
+        print(f"Saved times are {self.accessible_times}")
         cp.get_default_memory_pool().free_all_blocks()
 
 
-        print(f"Saved times are {self.accessible_times}")
-        
-        
+    def save_max_values(self):
+        self.max_vals_filename = "resources/data/max_values.csv"
+        header = [
+            "# This file contains the maximum values of wave functions at specific steps along the time evolution.",
+            "# The first row contains the corresponding N - the resolution of the saved simulation.",
+            "# The first column is the time step, and subsequent columns are max values for a given simulation.",
+        ]
+
+        # Convert dictionary to DataFrame (keys as index)
+        new_data = pd.DataFrame.from_dict(self.max_wave_vals_during_evolution, orient="index", columns=[f"{int(self.N)}"])
+
+        # Check if file exists
+        if os.path.exists(self.max_vals_filename):
+
+            existing_data = pd.read_csv(self.max_vals_filename, index_col=0, comment="#")  # Ignore comments when loading
+
+            # Assign new column name dynamically
+            new_column_name = f"{int(self.N)}"
+            new_data.columns = [new_column_name]
+
+            # Merge with existing data
+            updated_data = pd.concat([existing_data, new_data], axis=1)
+
+            # Write header and updated data back to the file
+            with open(self.max_vals_filename, "w") as file:
+                file.write("\n".join(header) + "\n")
+            updated_data.to_csv(self.max_vals_filename, mode="a")
+
+        else:
+            # File doesn't exist, create it with a header
+            with open(self.max_vals_filename, "w") as file:
+                file.write("\n".join(header) + "\n")
+            new_data.to_csv(self.max_vals_filename, mode="a")
+
+        print(f"{self.max_vals_filename} saved")
+
     def evolve_wavefunction_split_step(self, psi, step_index, total_steps):
         """
         Evolve the wavefunction using the split-step Fourier method.
@@ -334,7 +392,8 @@ class Simulation_class:
         if step_index == total_steps - 1:
 
             psi *= cp.sqrt(self.static_potential_propagator * gravity_propagator)
-        print(abs(psi).max())
+
+        self.max_wave_vals_during_evolution[step_index] = float(abs(psi).max())
         return psi
         
     def update_gravity_potential(self, psi):
@@ -418,96 +477,4 @@ class Simulation_class:
         return self.wave_values[closest_time_index]
 
 
-    def calculate_ground_state(self, omega, a_s=None, r_max=10, num_points=1000):
-        """
-        Calculate the ground state wave function using spherical symmetry and
-        the proposed differential equation system.
 
-        Parameters:
-        -----------
-        omega : float
-            Oscillation frequency parameter
-        a_s : float, optional
-            Scattering length (if not provided, use class attribute or default)
-        r_max : float, optional
-            Maximum radial distance to integrate (default: 10)
-        num_points : int, optional
-            Number of radial points to use (default: 1000)
-
-        Returns:
-        --------
-        dict: A dictionary containing:
-            - 'r': Radial coordinates
-            - 'psi': Wave function values
-            - 'density': Density profile
-        """
-
-        from scipy.integrate import solve_ivp
-
-        # Use class-level scattering length if not provided
-        if a_s is None:
-            a_s = getattr(self, 'scattering_length', 1.0)
-
-
-        def du_dr(r, y):
-            """
-            Differential equation system for ground state calculation
-
-            y = [Phi, U, A, B]
-            Phi: Wave function
-            U: Potential
-            A: d(Phi)/dr
-            B: d(U)/dr
-            """
-            Phi, U, A, B = y
-
-            if r == 0:
-                # Special case at origin
-                dydr = [
-                    A,
-                    B,
-                    2 * (U + a_s * Phi ** 2 - omega) * Phi / 3,
-                    4 * np.pi * Phi ** 2 / 3
-                ]
-            else:
-                dydr = [
-                    A,
-                    B,
-                    2 * (U + a_s * Phi ** 2 - omega) * Phi - (2 / r) * A,
-                    4 * np.pi * Phi ** 2 - (2 / r) * B
-                ]
-
-            return dydr
-
-
-        # Initial conditions at r = 0
-        y0 = [0, 0, 1, 0]
-
-        # Solve the differential equation
-        sol = solve_ivp(
-            du_dr,
-            [0, r_max],
-            y0,
-            method='Radau',  # Good for stiff problems
-            dense_output=True
-        )
-
-        # Extract radial coordinates and wave function
-        r = np.linspace(0, r_max, num_points)
-        psi = sol.sol(r)[0]
-
-        # Normalize the wave function
-        norm = np.trapz(psi ** 2 * r ** 2, r)
-        psi /= np.sqrt(norm)
-
-        # Compute density profile
-        density = psi ** 2
-
-        # Convert to CuPy arrays for consistency with the simulation
-        import cupy as cp
-
-        return {
-            'r': cp.asarray(r),
-            'psi': cp.asarray(psi),
-            'density': cp.asarray(density)
-        }

@@ -14,10 +14,11 @@ sim = Simulation_class(
     dim=3,                             # 2D simulation
     boundaries=[(-50, 50),(-50, 50),(-50, 50)], # Spatial boundaries
     N=256,                             # Grid resolution
-    total_time=100,                   # Total simulation time
+    total_time=1,                   # Total simulation time
     h=0.01,                            # Time step
     use_gravity=True , # Enable gravitational effects
     static_potential=None,
+    save_max_vals=False,
 )
 
 vlna = Wave_function(

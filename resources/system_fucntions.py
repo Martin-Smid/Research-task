@@ -1,5 +1,6 @@
 from resources.Functions.Schrodinger_eq_functions import *
-
+import pandas as pd
+import matplotlib.pyplot as plt
 
 def calculate_errors_between_num_and_analytical_evolution(wave_function, time_step):
     """
@@ -53,3 +54,36 @@ def calculate_errors_between_num_and_analytical_evolution(wave_function, time_st
         "analytical_norm": analytical_norm,
         "numerical_norm": numerical_norm
     }
+
+def plot_max_values_on_N(simulation_class_instance):
+
+    # File name
+    filename = simulation_class_instance.max_vals_filename
+
+    # Read the CSV file, skipping comment lines (lines starting with '#')
+    data = pd.read_csv(filename, comment='#')
+
+    # Extract the first row (N values) for column names
+    n_values = data.columns[1:]  # Skip the first column (time step)
+    n_values = [float(n) for n in n_values]  # Convert to float for proper naming
+
+    # Rename columns for clarity
+    data.columns = ['Time Step'] + [f"N = {n}" for n in n_values]
+
+    # Plotting
+    plt.figure(figsize=(10, 6))
+
+    # Plot each column of data (except the first column, which is the x-axis)
+    for col in data.columns[1:]:
+        plt.plot(data['Time Step'], data[col], label=col)
+
+    # Add labels, title, and legend
+    plt.xlabel("Time Step",fontsize=18)
+    plt.ylabel("Max Values", fontsize=18)
+    plt.legend(fontsize=15)
+    plt.yticks(fontsize=15)
+    plt.xticks(fontsize=15)
+
+
+    # Show the plot
+    plt.show()

@@ -14,7 +14,7 @@ sim = Simulation_class(
     dim=3,                             # 2D simulation
     boundaries=[(-50, 50),(-50, 50),(-50, 50)], # Spatial boundaries
     N=256,                             # Grid resolution
-    total_time=40,                   # Total simulation time
+    total_time=500,                   # Total simulation time
     h=0.01,                            # Time step
     use_gravity=True , # Enable gravitational effects
     static_potential=None,
@@ -22,17 +22,17 @@ sim = Simulation_class(
 
 vlna = Wave_function(
     packet_type="/home/martin/Downloads/GroundState(1).dat",
-    means=[-10,10,0],
+    means=[15,15,0],
     st_deviations=[0.5,0.5,0.5],
     simulation=sim,
     mass=1,
     omega=1,
-    momenta=[0,0,0],
+    momenta=[0,-1,0],
 )
 
 vlna2 = Wave_function(
     packet_type="/home/martin/Downloads/GroundState(1).dat",
-    means=[-10,-10,0],
+    means=[0,0,0],
     st_deviations=[0.5,0.5,0.5],
     simulation=sim,
     mass=1,
@@ -47,16 +47,16 @@ vlna3 = Wave_function(
     simulation=sim,
     mass=1,
     omega=1,
-    momenta=[0,-2,0],
+    momenta=[0,1,0],
 )
 
 
 sim.add_wave_function(vlna)
 sim.add_wave_function(vlna2)
-sim.add_wave_function(vlna3)
+#sim.add_wave_function(vlna3)
 
 
-sim.evolve(save_every=250)
+sim.evolve(save_every=2500)
 
 '''1D
 plt.figure()

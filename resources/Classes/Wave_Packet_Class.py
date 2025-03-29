@@ -83,11 +83,7 @@ class Packet():
                 raise FileNotFoundError(
                     f"Could not find the specified wave function file '{file_path}'. Raised from Wave_Packet_Class.py")
             wave_packet = self.create_ground_state(file_path)
-            print(abs(wave_packet).max())
-            print("---------------------------------------------------------------------------------")
             wave_packet *= self.momentum_propagator
-            print(abs(wave_packet).max())
-            print("--------------------------------------------------------------------------------")
             return wave_packet
 
         # Start creating the wavefunction
@@ -163,7 +159,7 @@ class Packet():
 
         # Assign phi_values based on the found indices
         psi_0 = phi_values[closest_r_indices]
-        print(abs(psi_0).max())
+
 
         return psi_0.astype(cp.complex64)
 

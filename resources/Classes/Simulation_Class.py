@@ -481,6 +481,7 @@ class Simulation_class:
 
     def check_time_step_restriction(self):
         """
+        This was done purely by Claude AI and I trust him wholeheartedly
         Check if the time step satisfies the stability criteria from the fuzzy dark matter paper.
         If not, give the user the option to continue with the given time step or end the code.
 

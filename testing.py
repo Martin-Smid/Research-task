@@ -12,14 +12,15 @@ from resources.Classes.Simulation_Class import Simulation_class
 
 sim = Simulation_class(
     dim=3,                             # 2D simulation
-    boundaries=[(-50, 50),(-50, 50),(-50, 50)], # Spatial boundaries
+    boundaries=[(-20, 20),(-20, 20),(-20, 20)], # Spatial boundaries
     N=256,                             # Grid resolution
-    total_time=150,                   # Total simulation time
-    h=0.1,                            # Time step
+    total_time=100,                   # Total simulation time
+    h=0.01,                            # Time step
     use_gravity=True , # Enable gravitational effects
     static_potential=None,
-    save_max_vals=False,
+    save_max_vals=True,
 )
+#TODO: compute the ratio between amplitudes of oscilations from 1 for N = 128, 256, 64
 
 vlna = Wave_function(
     packet_type="/home/martin/Downloads/GroundState(1).dat",
@@ -38,7 +39,7 @@ vlna2 = Wave_function(
     simulation=sim,
     mass=1,
     omega=1,
-    momenta=[0,-0.5,0],
+    momenta=[0.1,-0.5,0],
 )
 
 vlna3 = Wave_function(
@@ -57,7 +58,7 @@ sim.add_wave_function(vlna2)
 sim.add_wave_function(vlna3)
 
 
-sim.evolve(save_every=25)
+sim.evolve(save_every=250)
 
 '''1D
 plt.figure()
@@ -73,7 +74,7 @@ y_mesh = cp.asnumpy(sim.grids[1][:,:,0])
 
 
 
-
+#TODO make a function out of this
 
 # Choose a slice in the Z direction (middle of the grid)
 z_index = sim.grids[2].shape[0] // 2  # Middle z-plane
@@ -86,7 +87,7 @@ for time in sim.accessible_times:
     wave_slice = wave_values[:, :, z_index]
     levels = np.logspace(np.log10(wave_values[wave_values > 0].min()),np.log10(wave_values.max()), 128)
     plt.contourf(x_mesh,y_mesh,cp.asnumpy(wave_slice),
-               origin="lower", levels=levels,cmap="inferno", norm= LogNorm())
+               origin="lower", levels=levels,cmap="inferno")
     plt.colorbar(label="|ψ|²",format = "%.2e")
     plt.title(f"Wavefunction Probability Density at Time {time}")
     plt.xlabel("X")

@@ -9,6 +9,7 @@ import functools
 import os
 import datetime
 import numpy as np
+from astropy import units,constants
 
 from resources.system_fucntions import plot_max_values_on_N
 
@@ -75,11 +76,8 @@ def parameter_check(*types):
 
 
 
-#TODO: make the plotting work for 2D and 3D
-
-#TODO: implement limit fo h
 #TODO: make better descriptions of the methodes
-#TODO: a lot more to check gravity function
+
 
 
 
@@ -126,7 +124,7 @@ class Simulation_class:
         self.wave_omegas = []
 
         # Evolution data storage
-        self.total_mass = 1  # wont be updated when wave functions are added
+        self.mass_s = 10e-22 * units.eV #mass in eV units
         self.total_omega = 0
         self.combined_psi = None  # Will be initialized when evolution starts
         self.wave_values = []  # To store evolution snapshots
@@ -138,7 +136,13 @@ class Simulation_class:
 
         # Will be computed before evolution starts
         self.static_potential_propagator = None
+        self.static_potential_values = None
+        self.combined_potential_values = None
+        self.gravity_potential = None
         self.kinetic_propagator = None
+
+
+        self.G = constants.G.to("kpc3/(Msun Gyr2)")
 
     def unpack_boundaries(self):
         """
@@ -195,7 +199,6 @@ class Simulation_class:
         self.wave_masses.append(wave_function.mass)
         self.wave_momenta.append(wave_function.momenta)
         self.wave_omegas.append(wave_function.omega)
-        #self.total_mass += wave_function.mass
         self.total_omega += wave_function.omega
 
 
@@ -218,7 +221,7 @@ class Simulation_class:
         k_space = self.k_space  # Use existing k-space grids
         k_squared_sum = sum(k ** 2 for k in k_space)
 
-        G = 1  # Gravitational constant
+
         density -= cp.mean(density)
 
         density_k = cp.fft.fftn(density.astype(cp.complex64))
@@ -230,23 +233,14 @@ class Simulation_class:
         k_squared_sum[mask] = 1
 
         # Compute potential in Fourier space with single precision
-        potential_k = (-4 * cp.pi * G * density_k) / k_squared_sum.astype(cp.complex64)
+        potential_k = (-4 * cp.pi * self.G.value * density_k) / k_squared_sum.astype(cp.complex64)
         potential_k[mask] = 0
 
 
 
         # Transform back to real space, cast to real32
         potential = cp.fft.ifftn(potential_k).real.astype(cp.float32)
-        '''
-        print(type(potential))
-        potential_2 = cp.fft.fftn(potential)
-        potential_2 *= k_squared_sum
-        potential_2 = cp.fft.ifftn(potential_2).real
 
-        density_calcled = potential_2/(4*cp.pi)
-        print(f"denstity: after {density_calcled}")
-        print(f"diff: {cp.sum(cp.abs(density - density_calcled))}")
-        '''
 
         return potential
 
@@ -466,13 +460,13 @@ class Simulation_class:
         """Compute gravitational potential propagator based on current density."""
         if self.use_gravity:
             density = self.compute_density(psi)
-            gravity_potential = self.solve_poisson(density)
-            return cp.exp(-1j * self.h * gravity_potential, dtype=cp.complex64)
+            self.gravity_potential = self.solve_poisson(density)
+
+            return cp.exp(-1j * self.h * self.gravity_potential, dtype=cp.complex64)
         return cp.ones_like(psi, dtype=cp.complex64)
 
     def compute_density(self, psi):
         """Calculate the density rho = m|psi|^2."""
-        #rho = self.total_mass * cp.abs(psi).astype(cp.float32) ** 2  # Ensure float32 precision
         rho = cp.abs(psi).astype(cp.float32) ** 2
         return rho
         
@@ -484,19 +478,14 @@ class Simulation_class:
         if not self.wave_functions:
             raise ValueError("No wave functions added to the simulation")
 
-        if not self.check_time_step_restriction():
-            return
+
+
 
         # Combine all wave functions into one
         self.combined_psi = cp.zeros_like(self.wave_functions[0].psi, dtype=cp.complex64)
         for wave_func in self.wave_functions:
             self.combined_psi += wave_func.psi
 
-        # Normalize the combined wave function
-        #norm = cp.sqrt(cp.sum(cp.abs(self.combined_psi) ** 2) * cp.prod(cp.array(self.dx)))
-        #self.combined_psi /= norm
-
-        # Calculate combined momentum (weighted average)
 
 
         # Compute kinetic and static potential propagators
@@ -509,41 +498,23 @@ class Simulation_class:
 
         self.wave_values = [self.combined_psi.copy()]
 
+        if not self.check_time_step_restriction():
+            return
+        self.calculate_physical_units()
+
     def compute_kinetic_propagator(self):
         """Compute the kinetic propagator based on Fourier space components."""
         # Use single-precision floats to save memory
         k_squared_sum = cp.zeros_like(self.k_space[0], dtype=cp.float32)
         for k in self.k_space:
             k_squared_sum += k ** 2
-        return cp.exp(-1j * (self.h / 2) * k_squared_sum / self.total_mass, dtype=cp.complex64)
+        return cp.exp(-1j * (self.h / 2) * k_squared_sum , dtype=cp.complex64)
 
     def compute_static_potential_propagator(self):
         """Compute the static potential propagator."""
-        potential_values = self.static_potential(self)
-        return cp.exp(-1j * self.h * potential_values, dtype=cp.complex64)
-    
-    '''def get_wave_function_at_time(self, time):
-        """
-        Retrieve the wave function values at a given time.
+        static_potential_values = self.static_potential(self)
+        return cp.exp(-1j * self.h * self.static_potential_values, dtype=cp.complex64)
 
-        Parameters:
-            time (float): The time at which to retrieve the wave function values.
-
-        Returns:
-            cp.ndarray: The wave function values at the given time.
-
-        Raises:
-            ValueError: If the input time is outside the range of accessible times.
-        """
-        # Check if the input time is within the range of accessible times
-        if time < self.accessible_times[0] or time > self.accessible_times[-1]:
-            raise ValueError("Input time is outside the range of accessible times")
-
-        # Find the closest time in the accessible times list
-        closest_time_index = min(range(len(self.accessible_times)), key=lambda i: abs(self.accessible_times[i] - time))
-
-        # Return the corresponding wave function value
-        return self.wave_values[closest_time_index]'''
 
     def check_time_step_restriction(self):
         """
@@ -561,13 +532,13 @@ class Simulation_class:
 
         # Get the mass parameter (assuming the first wave function's mass is representative)
         # In natural units where ħ = 1
-        m = self.total_mass
+        m = 1
         hbar = 1.0
 
         # First constraint: 4π/3π · m/ħ · a²Δx²
         # a is typically 1 in comoving coordinates
-        a = 1.0
-        first_constraint = (4 * cp.pi) / (3 * cp.pi) * (m / hbar) * a ** 2 * min_dx ** 2
+
+        first_constraint = (4 * cp.pi) / (3 * cp.pi) * (m / hbar) * min_dx ** 2
 
         # Second constraint: 2π · ħ/m · 1/|Φₑ|ₘₐₓ
         # Need to calculate the maximum absolute value of the potential
@@ -578,11 +549,12 @@ class Simulation_class:
             phi_max = 1e-10  # Small value if no potential is set
 
         # If gravity is used, also consider the gravitational potential
+
+
         if self.use_gravity and hasattr(self, 'combined_psi') and self.combined_psi is not None:
-            density = self.compute_density(self.combined_psi)
-            gravity_potential = self.solve_poisson(density)
-            phi_grav_max = cp.abs(gravity_potential).max()
-            phi_max = max(phi_max, phi_grav_max)
+            self.update_gravity_potential(self.combined_psi)
+            phi_grav_max = cp.abs(self.gravity_potential).max()
+            phi_max = phi_grav_max + phi_max
 
         # Avoid division by zero
         if phi_max < 1e-10:
@@ -591,7 +563,7 @@ class Simulation_class:
         second_constraint = 2 * cp.pi * (hbar / m) * (1 / phi_max)
 
         # The maximum allowed time step is the minimum of the two constraints
-        max_allowed_dt = min(float(first_constraint), float(second_constraint))
+        max_allowed_dt = 1/2 * min(float(first_constraint), float(second_constraint))
 
         # Check if the current time step exceeds the maximum allowed
         if self.h > max_allowed_dt:
@@ -613,3 +585,29 @@ class Simulation_class:
             print(f"Time step h = {self.h} satisfies stability criterion (max allowed: {max_allowed_dt}).")
 
         return True
+
+
+    def calculate_physical_units(self):
+        print(f"Using mass: {self.mass_s}")
+        m_s_kg = (self.mass_s / constants.c ** 2).to("kg")
+        self.combined_psi = self.combined_psi * (1 / units.kpc ** 2)
+
+
+        # h_tilde = ħ/m_s (in kpc²/Gyr)
+        self.h_tilde = (constants.hbar / m_s_kg).to("kpc2/Gyr")
+
+
+
+        # Calculate the conversion factor (as a scalar value)
+        conversion_factor =  self.h_tilde.value / cp.sqrt(self.G.value)
+        self.combined_psi *= conversion_factor
+
+
+        if self.static_potential is not None and hasattr(self, 'gravity_potential'):
+            self.gravity_potential *= self.gravity_potential / (self.h_tilde.value ** 2)
+            static_potential_values = self.static_potential(self)
+            self.static_potential_values *= static_potential_values / (self.h_tilde.value ** 2)
+        elif hasattr(self, 'gravity_potential'):
+            self.gravity_potential *=  (self.h_tilde.value ** 2)
+        elif hasattr(self, 'static_potential_propagator'):
+            self.static_potential_values *= self.static_potential_values

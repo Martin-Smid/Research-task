@@ -115,7 +115,7 @@ plt.show()
 '''
 
 
-#TODO is implement the minimal time step requirement    eq 21 in Volker paper with a = 1
+
 
 
 #uncomment this section for plotting wavefunction snapshots when not treated individually

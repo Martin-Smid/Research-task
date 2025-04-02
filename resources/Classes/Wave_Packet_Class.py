@@ -33,8 +33,8 @@ class Packet():
         self.grids = grids  # Receive grids from parent class
         self.potential = potential  # Potential function
         self.dx = dx  # Receive dx from parent class
-        self.mass = mass  # New attribute for particle mass
-        self.omega = omega  # New attribute for harmonic oscillator frequency
+        self.mass = mass
+        self.omega = omega
         self.momentum_propagator = self.compute_momentum_propagator()
 
 
@@ -119,11 +119,6 @@ class Packet():
         for i in range(len(self.grids)):
             psi_0 *= gaussian_packet(self.grids[i], means_arr[i], st_deviations_arr[i])
 
-        '''psi_0 = cp.exp(-cp.sum(((grids_stacked - means_arr[:, np.newaxis, np.newaxis, np.newaxis]) ** 2) /
-                               (2 * st_deviations_arr[:, np.newaxis, np.newaxis, np.newaxis] ** 2), axis=0),
-                       dtype=cp.complex128)        '''
-
-        # Normalize the wavefunction over all dimensions
         dx_total = cp.prod(cp.array(self.dx))  # Total grid spacing in all dimensions
         # psi_0 = normalize_wavefunction(psi_0, dx_total)
         return psi_0 + 0j

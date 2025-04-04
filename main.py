@@ -11,7 +11,7 @@ N = 512 # Number of spatial points
 # Initialize the Wave_function instance
 
 
-sim = Simulation_class(
+sim = Simulation_Class(
     dim=1,                             # 2D simulation
     boundaries=[(-10, 10)], # Spatial boundaries
     N=512,                             # Grid resolution

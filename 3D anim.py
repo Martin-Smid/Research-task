@@ -3,7 +3,7 @@ import cupy as cp
 import matplotlib.pyplot as plt
 from resources.Classes.Wave_function_class import Wave_function
 from resources.Functions.Schrodinger_eq_functions import energy_nd, quadratic_potential
-from resources.Classes.Simulation_Class import Simulation_class
+from resources.Classes.Simulation_Class import Simulation_Class
 
 # Initialize constants
 N = 256  # Reduced for 3D computation
@@ -13,7 +13,7 @@ y_vals = np.linspace(-10, 10, N)
 z_vals = np.linspace(-10, 10, N)
 X, Y, Z = np.meshgrid(x_vals, y_vals, z_vals)
 
-sim = Simulation_class(
+sim = Simulation_Class(
     dim=3,
     boundaries=[(-10, 10), (-10, 10),(-10, 10)],
     N=N,

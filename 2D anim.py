@@ -7,13 +7,13 @@ from resources.Classes.Wave_function_class import Wave_function
 from resources.Functions.Schrodinger_eq_functions import energy_nd, quadratic_potential
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
-from resources.Classes.Simulation_Class import Simulation_class
+from resources.Classes.Simulation_Class import Simulation_Class
 
 N = 1024
 # Initialize the 2D system
 
 
-sim = Simulation_class(
+sim = Simulation_Class(
     dim=2,
     boundaries=[(-10, 10), (-10, 10)],
     N=N,

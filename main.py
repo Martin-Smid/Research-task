@@ -1,8 +1,7 @@
-import matplotlib.pyplot as plt
 from cupy import asnumpy
 
 from resources.Classes.Wave_function_class import *
-from resources.system_fucntions import *
+from resources.Functions.system_fucntions import *
 
 
 # Setup parameters for the domain

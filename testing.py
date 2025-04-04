@@ -1,21 +1,14 @@
-import numpy as np
-import cupy as cp
-import matplotlib.pyplot as plt
-from resources.Classes.Wave_function_class import Wave_function
-from resources.Functions.Schrodinger_eq_functions import energy_nd, quadratic_potential
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
 from resources.Classes.Wave_function_class import *
-from resources.system_fucntions import *
+from resources.Functions.system_fucntions import *
 from matplotlib.colors import LogNorm
-from resources.Classes.Simulation_Class import Simulation_class
+from resources.Classes.Simulation_Class import Simulation_Class
 
-sim = Simulation_class(
+sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-15, 15),(-15, 15),(-15, 15)], # Spatial boundaries
+    boundaries=[(-40, 40),(-40, 40),(-40, 40)], # Spatial boundaries
     N=256,                             # Grid resolution
-    total_time=5,                   # Total simulation time
-    h=0.009,                            # Time step
+    total_time=75,                   # Total simulation time
+    h=0.01,                            # Time step
     use_gravity=True , # Enable gravitational effects
     static_potential=None,
     save_max_vals=True,
@@ -24,7 +17,7 @@ sim = Simulation_class(
 
 vlna = Wave_function(
     packet_type="/home/martin/Downloads/GroundState(1).dat",
-    means=[0,0,0],
+    means=[10,10,0],
     st_deviations=[0.5,0.5,0.5],
     simulation=sim,
     mass=1,
@@ -39,7 +32,7 @@ vlna2 = Wave_function(
     simulation=sim,
     mass=1,
     omega=1,
-    momenta=[0.1,-0.5,0],
+    momenta=[0,-0.5,0],
 )
 
 vlna3 = Wave_function(
@@ -54,8 +47,8 @@ vlna3 = Wave_function(
 
 
 sim.add_wave_function(vlna)
-#sim.add_wave_function(vlna2)
-#sim.add_wave_function(vlna3)
+sim.add_wave_function(vlna2)
+sim.add_wave_function(vlna3)
 
 
 sim.evolve(save_every=200)

@@ -31,7 +31,7 @@ def quadratic_potential(simulation_instance):
     """
     grids = simulation_instance.grids  # Grids (already meshgrids) from the wave_function instance
 
-    mass = simulation_instance.total_mass  # Mass from the wave_function instance
+    mass = 1 # maybe change this later, im tired
     dim = simulation_instance.dim
     omega = simulation_instance.total_omega
 

@@ -95,8 +95,8 @@ class Simulation_class:
         static_potential (callable, optional): Function that returns static potential values.
     """
 
-    @parameter_check(int, list, int, (int, float), (int, float), bool, object,bool)
-    def __init__(self, dim, boundaries, N, total_time, h, use_gravity=False, static_potential=None,save_max_vals = False):
+    @parameter_check(int, list, int, (int, float), (int, float),float, bool, object,bool,dict)
+    def __init__(self, dim, boundaries, N, total_time, h,m_s=1e-22 ,use_gravity=False, static_potential=None,save_max_vals = False,sim_units = {"dUnits":"kpc","tUnits":"Gyr","mUnits":"Msun","eUnits":"eV"}):
         # Setup parameters
         self.dim = dim
         self.boundaries = boundaries
@@ -124,7 +124,7 @@ class Simulation_class:
         self.wave_omegas = []
 
         # Evolution data storage
-        self.mass_s = 10e-22 * units.eV #mass in eV units
+
         self.total_omega = 0
         self.combined_psi = None  # Will be initialized when evolution starts
         self.wave_values = []  # To store evolution snapshots
@@ -141,8 +141,19 @@ class Simulation_class:
         self.gravity_potential = None
         self.kinetic_propagator = None
 
+        #unpacks the simulation units
+        for key, value in sim_units.items():
+            # Set the string value (like "kpc")
+            setattr(self, key, value)
 
-        self.G = constants.G.to("kpc3/(Msun Gyr2)")
+            #creates self.?Units_unit which is astropy unit object
+            if hasattr(units, value):
+                setattr(self, f"{key}_unit", getattr(units, value))
+
+        #mass of the particle
+        self.mass_s = (m_s * self.eUnits_unit / constants.c**2).to(f"{self.mUnits}")
+        self.G = constants.G.to(f"{self.dUnits}3/({self.mUnits} {self.tUnits}2)").value
+
 
     def unpack_boundaries(self):
         """
@@ -233,7 +244,7 @@ class Simulation_class:
         k_squared_sum[mask] = 1
 
         # Compute potential in Fourier space with single precision
-        potential_k = (-4 * cp.pi * self.G.value * density_k) / k_squared_sum.astype(cp.complex64)
+        potential_k = (-4 * cp.pi * self.G * density_k) / k_squared_sum.astype(cp.complex64)
         potential_k[mask] = 0
 
 
@@ -588,26 +599,29 @@ class Simulation_class:
 
 
     def calculate_physical_units(self):
-        print(f"Using mass: {self.mass_s}")
-        m_s_kg = (self.mass_s / constants.c ** 2).to("kg")
-        self.combined_psi = self.combined_psi * (1 / units.kpc ** 2)
+        """
+           Convert the numerical wave function (ψ̂) to physical units (ψ).
+           Based on the transformation ψ̂_sol = (√G/ħ)ψ_sol from the reference paper.
+           """
+        # 1/distance^2
+        one_over_kpc2 = 1 / self.dUnits_unit ** 2
+
+        # Calculate ħ/m_s (in kpc²/Gyr)
+        self.h_bar_tilde = (constants.hbar / self.mass_s).to(f"{self.dUnits}2/{self.tUnits}").value
 
 
-        # h_tilde = ħ/m_s (in kpc²/Gyr)
-        self.h_tilde = (constants.hbar / m_s_kg).to("kpc2/Gyr")
+        #ψ_sol = ψ̂_sol * (ħ/√G)
+        conversion_factor = self.h_bar_tilde / np.sqrt(self.G)
 
 
-
-        # Calculate the conversion factor (as a scalar value)
-        conversion_factor =  self.h_tilde.value / cp.sqrt(self.G.value)
-        self.combined_psi *= conversion_factor
+        self.combined_psi = self.combined_psi * one_over_kpc2.value * conversion_factor
 
 
         if self.static_potential is not None and hasattr(self, 'gravity_potential'):
-            self.gravity_potential *= self.gravity_potential / (self.h_tilde.value ** 2)
+            self.gravity_potential *= self.gravity_potential / (self.h_bar_tilde ** 2)
             static_potential_values = self.static_potential(self)
-            self.static_potential_values *= static_potential_values / (self.h_tilde.value ** 2)
+            self.static_potential_values *= static_potential_values / (self.h_bar_tilde ** 2)
         elif hasattr(self, 'gravity_potential'):
-            self.gravity_potential *=  (self.h_tilde.value ** 2)
+            self.gravity_potential *=  (self.h_bar_tilde ** 2)
         elif hasattr(self, 'static_potential_propagator'):
             self.static_potential_values *= self.static_potential_values

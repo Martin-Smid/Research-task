@@ -23,6 +23,7 @@ class Propagator_Class:
         self.grids = simulation.grids
         self.k_space = simulation.k_space
         self.G = simulation.G
+        self.hbar = simulation.h_bar
         # Placeholders for propagators
         self.kinetic_propagator = None
         self.static_potential_propagator = None
@@ -42,7 +43,8 @@ class Propagator_Class:
             k_squared_sum += k ** 2
 
         # Create propagator with time factor h/2 (for split-step)
-        self.kinetic_propagator = cp.exp(-1j * (self.h / 2) * k_squared_sum, dtype=cp.complex64)
+        # --------------------------------------------------------------- ask about hbar/2 masses
+        self.kinetic_propagator = cp.exp(-1j * (self.h / 2) *(self.hbar/(2))* k_squared_sum, dtype=cp.complex64)
         return self.kinetic_propagator
 
     def compute_static_potential_propagator(self, potential_function):
@@ -57,7 +59,7 @@ class Propagator_Class:
         """
         if potential_function is not None:
             potential_values = potential_function(self.simulation)
-            self.static_potential_propagator = cp.exp(-1j * self.h * potential_values, dtype=cp.complex64)
+            self.static_potential_propagator = cp.exp(-1j * self.h * potential_values* (self.simulation.h_bar_tilde**2) , dtype=cp.complex64)
         else:
             # If no potential is provided, use unit propagator (no effect)
             self.static_potential_propagator = cp.ones(self.simulation.grids[0].shape, dtype=cp.complex64)
@@ -89,12 +91,14 @@ class Propagator_Class:
         self.gravity_potential = gravity_potential
 
         # Create the propagator with appropriate time factor
+
         if first_step or last_step:
             # Half step for first and last steps (for split-step)
-            self.gravity_propagator = cp.exp(-1j * (self.h / 2) * gravity_potential, dtype=cp.complex64)
+            self.gravity_propagator = cp.exp((-1j) * (self.h / 2) * (self.simulation.h_bar_tilde**2) *gravity_potential , dtype=cp.complex64)
+            print(self.gravity_propagator)
         else:
             # Full step for middle steps
-            self.gravity_propagator = cp.exp(-1j * self.h * gravity_potential, dtype=cp.complex64)
+            self.gravity_propagator = cp.exp((-1j)  * self.h * (self.simulation.h_bar_tilde**2) *gravity_potential, dtype=cp.complex64)
 
         return self.gravity_propagator
 

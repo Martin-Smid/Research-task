@@ -157,8 +157,11 @@ class Simulation_Class:
                 setattr(self, f"{key}_unit", getattr(units, value))
 
         # Mass of the particle
-        self.mass_s = (m_s * self.eUnits_unit / constants.c ** 2).to(f"{self.mUnits}")
+        self.mass_s = (m_s * self.eUnits_unit / constants.c ** 2).to(f"{self.mUnits}").value
         self.G = constants.G.to(f"{self.dUnits}3/({self.mUnits} {self.tUnits}2)").value
+        self.h_bar = constants.hbar.to(f"{self.dUnits}2 {self.mUnits}/{self.tUnits}").value
+        self.h_bar_tilde = (self.h_bar / self.mass_s)
+
 
     def unpack_boundaries(self):
         """
@@ -304,7 +307,7 @@ class Simulation_Class:
 
 
         # Calculate first constraint
-        first_constraint = (4 * cp.pi) / (3 * cp.pi) * (self.mass_s / constants.hbar).to(f"{self.tUnits}/{self.dUnits}2").value * min_dx ** 2
+        first_constraint = ((4 * cp.pi) / (3 * cp.pi) * (self.mass_s / self.h_bar)* min_dx ** 2)
 
         # Calculate second constraint based on potential
         if self.static_potential is not None:
@@ -317,7 +320,7 @@ class Simulation_Class:
         if phi_max < 1e-10:
             phi_max = 1e-10
 
-        second_constraint = (2 * cp.pi * (constants.hbar.value / self.mass_s) * (1 / phi_max)).value
+        second_constraint = (2 * cp.pi * (self.h_bar/ self.mass_s) * (1 / phi_max))
 
         # Maximum allowed time step
         max_allowed_dt = 0.5 * min(float(first_constraint), float(second_constraint))
@@ -349,11 +352,12 @@ class Simulation_Class:
         Convert the numerical wave function to physical units.
         """
 
-        self.h = (self.h * self.tUnits_unit).value
-        self.total_time = (self.total_time * self.tUnits_unit).value
+
+        self.total_time = (self.total_time * self.tUnits_unit)
 
         # Calculate ħ/m_s
-        self.h_bar_tilde = (constants.hbar / self.mass_s).to(f"{self.dUnits}2/{self.tUnits}").value
+
+
 
         # Convert wave function: ψ_sol = ψ̂_sol * (ħ/√G)
         conversion_factor = self.h_bar_tilde / np.sqrt(self.G)

@@ -22,8 +22,7 @@ class Propagator_Class:
         self.N = simulation.N
         self.grids = simulation.grids
         self.k_space = simulation.k_space
-        self.G = 1
-
+        self.G = simulation.G
         # Placeholders for propagators
         self.kinetic_propagator = None
         self.static_potential_propagator = None
@@ -135,7 +134,7 @@ class Propagator_Class:
         k_squared_sum[mask] = 1
 
         # Calculate potential in k-space: -4πGρ/k²
-        potential_k = (-4 * cp.pi * self.G * density_k) / k_squared_sum.astype(cp.complex64)
+        potential_k = (-4 * cp.pi * self.G* density_k) / k_squared_sum.astype(cp.complex64)
         potential_k[mask] = 0  # Set k=0 mode to zero
 
         # Transform back to real space

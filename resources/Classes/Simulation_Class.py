@@ -105,7 +105,7 @@ class Simulation_Class:
         self.boundaries = boundaries
         self.N = N
         self.total_time = total_time
-        self.h = h  # Time step size
+        self.h = h
         self.num_steps = int(self.total_time / self.h)
 
         # Gravity and potential settings
@@ -254,7 +254,7 @@ class Simulation_Class:
             return
 
         # Apply physical unit transformations
-        #self.calculate_physical_units()
+        self.calculate_physical_units()
 
     def evolve(self, save_every=1):
         """
@@ -301,11 +301,10 @@ class Simulation_Class:
         min_dx = min(self.dx)
 
         # Constants (in natural units)
-        m = 1
-        hbar = 1.0
+
 
         # Calculate first constraint
-        first_constraint = (4 * cp.pi) / (3 * cp.pi) * (m / hbar) * min_dx ** 2
+        first_constraint = (4 * cp.pi) / (3 * cp.pi) * (self.mass_s / constants.hbar).to(f"{self.tUnits}/{self.dUnits}2").value * min_dx ** 2
 
         # Calculate second constraint based on potential
         if self.static_potential is not None:
@@ -318,7 +317,7 @@ class Simulation_Class:
         if phi_max < 1e-10:
             phi_max = 1e-10
 
-        second_constraint = 2 * cp.pi * (hbar / m) * (1 / phi_max)
+        second_constraint = (2 * cp.pi * (constants.hbar.value / self.mass_s) * (1 / phi_max)).value
 
         # Maximum allowed time step
         max_allowed_dt = 0.5 * min(float(first_constraint), float(second_constraint))
@@ -349,12 +348,13 @@ class Simulation_Class:
         """
         Convert the numerical wave function to physical units.
         """
-        # 1/distance^2
-        one_over_kpc2 = 1 / self.dUnits_unit ** 2
+
+        self.h = (self.h * self.tUnits_unit).value
+        self.total_time = (self.total_time * self.tUnits_unit).value
 
         # Calculate ħ/m_s
         self.h_bar_tilde = (constants.hbar / self.mass_s).to(f"{self.dUnits}2/{self.tUnits}").value
 
         # Convert wave function: ψ_sol = ψ̂_sol * (ħ/√G)
         conversion_factor = self.h_bar_tilde / np.sqrt(self.G)
-        self.combined_psi = self.combined_psi * one_over_kpc2.value * conversion_factor
+        self.combined_psi = self.combined_psi  * conversion_factor

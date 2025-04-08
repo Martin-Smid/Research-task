@@ -1,8 +1,7 @@
-import matplotlib.pyplot as plt
 from cupy import asnumpy
 
 from resources.Classes.Wave_function_class import *
-from resources.system_fucntions import *
+from resources.Functions.system_fucntions import *
 
 
 # Setup parameters for the domain
@@ -12,7 +11,7 @@ N = 512 # Number of spatial points
 # Initialize the Wave_function instance
 
 
-sim = Simulation_class(
+sim = Simulation_Class(
     dim=1,                             # 2D simulation
     boundaries=[(-10, 10)], # Spatial boundaries
     N=512,                             # Grid resolution

@@ -2,7 +2,7 @@ import cupy as cp
 from scipy.constants import gravitational_constant
 
 from resources.Functions.Schrodinger_eq_functions import *
-from resources.Classes.Simulation_Class import Simulation_class
+from resources.Classes.Simulation_Class import Simulation_Class
 from resources.Classes.Wave_Packet_Class import Packet
 
 

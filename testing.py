@@ -7,7 +7,7 @@ sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-40, 40),(-40, 40),(-40, 40)], # Spatial boundaries
     N=256,                             # Grid resolution
-    total_time=5,                   # Total simulation time
+    total_time=10,                   # Total simulation time
     h=0.001,                            # Time step
     use_gravity=True , # Enable gravitational effects
     static_potential=None,
@@ -51,7 +51,7 @@ sim.add_wave_function(vlna2)
 sim.add_wave_function(vlna3)
 
 
-sim.evolve(save_every=1000)
+sim.evolve(save_every=250)
 
 '''1D
 plt.figure()

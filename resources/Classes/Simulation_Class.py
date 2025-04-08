@@ -307,7 +307,7 @@ class Simulation_Class:
 
 
         # Calculate first constraint
-        first_constraint = ((4 * cp.pi) / (3 * cp.pi) * (self.mass_s / self.h_bar)* min_dx ** 2)
+        first_constraint = ((4 * cp.pi) / (3 * cp.pi) * self.h_bar_tilde* min_dx ** 2)
 
         # Calculate second constraint based on potential
         if self.static_potential is not None:
@@ -353,11 +353,7 @@ class Simulation_Class:
         """
 
 
-        self.total_time = (self.total_time * self.tUnits_unit)
-
-        # Calculate ħ/m_s
-
-
+        self.total_time = (self.total_time)
 
         # Convert wave function: ψ_sol = ψ̂_sol * (ħ/√G)
         conversion_factor = self.h_bar_tilde / np.sqrt(self.G)

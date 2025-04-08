@@ -24,6 +24,7 @@ class Propagator_Class:
         self.k_space = simulation.k_space
         self.G = simulation.G
         self.hbar = simulation.h_bar
+        self.h_bar_tilde = self.simulation.h_bar_tilde
         # Placeholders for propagators
         self.kinetic_propagator = None
         self.static_potential_propagator = None
@@ -44,7 +45,9 @@ class Propagator_Class:
 
         # Create propagator with time factor h/2 (for split-step)
         # --------------------------------------------------------------- ask about hbar/2 masses
-        self.kinetic_propagator = cp.exp(-1j * (self.h / 2) *(self.hbar/(2))* k_squared_sum, dtype=cp.complex64)
+        print(self.simulation.mass_s)
+        self.kinetic_propagator = cp.exp(((-1j * (self.h / 2) * k_squared_sum )*(self.h_bar_tilde)), dtype=cp.complex64)
+        print(self.kinetic_propagator)
         return self.kinetic_propagator
 
     def compute_static_potential_propagator(self, potential_function):
@@ -94,11 +97,11 @@ class Propagator_Class:
 
         if first_step or last_step:
             # Half step for first and last steps (for split-step)
-            self.gravity_propagator = cp.exp((-1j) * (self.h / 2) * (self.simulation.h_bar_tilde**2) *gravity_potential , dtype=cp.complex64)
-            print(self.gravity_propagator)
+            self.gravity_propagator = cp.exp((-1j * (self.h / 2) * gravity_potential )/(self.simulation.h_bar_tilde), dtype=cp.complex64)
+
         else:
             # Full step for middle steps
-            self.gravity_propagator = cp.exp((-1j)  * self.h * (self.simulation.h_bar_tilde**2) *gravity_potential, dtype=cp.complex64)
+            self.gravity_propagator = cp.exp((-1j  * self.h * gravity_potential)/(self.simulation.h_bar_tilde), dtype=cp.complex64)
 
         return self.gravity_propagator
 

@@ -1,3 +1,5 @@
+import matplotlib.pyplot as plt
+
 from resources.Classes.Wave_function_class import *
 from resources.Functions.system_fucntions import *
 from matplotlib.colors import LogNorm
@@ -7,10 +9,10 @@ sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-40, 40),(-40, 40),(-40, 40)], # Spatial boundaries
     N=256,                             # Grid resolution
-    total_time=10,                   # Total simulation time
+    total_time=1,                   # Total simulation time
     h=0.001,                            # Time step
     use_gravity=True , # Enable gravitational effects
-    static_potential=None,
+    static_potential=gravity_potential,
     save_max_vals=False,
 )
 #TODO: compute the ratio between amplitudes of oscilations from 1 for N = 128, 256, 64
@@ -47,8 +49,8 @@ vlna3 = Wave_function(
 
 
 sim.add_wave_function(vlna)
-sim.add_wave_function(vlna2)
-sim.add_wave_function(vlna3)
+#sim.add_wave_function(vlna2)
+#sim.add_wave_function(vlna3)
 
 
 sim.evolve(save_every=250)
@@ -85,6 +87,7 @@ for time in sim.accessible_times:
     plt.title(f"Wavefunction Probability Density at Time {time}")
     plt.xlabel("X")
     plt.ylabel("Y")
+    plt.grid()
     plt.show()
 
 '''

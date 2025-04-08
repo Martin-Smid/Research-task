@@ -161,8 +161,9 @@ class Simulation_Class:
         self.G = constants.G.to(f"{self.dUnits}3/({self.mUnits} {self.tUnits}2)").value
         self.h_bar = constants.hbar.to(f"{self.dUnits}2 {self.mUnits}/{self.tUnits}").value
         self.h_bar_tilde = (self.h_bar / self.mass_s)
-
-
+        print(self.h_bar)
+        print(self.mass_s)
+        print(self.h_bar_tilde)
     def unpack_boundaries(self):
         """
         Validates the format of the boundaries and unpacks them into dx and multidimensional grids.

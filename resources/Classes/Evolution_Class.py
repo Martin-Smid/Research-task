@@ -128,6 +128,7 @@ class Evolution_Class:
         if is_first_step:
             # Apply half-step potential for first step
             psi *= cp.sqrt(self.propagator.static_potential_propagator * gravity_propagator)
+            print(self.propagator.static_potential_propagator)
         else:
             # Apply full-step potential for other steps
             psi *= self.propagator.static_potential_propagator * gravity_propagator
@@ -141,10 +142,10 @@ class Evolution_Class:
         if is_last_step:
             psi *= cp.sqrt(self.propagator.static_potential_propagator * gravity_propagator)
 
+
         # Track maximum values if enabled
         if self.save_max_vals:
             self.max_wave_vals_during_evolution[step_index] = float(abs(psi).max())
-
         return psi
 
     def get_wave_function_at_time(self, time):

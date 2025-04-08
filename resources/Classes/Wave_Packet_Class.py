@@ -10,7 +10,7 @@ class Packet():
     the creation of the initial wavefunction, based on the selected packet type.
     """
 
-    def __init__(self, packet_type="gaussian",dim =1, boundaries=None, potential=None, means=None, st_deviations=None, grids=None, dx=None, mass=1, omega=1,momenta = [0],
+    def __init__(self, packet_type="gaussian",hbar=1,dim =1, boundaries=None, potential=None, means=None, st_deviations=None, grids=None, dx=None, mass=1, omega=1,momenta = [0],
                  *args, **kwargs):
         """
         Initialize a Packet instance.
@@ -34,6 +34,7 @@ class Packet():
         self.potential = potential  # Potential function
         self.dx = dx  # Receive dx from parent class
         self.mass = mass
+        self.h_bar_tilde = hbar
         self.omega = omega
         self.momentum_propagator = self.compute_momentum_propagator()
 
@@ -45,7 +46,7 @@ class Packet():
         """Compute the kinetic propagator based on Fourier space components."""
         # Use single-precision floats to save memory
         momenta = [
-            -1j * cp.array((momentum / 1) * grid, dtype=cp.float32)
+            -1j * cp.array((momentum / self.h_bar_tilde) * grid, dtype=cp.float32)
             for momentum, grid in zip(self.momenta, self.grids)]
         summed_momenta = cp.zeros_like(momenta[0])
         for momentum in momenta:

@@ -41,6 +41,44 @@ def quadratic_potential(simulation_instance):
     return  0.5 * mass * omega ** 2 * r2
 
 
+def gravity_potential(simulation_instance, mass_multiplier=1, center=None):
+    """
+    Compute the gravitational potential from a point mass.
+    Uses regularization to avoid singularity at r=0.
+
+    Parameters:
+        simulation_instance: Simulation_Class instance
+        mass_multiplier: Factor to multiply the base mass by
+        center: Center coordinates of the point mass (defaults to center of grid)
+
+    Returns:
+        cp.ndarray: The potential computed on the spatial grid.
+    """
+
+    # Set default center to middle of the grid if not specified
+    if center is None:
+        center = [0, 0, 0]  # You can change this to grid center if needed
+
+
+    r_squared = cp.zeros_like(simulation_instance.grids[0])
+    for dim in range(simulation_instance.dim):
+        r_squared += (simulation_instance.grids[dim] - center[dim]) ** 2
+
+
+    epsilon = min(simulation_instance.dx)
+    r = cp.sqrt(r_squared) + epsilon
+
+
+    mass = 1
+    G = simulation_instance.G
+
+    # Calculate potential
+    potential = -(G * mass) / r
+
+    return potential
+
+
+
 
 def coefficient_nd(n, m=1, omega=1, hbar=1):
     """Calculate the normalization constant for N dimensions."""

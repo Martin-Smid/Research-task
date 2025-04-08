@@ -40,6 +40,7 @@ class Wave_function():  # Streamlined and unified evolution logic
             st_deviations=st_deviations,
             grids=self.grids,
             dx=self.dx,
+            hbar=self.simulation.h_bar_tilde,
             mass=mass,
             omega=omega,
             dim=self.dim, )

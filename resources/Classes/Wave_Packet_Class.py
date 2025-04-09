@@ -10,7 +10,7 @@ class Packet():
     the creation of the initial wavefunction, based on the selected packet type.
     """
 
-    def __init__(self, packet_type="gaussian",hbar=1,dim =1, boundaries=None, potential=None, means=None, st_deviations=None, grids=None, dx=None, mass=1, omega=1,momenta = [0],
+    def __init__(self, packet_type="gaussian",h_bar_tilde=1,dim =1, boundaries=None, potential=None, means=None, st_deviations=None, grids=None, dx=None, mass=1, omega=1,momenta = [0],
                  *args, **kwargs):
         """
         Initialize a Packet instance.
@@ -34,7 +34,8 @@ class Packet():
         self.potential = potential  # Potential function
         self.dx = dx  # Receive dx from parent class
         self.mass = mass
-        self.h_bar_tilde = hbar
+        self.h_bar_tilde = h_bar_tilde
+
         self.omega = omega
         self.momentum_propagator = self.compute_momentum_propagator()
 
@@ -46,7 +47,7 @@ class Packet():
         """Compute the kinetic propagator based on Fourier space components."""
         # Use single-precision floats to save memory
         momenta = [
-            -1j * cp.array((momentum / self.h_bar_tilde) * grid, dtype=cp.float32)
+            1j * cp.array((momentum / self.h_bar_tilde) * grid, dtype=cp.float32)
             for momentum, grid in zip(self.momenta, self.grids)]
         summed_momenta = cp.zeros_like(momenta[0])
         for momentum in momenta:
@@ -96,7 +97,11 @@ class Packet():
 
             return wave_packet
         elif self.packet_type == "LHO":
-            return self._create_LHO_packet()
+            wave_packet = self._create_LHO_packet()
+
+            wave_packet *= self.momentum_propagator
+
+            return wave_packet
         else:
             raise IncorrectPacketTypeError(
                 message=f"The packet type '{self.packet_type}' is not recognized.",
@@ -201,6 +206,7 @@ class Packet():
         except Exception as e:
             raise Exception(f"Error reading file '{file_path}': {str(e)}")
 
+    # In _create_LHO_packet method
     def _create_LHO_packet(self):
         """
         Creates a wave packet for the linear harmonic oscillator (LHO).
@@ -208,10 +214,9 @@ class Packet():
         Returns:
             cp.ndarray: The normalized LHO wavefunction.
         """
-        # Compute linear harmonic oscillator wave packet over the full meshgrid
+        # Pass self to lin_harmonic_oscillator
         psi_0 = lin_harmonic_oscillator(self)
 
         # Normalize the wavefunction over all dimensions
-        dx_total = cp.prod(cp.array(self.dx))  # Total grid spacing in all dimensions
-        #psi_0 = normalize_wavefunction(psi_0, dx_total)
+        dx_total = cp.prod(cp.array(self.dx))
         return psi_0 + 0j

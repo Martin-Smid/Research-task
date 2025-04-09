@@ -4,7 +4,7 @@ from scipy.constants import gravitational_constant
 from resources.Functions.Schrodinger_eq_functions import *
 from resources.Classes.Simulation_Class import Simulation_Class
 from resources.Classes.Wave_Packet_Class import Packet
-
+from astropy import units, constants
 
 
 #-----------------------------------------------------------------------------------------------------------------------
@@ -25,24 +25,26 @@ class Wave_function():  # Streamlined and unified evolution logic
         self.dim = simulation.dim
         self.boundaries = simulation.boundaries
         self.N = simulation.N
+        self.means = means
         self.total_time = simulation.total_time
         self.h = simulation.h
         self.num_steps = int(self.total_time / self.h)
         self.dx = simulation.dx
         self.grids = simulation.grids
         self.momenta = momenta
-        self.mass = mass
+        self.mass = self.simulation.mass_s
+        self.h_bar_tilde = self.simulation.h_bar_tilde
         self.omega = omega
         self.packet_creator = Packet(
             packet_type=packet_type,
             momenta=self.momenta,
-            means=means,
+            means=self.means,
             st_deviations=st_deviations,
             grids=self.grids,
             dx=self.dx,
-            hbar=self.simulation.h_bar_tilde,
-            mass=mass,
-            omega=omega,
+            h_bar_tilde=self.h_bar_tilde,
+            mass=self.mass,
+            omega=self.omega,
             dim=self.dim, )
         self.psi = self.packet_creator.create_psi_0()
 

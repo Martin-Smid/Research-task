@@ -81,10 +81,10 @@ class Simulation_Class:
     separate classes.
     """
 
-    @parameter_check(int, list, int, (int, float), (int, float), float, bool, object, bool, dict)
+    @parameter_check(int, list, int, (int, float), (int, float), float, bool, object, bool, dict,bool)
     def __init__(self, dim, boundaries, N, total_time, h, m_s=1e-22, use_gravity=False,
                  static_potential=None, save_max_vals=False,
-                 sim_units={"dUnits": "kpc", "tUnits": "Gyr", "mUnits": "Msun", "eUnits": "eV"}):
+                 sim_units={"dUnits": "kpc", "tUnits": "Gyr", "mUnits": "Msun", "eUnits": "eV"},use_units=True):
         """
         Initialize the simulation parameters and setup.
 
@@ -130,6 +130,7 @@ class Simulation_Class:
         self.combined_psi = None
 
         # Setup physical units
+        self.use_units = use_units
         self.setup_units(sim_units, m_s)
 
         # Initialize helper classes
@@ -161,9 +162,7 @@ class Simulation_Class:
         self.G = constants.G.to(f"{self.dUnits}3/({self.mUnits} {self.tUnits}2)").value
         self.h_bar = constants.hbar.to(f"{self.dUnits}2 {self.mUnits}/{self.tUnits}").value
         self.h_bar_tilde = (self.h_bar / self.mass_s)
-        print(self.h_bar)
-        print(self.mass_s)
-        print(self.h_bar_tilde)
+
     def unpack_boundaries(self):
         """
         Validates the format of the boundaries and unpacks them into dx and multidimensional grids.
@@ -244,6 +243,12 @@ class Simulation_Class:
         for wave_func in self.wave_functions:
             self.combined_psi += wave_func.psi
 
+        if not self.check_time_step_restriction():
+            return
+
+        if self.use_units:
+            self.calculate_physical_units()
+
         # Create the propagator and evolution classes
         self.propagator = Propagator_Class(self)
         self.evolution = Evolution_Class(self, self.propagator)
@@ -253,12 +258,10 @@ class Simulation_Class:
         self.propagator.static_potential_propagator = self.propagator.compute_static_potential_propagator(
             self.static_potential)
 
-        # Check time step restrictions
-        if not self.check_time_step_restriction():
-            return
 
-        # Apply physical unit transformations
-        self.calculate_physical_units()
+
+
+
 
     def evolve(self, save_every=1):
         """

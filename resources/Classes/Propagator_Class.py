@@ -29,6 +29,10 @@ class Propagator_Class:
         self.kinetic_propagator = None
         self.static_potential_propagator = None
         self.gravity_propagator = None
+        if not self.simulation.use_units:
+            self.h_bar_tilde = 1
+            self.h_bar = 1
+            self.G = 1
 
     def compute_kinetic_propagator(self):
         """
@@ -44,7 +48,6 @@ class Propagator_Class:
             k_squared_sum += k ** 2
 
         # Create propagator with time factor h/2 (for split-step)
-        # --------------------------------------------------------------- ask about hbar/2 masses
 
         self.kinetic_propagator = cp.exp(((-1j * (self.h / 2) * k_squared_sum )*(self.h_bar_tilde)), dtype=cp.complex64)
         return self.kinetic_propagator
@@ -61,7 +64,7 @@ class Propagator_Class:
         """
         if potential_function is not None:
             potential_values = potential_function(self.simulation)
-            self.static_potential_propagator = cp.exp((-1j * self.h * potential_values)*(self.simulation.h_bar_tilde**2) , dtype=cp.complex64)
+            self.static_potential_propagator = cp.exp((-1j * self.h * potential_values)*(self.h_bar_tilde) , dtype=cp.complex64)
         else:
             # If no potential is provided, use unit propagator (no effect)
             self.static_potential_propagator = cp.ones(self.simulation.grids[0].shape, dtype=cp.complex64)
@@ -89,17 +92,14 @@ class Propagator_Class:
         # Solve Poisson equation for gravitational potential
         gravity_potential = self.solve_poisson(density)
 
-        # Store the potential for possible later use
         self.gravity_potential = gravity_potential
 
         # Create the propagator with appropriate time factor
 
         if first_step or last_step:
-            # Half step for first and last steps (for split-step)
             self.gravity_propagator = cp.exp((-1j * (self.h / 2) * gravity_potential )/(self.simulation.h_bar_tilde), dtype=cp.complex64)
 
         else:
-            # Full step for middle steps
             self.gravity_propagator = cp.exp((-1j  * self.h * gravity_potential)/(self.simulation.h_bar_tilde), dtype=cp.complex64)
 
         return self.gravity_propagator

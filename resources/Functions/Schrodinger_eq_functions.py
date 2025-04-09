@@ -17,23 +17,23 @@ def normalize_wavefunction(psi, dx):
     psi /= cp.sqrt(cp.sum(cp.abs(psi) ** 2) * dx_total)
     return psi
 
-def quadratic_potential(simulation_instance):
+def quadratic_potential(packet_class_instance):
     """
     Compute the potential V(r) = 1/2 * omega^2 * r^2 for arbitrary dimensions
     using the properties of a Wave_function instance.
 
     Parameters:
-        simulation_instance (Wave_function): An instance of the Wave_function class.
+        packet_class_instance (Wave_function): An instance of the Wave_function class.
 
     Returns:
         cp.ndarray: The potential computed on the spatial grid.
         cp.ndarray: The potential computed on the spatial grid.
     """
-    grids = simulation_instance.grids  # Grids (already meshgrids) from the wave_function instance
+    grids = packet_class_instance.grids  # Grids (already meshgrids) from the wave_function instance
 
     mass = 1 # maybe change this later, im tired
-    dim = simulation_instance.dim
-    omega = simulation_instance.total_omega
+    dim = packet_class_instance.dim
+    omega = packet_class_instance.total_omega
 
     # Compute r^2 from the multidimensional grid
     r2 = sum(g ** 2 for g in grids)
@@ -68,12 +68,14 @@ def gravity_potential(simulation_instance, mass_multiplier=1, center=None):
     epsilon = min(simulation_instance.dx)
     r = cp.sqrt(r_squared) + epsilon
 
-
-    mass = 1
+    mass = 10000
     G = simulation_instance.G
+    print(G)
 
     # Calculate potential
     potential = -(G * mass) / r
+
+    print(potential)
 
     return potential
 
@@ -122,7 +124,7 @@ def lin_harmonic_oscillator(simulation_instance):
     dim = simulation_instance.dim
     means = simulation_instance.means
     dx = simulation_instance.dx
-    mass = simulation_instance.mass
+    mass = 1
     omega = simulation_instance.omega
     h_bar = 1
 

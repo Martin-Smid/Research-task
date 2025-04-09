@@ -7,24 +7,24 @@ from resources.Classes.Simulation_Class import Simulation_Class
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-40, 40),(-40, 40),(-40, 40)], # Spatial boundaries
+    boundaries=[(-20, 20),(-20, 20),(-20, 20)], # Spatial boundaries
     N=256,                             # Grid resolution
-    total_time=1,                   # Total simulation time
-    h=0.001,                            # Time step
-    use_gravity=True , # Enable gravitational effects
-    static_potential=gravity_potential,
+    total_time=10 ,                   # Total simulation time
+    h=0.01,                            # Time step
+    use_gravity=False , # Enable gravitational effects
+    static_potential=None,
     save_max_vals=False,
 )
 #TODO: compute the ratio between amplitudes of oscilations from 1 for N = 128, 256, 64
 
 vlna = Wave_function(
-    packet_type="/home/martin/Downloads/GroundState(1).dat",
-    means=[10,10,0],
+    packet_type="gaussian",
+    means=[5,0,0],
     st_deviations=[0.5,0.5,0.5],
     simulation=sim,
     mass=1,
     omega=1,
-    momenta=[0,0,0],
+    momenta=[0,0.095,0],
 )
 
 vlna2 = Wave_function(
@@ -53,7 +53,7 @@ sim.add_wave_function(vlna)
 #sim.add_wave_function(vlna3)
 
 
-sim.evolve(save_every=250)
+sim.evolve(save_every=50 )
 
 '''1D
 plt.figure()
@@ -66,13 +66,13 @@ plt.show()
 
 x_mesh = cp.asnumpy(sim.grids[0][:,:,0])
 y_mesh = cp.asnumpy(sim.grids[1][:,:,0])
+z_mesh = cp.asnumpy(sim.grids[2][0,0,:])
 
 
 
-#TODO make a function out of this
-
+'''
 # Choose a slice in the Z direction (middle of the grid)
-z_index = sim.grids[2].shape[0] // 2  # Middle z-plane
+z_index = (sim.grids[2].shape[0] // 2 )  + 10# Middle z-plane
 
 plt.figure(figsize=(8, 6))
 for time in sim.accessible_times:
@@ -91,44 +91,73 @@ for time in sim.accessible_times:
     plt.show()
 
 '''
-rho = cp.abs(sim.get_wave_function_at_time(0)) ** 2
+x_index = (sim.grids[0].shape[0] // 2)
+y_index = (sim.grids[1].shape[0] //2)
+z_index = (sim.grids[2].shape[0] //2)
+# For the YZ plane plotting
+y_mesh_2d, z_mesh_2d = np.meshgrid(sim.grids[1][0,:,0].get(), sim.grids[2][0,0,:].get())
+x_mesh_2d, z_mesh_2d = np.meshgrid(sim.grids[0][:,0,0].get(), sim.grids[2][0,0,:].get())
+plt.figure(figsize=(8, 6))
+x_mesh_2d, y_mesh_2d = np.meshgrid(sim.grids[0][:,0,0].get(), sim.grids[1][0,:,0].get())
+for time in sim.accessible_times:
+    wave_values = cp.asnumpy(abs(sim.get_wave_function_at_time(time)) ** 2)
+
+    # Take the middle x-slice
+    wave_slice = wave_values[:, :, z_index]
+    levels = np.logspace(np.log10(wave_values[wave_values > 0].min()), np.log10(wave_values.max()), 128)
+    plt.contourf(x_mesh_2d, y_mesh_2d, cp.asnumpy(wave_slice).T,
+                 origin="lower", levels=levels, cmap="inferno", norm=LogNorm())
+    plt.colorbar(label="|ψ|²", format="%.2e")
+    plt.title(f"Wavefunction Probability Density at Time {time}")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.grid()
+    plt.show()
 
 
-rho_xy = cp.asnumpy(rho.sum(axis=2))  # Summing over Z → XY plane
-rho_zx = cp.asnumpy(rho.sum(axis=1))  # Summing over Y → ZX plane
-rho_yz = cp.asnumpy(rho.sum(axis=0))  # Summing over X → YZ plane
 
-
-x_min, x_max = sim.grids[0].min().get(), sim.grids[0].max().get()
-y_min, y_max = sim.grids[1].min().get(), sim.grids[1].max().get()
-z_min, z_max = sim.grids[2].min().get(), sim.grids[2].max().get()
-
-
-fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-
-
-im1 = axes[0].imshow(rho_xy, extent=[x_min, x_max, y_min, y_max], origin="lower", cmap="inferno")
-axes[0].set_title("XY Projection ")
-axes[0].set_xlabel("X")
-axes[0].set_ylabel("Y")
-plt.colorbar(im1, ax=axes[0])
-
-# ZX Projection
-im2 = axes[1].imshow(rho_zx, extent=[z_min, z_max, x_min, x_max], origin="lower", cmap="inferno")
-axes[1].set_title("ZX Projection ")
-axes[1].set_xlabel("Z")
-axes[1].set_ylabel("X")
-plt.colorbar(im2, ax=axes[1])
-
-# YZ Projection
-im3 = axes[2].imshow(rho_yz, extent=[z_min, z_max, y_min, y_max], origin="lower", cmap="inferno")
-axes[2].set_title("YZ Projection")
-axes[2].set_xlabel("Z")
-axes[2].set_ylabel("Y")
-plt.colorbar(im3, ax=axes[2])
-
-plt.tight_layout()
-plt.show()
 '''
 
+def plot_wave_slice(sim, time, axis="z", index=None):
+    wave_values = cp.asnumpy(abs(sim.get_wave_function_at_time(time)) ** 2)
+    levels = np.logspace(np.log10(wave_values[wave_values > 0].min()), np.log10(wave_values.max()), 128)
+
+    if axis == "z":
+        index = index or sim.grids[2].shape[0] // 2
+        x_mesh = cp.asnumpy(sim.grids[0][:, :, index])
+        y_mesh = cp.asnumpy(sim.grids[1][:, :, index])
+        wave_slice = wave_values[:, :, index]
+        xlabel, ylabel = "X", "Y"
+
+    elif axis == "x":
+        index = index or sim.grids[0].shape[0] // 2
+        y_mesh = cp.asnumpy(sim.grids[1][index, :, :])
+        z_mesh = cp.asnumpy(sim.grids[2][index, :, :])
+        wave_slice = wave_values[index, :, :]
+        x_mesh, y_mesh = y_mesh, z_mesh
+        xlabel, ylabel = "Y", "Z"
+
+    elif axis == "y":
+        index = index or sim.grids[1].shape[1] // 2
+        x_mesh = cp.asnumpy(sim.grids[0][:, index, :])
+        z_mesh = cp.asnumpy(sim.grids[2][:, index, :])
+        wave_slice = wave_values[:, index, :]
+        x_mesh, y_mesh = x_mesh, z_mesh
+        xlabel, ylabel = "X", "Z"
+
+    else:
+        raise ValueError("Axis must be one of 'x', 'y', or 'z'")
+
+    plt.figure(figsize=(8, 6))
+    plt.contourf(x_mesh, y_mesh, wave_slice, origin="lower", levels=levels, cmap="inferno", norm=LogNorm())
+    plt.colorbar(label="|ψ|²", format="%.2e")
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.title(f"Wavefunction Probability Density at Time {time} (Slice along {axis.upper()}={index})")
+    plt.grid()
+    plt.show()
+
+for time in sim.accessible_times:
+    plot_wave_slice(sim, time=time, axis="x")
+'''
 #TODO make it so that you can create different dim wave from the simulation, maybe make dim a wave_function class attribute and if not given take it from sim

@@ -13,13 +13,13 @@ N = 512 # Number of spatial points
 
 sim = Simulation_Class(
     dim=1,                             # 2D simulation
-    boundaries=[(-10, 10)], # Spatial boundaries
+    boundaries=[(-40, 40)], # Spatial boundaries
     N=512,                             # Grid resolution
     total_time=2.0,                   # Total simulation time
     h=0.01,                            # Time step
     use_gravity=False,  # Enable gravitational effects
     static_potential=quadratic_potential,
-    use_units=False,
+    use_units=True,
 )
 
 vlna = Wave_function(
@@ -52,11 +52,11 @@ x_vals = np.linspace(a, b, N, endpoint=False)
 
 #controlled_times = [0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.5,7,7.5,8,8.5,9,9.5,10]
 for time in sim.accessible_times:
-    print(f"Time: {time}")
-    print(f"Psi: {vlna.psi  * cp.exp(-1j * energy_nd([0], omega=1, hbar=1) * time)}")
-    an_psi = asnumpy(cp.abs(vlna.psi  * cp.exp(-1j * energy_nd([0], omega=1, hbar=1) * time))**2)
-    an_psi_real = asnumpy(cp.real(vlna.psi  * cp.exp(-1j * energy_nd([0], omega=1, hbar=1) * time)))
-    an_psi_imag = asnumpy(cp.imag(vlna.psi  * cp.exp(-1j * energy_nd([0], omega=1, hbar=1) * time)))
+
+
+    an_psi = asnumpy(cp.abs(sim.get_wave_function_at_time(0)  * cp.exp(-1j * energy_nd([0], omega=1, hbar=sim.h_bar) * time))**2)
+    an_psi_real = asnumpy(cp.real(sim.get_wave_function_at_time(0)  * cp.exp(-1j * energy_nd([0], omega=1, hbar=sim.h_bar) * time)))
+    an_psi_imag = asnumpy(cp.imag(sim.get_wave_function_at_time(0)  * cp.exp(-1j * energy_nd([0], omega=1, hbar=sim.h_bar) * time)))
 
     num_psi = sim.get_wave_function_at_time(time)
     num_psi = asnumpy(num_psi)
@@ -71,8 +71,10 @@ for time in sim.accessible_times:
 plt.legend(['Analytical real', 'Numerical real', 'Analytical imag', 'Numerical imag'], loc='upper right')
 plt.show()
 
-print(sim.wave_values[0])
-print(sim.get_wave_function_at_time(0.4))
+
+print("#--------------------------------------------------------------------------#")
+
+print(sim.get_wave_function_at_time(0))
 print("#--------------------------------------------------------------------------#")
 
 '''

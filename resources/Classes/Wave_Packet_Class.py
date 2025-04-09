@@ -33,7 +33,7 @@ class Packet():
         self.grids = grids  # Receive grids from parent class
         self.potential = potential  # Potential function
         self.dx = dx  # Receive dx from parent class
-        self.mass = mass
+        self.mass_s = mass
         self.h_bar_tilde = h_bar_tilde
 
         self.omega = omega

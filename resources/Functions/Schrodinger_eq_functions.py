@@ -30,15 +30,13 @@ def quadratic_potential(packet_class_instance):
         cp.ndarray: The potential computed on the spatial grid.
     """
     grids = packet_class_instance.grids  # Grids (already meshgrids) from the wave_function instance
-
-    mass = 1 # maybe change this later, im tired
     dim = packet_class_instance.dim
     omega = packet_class_instance.total_omega
 
     # Compute r^2 from the multidimensional grid
     r2 = sum(g ** 2 for g in grids)
     # Return the computed quadratic potential
-    return  0.5 * mass * omega ** 2 * r2
+    return  0.5 *  omega ** 2 * r2
 
 
 def gravity_potential(simulation_instance, mass_multiplier=1, center=None):
@@ -82,10 +80,10 @@ def gravity_potential(simulation_instance, mass_multiplier=1, center=None):
 
 
 
-def coefficient_nd(n, m=1, omega=1, hbar=1):
+def coefficient_nd(n, omega=1, h_bar_tilde=1):
     """Calculate the normalization constant for N dimensions."""
 
-    beta = np.sqrt(m * omega / hbar)
+    beta = np.sqrt( omega / h_bar_tilde)
     factor = (beta ** 2 / np.pi) ** (len(n) / 2)  # Normalization factor for N dimensions
     denom = np.sqrt(np.prod([2 ** ni * factorial(ni) for ni in n]))  # Hermite polynomial normalization
     return factor / denom
@@ -105,8 +103,9 @@ def energy_nd(n, omega=1, hbar=1):
     """
     if not isinstance(n, list) or not all(isinstance(x, int) and x >= 0 for x in n):
         raise ValueError("n must be a list of non-negative integers representing quantum numbers.")
+    print(hbar)
 
-    return hbar * omega * (sum(n) + len(n) * 0.5)
+    return 1 * omega * (sum(n) + len(n) * 0.5)
 
 
 def lin_harmonic_oscillator(simulation_instance):
@@ -124,12 +123,12 @@ def lin_harmonic_oscillator(simulation_instance):
     dim = simulation_instance.dim
     means = simulation_instance.means
     dx = simulation_instance.dx
-    mass = 1
     omega = simulation_instance.omega
-    h_bar = 1
+    h_bar_tilde = simulation_instance.h_bar_tilde
+    print(h_bar_tilde)
 
     quantum_numbers = [0] * dim  # Quantum numbers for each dimension
-    beta = np.sqrt((mass * omega) / h_bar)
+    beta = np.sqrt(( omega) / h_bar_tilde)
 
     gaussian_factors = []
     hermite_polynomials = []
@@ -147,7 +146,7 @@ def lin_harmonic_oscillator(simulation_instance):
         psi_0 *= gaussian_factors[i] * hermite_polynomials[i]
 
     # Call coefficient_nd for normalization constant across dimensions
-    coeff = coefficient_nd(quantum_numbers, mass, omega, h_bar)
+    coeff = coefficient_nd(quantum_numbers, omega, h_bar_tilde)
     psi_0 *= coeff  # Apply the normalization constant to psi_0
 
     # Normalize the wavefunction using the provided normalize_wavefunction function

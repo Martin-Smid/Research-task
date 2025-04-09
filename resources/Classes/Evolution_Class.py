@@ -128,7 +128,6 @@ class Evolution_Class:
         if is_first_step:
             # Apply half-step potential for first step
             psi *= cp.sqrt(self.propagator.static_potential_propagator * gravity_propagator)
-            print(self.propagator.static_potential_propagator)
         else:
             # Apply full-step potential for other steps
             psi *= self.propagator.static_potential_propagator * gravity_propagator

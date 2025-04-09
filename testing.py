@@ -9,16 +9,16 @@ sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-20, 20),(-20, 20),(-20, 20)], # Spatial boundaries
     N=256,                             # Grid resolution
-    total_time=10 ,                   # Total simulation time
+    total_time=100 ,                   # Total simulation time
     h=0.01,                            # Time step
-    use_gravity=False , # Enable gravitational effects
-    static_potential=None,
+    use_gravity=True , # Enable gravitational effects
+    static_potential=gravity_potential,
     save_max_vals=False,
 )
 #TODO: compute the ratio between amplitudes of oscilations from 1 for N = 128, 256, 64
 
 vlna = Wave_function(
-    packet_type="gaussian",
+    packet_type="/home/martin/Downloads/GroundState(1).dat",
     means=[5,0,0],
     st_deviations=[0.5,0.5,0.5],
     simulation=sim,
@@ -53,7 +53,7 @@ sim.add_wave_function(vlna)
 #sim.add_wave_function(vlna3)
 
 
-sim.evolve(save_every=50 )
+sim.evolve(save_every=250 )
 
 '''1D
 plt.figure()

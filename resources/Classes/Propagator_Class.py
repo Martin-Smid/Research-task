@@ -64,7 +64,9 @@ class Propagator_Class:
         """
         if potential_function is not None:
             potential_values = potential_function(self.simulation)
-            self.static_potential_propagator = cp.exp((-1j * self.h * potential_values)*(self.h_bar_tilde) , dtype=cp.complex64)
+            print(potential_values)
+            self.static_potential_propagator = cp.exp((-1j * self.h * potential_values)/(self.h_bar_tilde) , dtype=cp.complex64)
+            print(self.static_potential_propagator)
         else:
             # If no potential is provided, use unit propagator (no effect)
             self.static_potential_propagator = cp.ones(self.simulation.grids[0].shape, dtype=cp.complex64)

@@ -222,24 +222,43 @@ class Simulation_Class:
         k_space = cp.meshgrid(*k_components, indexing='ij')
         return k_space
 
-    def add_wave_function(self, wave_function):
+    def add_wave_function(self, wave_vector):
         """
         Add a wave function to the simulation.
 
         Parameters:
-            wave_function: A wave function object with psi, mass, and momenta attributes
+            wave_vector: A wave function object with psi, mass, and momenta attributes
         """
-        self.wave_functions.append(wave_function)
-        self.wave_masses.append(wave_function.mass)
-        self.wave_momenta.append(wave_function.momenta)
-        self.wave_omegas.append(wave_function.omega)
-        self.total_omega += wave_function.omega
+        if isinstance(wave_vector, list):
+            for wave_function in wave_vector:
+
+                self.wave_functions.append(wave_function)
+                self.wave_masses.append(wave_function.mass)
+                self.wave_momenta.append(wave_function.momenta)
+                self.wave_omegas.append(wave_function.omega)
+                self.total_omega += wave_function.omega
+
+                print(f"přidal jsem {wave_function}")
+                print(f"s hodntami {wave_function.psi}"
+                      f"a středy {wave_function.means}")
+        else:
+            try:
+                self.wave_functions.append(wave_vector)
+                self.wave_masses.append(wave_vector.mass)
+                self.wave_momenta.append(wave_vector.momenta)
+                self.wave_omegas.append(wave_vector.omega)
+                self.total_omega += wave_vector.omega
+            except Exception as e:
+                raise ValueError(f"Tried adding either a Wave_vector.wave_vector, list of Wave_functions or Wave_function but failed \n"
+                                 f"got the error: {e}"
+                                 f"try adding Wave_vector.wave_vector")
 
     def initialize_simulation(self):
         """
         Initialize the combined wave function and propagators before evolution.
         Sets up the Propagator and Evolution helper classes.
         """
+        print(f"pracuji s {self.wave_functions}")
         if not self.wave_functions:
             raise ValueError("No wave functions added to the simulation")
 

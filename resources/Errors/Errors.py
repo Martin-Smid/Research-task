@@ -1,5 +1,4 @@
 import traceback
-import traceback
 
 class MissingArgumentError(Exception):
     """Raised when a required argument is missing."""
@@ -90,3 +89,20 @@ class TypeMismatchError(Exception):
 
     def __str__(self):
         return self.message
+
+class IncorrectWaveBlueprintError(Exception):
+    """Raised when the wave blueprint provided is invalid."""
+
+    def __init__(self, message, provided=None):
+        self.message = message
+        self.provided = provided
+
+        tb = traceback.extract_stack()[-2]
+        self.file = tb.filename
+        self.line = tb.lineno
+
+        super().__init__(self.message)
+
+    def __str__(self):
+        return (f"Wave blueprint error: {self.message}. Provided: {self.provided} "
+                f"(raised in {self.file}, line {self.line})")

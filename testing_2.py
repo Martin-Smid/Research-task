@@ -10,8 +10,8 @@ sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-25, 25),(-25, 25),(-25, 25)], # Spatial boundaries
     N=64,                             # Grid resolution
-    total_time=1 ,                   # Total simulation time
-    h=0.01,                            # Time step
+    total_time=10,                   # Total simulation time
+    h=0.005,                            # Time step
     use_gravity=True , # Enable gravitational effects
     static_potential=None,
     save_max_vals=False,
@@ -19,23 +19,34 @@ sim = Simulation_Class(
 
 vlna = Wave_function(
     packet_type="/home/martin/Downloads/GroundState(1).dat",
-    means=[0,0,0],
+    means=[-0,5,0],
     st_deviations=[0.5,0.5,0.5],
     simulation=sim,
     mass=1,
     omega=1,
-    momenta=[0,2,0],
+    momenta=[4,0,0],
 )
 
-#print(vlna.psi)
-print("-----------------------------------------------------------------------")
-Wave_vector = Wave_vector_class(vlna, spin=0)
+
+
+vlna2 = Wave_function(
+    packet_type="/home/martin/Downloads/GroundState(1).dat",
+    means=[-0,-5,0],
+    st_deviations=[0.5,0.5,0.5],
+    simulation=sim,
+    mass=1,
+    omega=1,
+    momenta=[-4,0,0],
+)
+Wave_vector1 = Wave_vector_class([vlna,vlna2,vlna], spin=1)
 
 
 
 
-sim.add_wave_function(Wave_vector.wave_vector[0])
-sim.evolve(save_every=10 )
+sim.add_wave_function(Wave_vector1.wave_vector)
+
+
+sim.evolve(save_every=60)
 
 x_index = (sim.grids[0].shape[0] // 2)
 y_index = (sim.grids[1].shape[0] //2)

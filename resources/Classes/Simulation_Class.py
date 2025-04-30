@@ -94,6 +94,7 @@ class Simulation_Class:
             N (int): Number of spatial points for each dimension
             total_time (float): Total simulation time
             h (float): Time step size for propagation
+            order_of_evolution (int): Order of evolution possible values are 2 and 4
             m_s (float): Mass parameter
             use_gravity (bool): Whether to include gravitational effects
             static_potential (callable): Function that returns static potential values
@@ -108,6 +109,9 @@ class Simulation_Class:
         self.h = h
         self.num_steps = int(self.total_time / self.h)
         self.order_of_evolution = order_of_evolution
+
+        if order_of_evolution not in (2, 4):
+            raise ValueError("order_of_evolution must be either 2 or 4. Raised while initializing Simulation_Class")
 
         # Gravity and potential settings
         self.use_gravity = use_gravity

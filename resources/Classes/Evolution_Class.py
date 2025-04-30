@@ -283,7 +283,8 @@ class Evolution_Class:
             return psi * full_potential_propagator
         else:
             gravity_propagator = self.propagator.compute_gravity_propagator(psi,time_factor=time_factor)
-            full_potential_propagator = self.propagator.static_potential_propagator * gravity_propagator
+            non_gravity_propagator = self.propagator.compute_static_potential_propagator(self.simulation.static_potential,time_factor=time_factor)
+            full_potential_propagator = non_gravity_propagator * gravity_propagator
             return psi * full_potential_propagator
 
     def drift_step(self, psi,time_factor=1):

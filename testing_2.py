@@ -12,7 +12,7 @@ sim = Simulation_Class(
     N=128,                             # Grid resolution
     total_time=1,                   # Total simulation time
     h=0.005,                            # Time step
-    order_of_evolution=2,
+    order_of_evolution=4,
     use_gravity=True , # Enable gravitational effects
     static_potential=None,
     save_max_vals=False,
@@ -25,7 +25,7 @@ vlna = Wave_function(
     simulation=sim,
     mass=1,
     omega=1,
-    momenta=[-1,0,0],
+    momenta=[-5,0,0],
 )
 
 

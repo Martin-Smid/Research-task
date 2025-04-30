@@ -141,6 +141,7 @@ class Evolution_Class:
         return psi
 
     def evolve_wavefunction_split_step_o4(self, psi, step_index, total_steps):
+        # Calculate coefficients for 4th-order method
         v1 = (121.0 / 3924.0) * (12.0 - cp.sqrt(471.0))
         w = cp.sqrt(3.0 - 12.0 * v1 + 9 * v1 * v1)
         t2 = 0.25 * (1.0 - cp.sqrt((9.0 * v1 - 4.0 + 2 * w) / (3.0 * v1)))
@@ -148,22 +149,30 @@ class Evolution_Class:
         v2 = (1.0 / 6.0) - 4 * v1 * t1 * t1
         v0 = 1.0 - 2.0 * (v1 + v2)
 
+        # Handle boundary conditions correctly
+        is_first_step = (step_index == 0)
+        is_last_step = (step_index == total_steps - 1)
 
-        is_first_step = False
-        is_last_step = False
+        # First half-step potential for first timestep only
+        if is_first_step:
+            psi = self.kick_step(psi, True, False, v2)
+        else:
+            psi = self.kick_step(psi, False, False, v2)
 
+        # Main sequence of operations
+        psi = self.drift_step(psi, t2)
+        psi = self.kick_step(psi, False, False, v1)
+        psi = self.drift_step(psi, t1)
+        psi = self.kick_step(psi, False, False, v0)
+        psi = self.drift_step(psi, t1)
+        psi = self.kick_step(psi, False, False, v1)
+        psi = self.drift_step(psi, t2)
 
-
-        psi = self.kick_step(psi, is_first_step, is_last_step,v2)
-        psi = self.drift_step(psi,t2)
-        psi = self.kick_step(psi, is_first_step, is_last_step,v1)
-        psi = self.drift_step(psi,t1)
-        psi = self.kick_step(psi, is_first_step, is_last_step,v0)
-        psi = self.drift_step(psi,t1)
-        psi = self.kick_step(psi, is_first_step, is_last_step,v1)
-        psi = self.drift_step(psi,t2)
-        psi = self.kick_step(psi, is_first_step, is_last_step,v2)
-
+        # Last half-step potential for last timestep only
+        if is_last_step:
+            psi = self.kick_step(psi, False, True, v2)
+        else:
+            psi = self.kick_step(psi, False, False, v2)
 
         # Track maximum values if enabled
         if self.save_max_vals:

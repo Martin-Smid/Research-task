@@ -73,7 +73,7 @@ class Propagator_Class:
 
         return self.static_potential_propagator
 
-    def compute_gravity_propagator(self, psi, first_step=False, last_step=False):
+    def compute_gravity_propagator(self, psi, first_step=False, last_step=False,time_factor=1):
         """
         Compute the gravitational potential propagator based on current wave function density.
 
@@ -99,10 +99,10 @@ class Propagator_Class:
         # Create the propagator with appropriate time factor
 
         if first_step or last_step:
-            self.gravity_propagator = cp.exp((-1j * (self.h / 2) * gravity_potential )/(self.simulation.h_bar_tilde), dtype=cp.complex64)
+            self.gravity_propagator = cp.exp((-1j * ((self.h*time_factor) / 2) * gravity_potential )/(self.simulation.h_bar_tilde), dtype=cp.complex64)
 
         else:
-            self.gravity_propagator = cp.exp((-1j  * self.h * gravity_potential)/(self.simulation.h_bar_tilde), dtype=cp.complex64)
+            self.gravity_propagator = cp.exp((-1j  * (self.h*time_factor) * gravity_potential)/(self.simulation.h_bar_tilde), dtype=cp.complex64)
 
         return self.gravity_propagator
 

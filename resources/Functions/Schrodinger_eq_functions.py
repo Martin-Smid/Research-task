@@ -181,7 +181,7 @@ def plot_wave_function(wave_function_instance, time_step=None, dimension_slice=N
         if time_step > current_step:
             # Evolve forward from the current state
             for _ in range(time_step - current_step):
-                wave_function_instance.psi_0 = wave_function_instance.evolve_wavefunction_split_step(
+                wave_function_instance.psi_0 = wave_function_instance.evolve_wavefunction_split_step_o2(
                     wave_function_instance.psi_0)
             # Update the number of steps performed
             wave_function_instance.num_steps_performed = time_step
@@ -288,7 +288,7 @@ def plot_1D_wavefunction_evolution(wave_function, interval=20, save_file=None):
         """Update the plot for each frame."""
         nonlocal psi
         # Pass step (as step_index) and total number of steps from wave_function
-        psi = wave_function.evolve_wavefunction_split_step(psi, step, wave_function.num_steps)
+        psi = wave_function.evolve_wavefunction_split_step_o2(psi, step, wave_function.num_steps)
         psi_real = cp.asnumpy(cp.real(psi))
         psi_imag = cp.asnumpy(cp.imag(psi))
         psi_abs2 = cp.asnumpy(cp.abs(psi) ** 2)
@@ -364,7 +364,7 @@ def plot_2D_wavefunction_evolution(wave_function, interval=20, save_file=None, N
         """Update the plot for each frame."""
         nonlocal psi
         # Use evolve_wavefunction_split_step to evolve
-        psi = wave_function.evolve_wavefunction_split_step(psi)
+        psi = wave_function.evolve_wavefunction_split_step_o2(psi)
         psi_abs2 = cp.abs(psi) ** 2  # Compute |ψ|²
 
         # Update the heatmap with new |ψ|² data

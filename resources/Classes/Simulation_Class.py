@@ -81,8 +81,8 @@ class Simulation_Class:
     separate classes.
     """
 
-    @parameter_check(int, list, int, (int, float), (int, float), float, bool, object, bool, dict,bool)
-    def __init__(self, dim, boundaries, N, total_time, h, m_s=1e-22, use_gravity=False,
+    @parameter_check(int, list, int, (int, float), (int, float),int, float, bool, object, bool, dict,bool)
+    def __init__(self, dim, boundaries, N, total_time, h,order_of_evolution = 2, m_s=1e-22, use_gravity=False,
                  static_potential=None, save_max_vals=False,
                  sim_units={"dUnits": "kpc", "tUnits": "Gyr", "mUnits": "Msun", "eUnits": "eV"},use_units=True):
         """
@@ -107,6 +107,7 @@ class Simulation_Class:
         self.total_time = total_time
         self.h = h
         self.num_steps = int(self.total_time / self.h)
+        self.order_of_evolution = order_of_evolution
 
         # Gravity and potential settings
         self.use_gravity = use_gravity
@@ -276,7 +277,7 @@ class Simulation_Class:
 
         # Create the propagator and evolution classes
         self.propagator = Propagator_Class(self)
-        self.evolution = Evolution_Class(self, self.propagator)
+        self.evolution = Evolution_Class(self, self.propagator,order=self.order_of_evolution)
 
         # Initialize propagators
         self.propagator.kinetic_propagator = self.propagator.compute_kinetic_propagator()

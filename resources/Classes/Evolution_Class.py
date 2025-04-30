@@ -12,7 +12,7 @@ class Evolution_Class:
     Uses the split-step Fourier method for propagation.
     """
 
-    def __init__(self, simulation, propagator):
+    def __init__(self, simulation, propagator,order=2):
         """
         Initialize the evolution handler.
 
@@ -26,12 +26,15 @@ class Evolution_Class:
         self.num_steps = simulation.num_steps
         self.total_time = simulation.total_time
         self.save_max_vals = simulation.save_max_vals
+        self.order = order
 
         # Evolution data storage
         self.wave_values = []
         self.accessible_times = []
         self.max_wave_vals_during_evolution = {}
         self.snapshot_directory = None
+
+
 
     def evolve(self, combined_psi, save_every=1):
         """
@@ -66,10 +69,13 @@ class Evolution_Class:
         # Evolve over time steps
         for step in range(self.num_steps):
             # Perform the evolution step
-            psi = self.evolve_wavefunction_split_step(
-                psi, step_index=step, total_steps=self.num_steps
-            )
-
+            if self.order == 2:
+                psi = self.evolve_wavefunction_split_step_o2(
+                    psi, step_index=step, total_steps=self.num_steps
+                )
+            elif self.order == 4:
+                psi = self.evolve_wavefunction_split_step_o4(
+                    psi, step_index=step, total_steps=self.num_steps)
             # Save wave function at specified intervals
             if step % save_every == 0 and step > 0:
                 print(f"Still working... Step {step} out of {self.num_steps}")
@@ -106,7 +112,7 @@ class Evolution_Class:
 
         return psi
 
-    def evolve_wavefunction_split_step(self, psi, step_index, total_steps):
+    def evolve_wavefunction_split_step_o2(self, psi, step_index, total_steps):
         """
         Evolve the wavefunction using the split-step Fourier method.
 
@@ -118,20 +124,21 @@ class Evolution_Class:
         Returns:
             cp.ndarray: Evolved wave function after one time step
         """
-        # Compute gravity propagator based on current density
         is_first_step = (step_index == 0)
         is_last_step = (step_index == total_steps - 1)
-        gravity_propagator = self.propagator.compute_gravity_propagator(
-            psi, first_step=is_first_step, last_step=is_last_step)
 
-        # Apply potential propagator
+
+
+        # Compute gravity propagator based on current density
+
+        #gravity_propagator = self.propagator.compute_gravity_propagator(psi, first_step=is_first_step, last_step=is_last_step)
+        '''
         if is_first_step:
             # Apply half-step potential for first step
             psi *= cp.sqrt(self.propagator.static_potential_propagator * gravity_propagator)
         else:
             # Apply full-step potential for other steps
             psi *= self.propagator.static_potential_propagator * gravity_propagator
-
         # Apply kinetic propagator in Fourier space
         psi_k = cp.fft.fftn(psi)
         psi_k *= self.propagator.kinetic_propagator
@@ -141,12 +148,37 @@ class Evolution_Class:
         if is_last_step:
             psi *= cp.sqrt(self.propagator.static_potential_propagator * gravity_propagator)
 
+        '''
+
+        psi = self.kick_step(psi, is_first_step, is_last_step)
+        psi = self.drift_step(psi)
+        psi = self.kick_step(psi, is_first_step, is_last_step)
+
+
 
         # Track maximum values if enabled
         if self.save_max_vals:
             self.max_wave_vals_during_evolution[step_index] = float(abs(psi).max())
         return psi
 
+    def evolve_wavefunction_split_step_o4(self, psi, step_index, total_steps):
+        is_first_step = (step_index == 0)
+        is_last_step = (step_index == total_steps - 1)
+
+
+        psi = self.kick_step(psi, is_first_step, is_last_step)
+        psi = self.drift_step(psi)
+        psi = self.kick_step(psi, is_first_step, is_last_step)
+        psi = self.drift_step(psi)
+        psi = self.kick_step(psi, is_first_step, is_last_step)
+        psi = self.drift_step(psi)
+        psi = self.kick_step(psi, is_first_step, is_last_step)
+
+
+        # Track maximum values if enabled
+        if self.save_max_vals:
+            self.max_wave_vals_during_evolution[step_index] = float(abs(psi).max())
+        return psi
     def get_wave_function_at_time(self, time):
         """
         Retrieve the wave function values at a given time.
@@ -249,3 +281,25 @@ class Evolution_Class:
             new_data.to_csv(self.max_vals_filename, mode="a")
 
         print(f"{self.max_vals_filename} saved")
+
+    def kick_step(self, psi, is_first_step, is_last_step, time_factor=1):
+        """
+        takes care of the propagation by potential
+        """
+
+        if is_first_step or is_last_step:
+            gravity_propagator = self.propagator.compute_gravity_propagator(psi, first_step=is_first_step, last_step=is_last_step, time_factor=time_factor)
+            full_potential_propagator = self.propagator.static_potential_propagator * gravity_propagator
+            return psi * cp.sqrt(full_potential_propagator)
+        else:
+            gravity_propagator = self.propagator.compute_gravity_propagator(psi,time_factor=time_factor)
+            full_potential_propagator = self.propagator.static_potential_propagator * gravity_propagator
+            return psi * full_potential_propagator
+
+    def drift_step(self,psi):
+        """
+        kinetic part of the evolution
+        """
+        psi_k = cp.fft.fftn(psi)
+        psi_k *= self.propagator.kinetic_propagator
+        return cp.fft.ifftn(psi_k)

@@ -68,12 +68,12 @@ def gravity_potential(simulation_instance, mass_multiplier=1, center=None):
 
     mass = 1000000
     G = simulation_instance.G
-    print(G)
+
 
     # Calculate potential
     potential = -(G * mass) / r
 
-    print(potential)
+
 
     return potential
 

@@ -8,11 +8,11 @@ from resources.Classes.Wave_vector_class import Wave_vector_class
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-25, 25),(-25, 25),(-25, 25)], # Spatial boundaries
-    N=64,                             # Grid resolution
-    total_time=5,                   # Total simulation time
+    boundaries=[(-20, 20),(-20, 20),(-20, 20)], # Spatial boundaries
+    N=128,                             # Grid resolution
+    total_time=1,                   # Total simulation time
     h=0.005,                            # Time step
-    order_of_evolution=4,
+    order_of_evolution=2,
     use_gravity=True , # Enable gravitational effects
     static_potential=None,
     save_max_vals=False,
@@ -25,7 +25,7 @@ vlna = Wave_function(
     simulation=sim,
     mass=1,
     omega=1,
-    momenta=[0,0,0],
+    momenta=[-1,0,0],
 )
 
 
@@ -39,15 +39,14 @@ vlna2 = Wave_function(
     omega=1,
     momenta=[4,0,0],
 )
-Wave_vector1 = Wave_vector_class(vlna, spin=0)
+Wave_vector1 = Wave_vector_class([vlna], spin=1)
 
 
 
+sim.add_wave_function(wave_vector=Wave_vector1.wave_vector)
 
-sim.add_wave_function(vlna)
 
-
-sim.evolve(save_every=60)
+sim.evolve(save_every=25)
 
 x_index = (sim.grids[0].shape[0] // 2)
 y_index = (sim.grids[1].shape[0] //2)

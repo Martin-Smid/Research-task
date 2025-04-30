@@ -47,12 +47,11 @@ class Wave_vector_class:
         num_polarization_states = 2 * spin + 1
 
         self.polarization_coefficients = cp.asarray(np.random.uniform(0, 1, num_polarization_states))
-        print(sum(self.polarization_coefficients))
         self.polarization_coefficients = self.polarization_coefficients / cp.linalg.norm(self.polarization_coefficients)
-        # self.polarization_coefficients = self.polarization_coefficients / cp.sum(self.polarization_coefficients) ???????????
 
-        print(sum(self.polarization_coefficients))
-        # Generate random phases
+
+
+
         self.polarization_phases = cp.asarray(cp.random.uniform(0, 2 * cp.pi, num_polarization_states))
 
         # Initialize polarization bases based on spin

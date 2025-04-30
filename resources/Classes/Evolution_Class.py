@@ -128,32 +128,11 @@ class Evolution_Class:
         is_last_step = (step_index == total_steps - 1)
 
 
-
-        # Compute gravity propagator based on current density
-
-        #gravity_propagator = self.propagator.compute_gravity_propagator(psi, first_step=is_first_step, last_step=is_last_step)
-        '''
-        if is_first_step:
-            # Apply half-step potential for first step
-            psi *= cp.sqrt(self.propagator.static_potential_propagator * gravity_propagator)
-        else:
-            # Apply full-step potential for other steps
-            psi *= self.propagator.static_potential_propagator * gravity_propagator
-        # Apply kinetic propagator in Fourier space
-        psi_k = cp.fft.fftn(psi)
-        psi_k *= self.propagator.kinetic_propagator
-        psi = cp.fft.ifftn(psi_k)
-
-        # Apply another half-step potential for last step
-        if is_last_step:
-            psi *= cp.sqrt(self.propagator.static_potential_propagator * gravity_propagator)
-
-        '''
-
         psi = self.kick_step(psi, is_first_step, is_last_step)
         psi = self.drift_step(psi)
-        psi = self.kick_step(psi, is_first_step, is_last_step)
 
+        if is_last_step:
+            psi = self.kick_step(psi, is_first_step, is_last_step)
 
 
         # Track maximum values if enabled
@@ -162,17 +141,28 @@ class Evolution_Class:
         return psi
 
     def evolve_wavefunction_split_step_o4(self, psi, step_index, total_steps):
-        is_first_step = (step_index == 0)
-        is_last_step = (step_index == total_steps - 1)
+        v1 = (121.0 / 3924.0) * (12.0 - cp.sqrt(471.0))
+        w = cp.sqrt(3.0 - 12.0 * v1 + 9 * v1 * v1)
+        t2 = 0.25 * (1.0 - cp.sqrt((9.0 * v1 - 4.0 + 2 * w) / (3.0 * v1)))
+        t1 = 0.5 - t2
+        v2 = (1.0 / 6.0) - 4 * v1 * t1 * t1
+        v0 = 1.0 - 2.0 * (v1 + v2)
 
 
-        psi = self.kick_step(psi, is_first_step, is_last_step)
-        psi = self.drift_step(psi)
-        psi = self.kick_step(psi, is_first_step, is_last_step)
-        psi = self.drift_step(psi)
-        psi = self.kick_step(psi, is_first_step, is_last_step)
-        psi = self.drift_step(psi)
-        psi = self.kick_step(psi, is_first_step, is_last_step)
+        is_first_step = False
+        is_last_step = False
+
+
+
+        psi = self.kick_step(psi, is_first_step, is_last_step,v2)
+        psi = self.drift_step(psi,t2)
+        psi = self.kick_step(psi, is_first_step, is_last_step,v1)
+        psi = self.drift_step(psi,t1)
+        psi = self.kick_step(psi, is_first_step, is_last_step,v0)
+        psi = self.drift_step(psi,t1)
+        psi = self.kick_step(psi, is_first_step, is_last_step,v1)
+        psi = self.drift_step(psi,t2)
+        psi = self.kick_step(psi, is_first_step, is_last_step,v2)
 
 
         # Track maximum values if enabled
@@ -290,16 +280,17 @@ class Evolution_Class:
         if is_first_step or is_last_step:
             gravity_propagator = self.propagator.compute_gravity_propagator(psi, first_step=is_first_step, last_step=is_last_step, time_factor=time_factor)
             full_potential_propagator = self.propagator.static_potential_propagator * gravity_propagator
-            return psi * cp.sqrt(full_potential_propagator)
+            return psi * full_potential_propagator
         else:
             gravity_propagator = self.propagator.compute_gravity_propagator(psi,time_factor=time_factor)
             full_potential_propagator = self.propagator.static_potential_propagator * gravity_propagator
             return psi * full_potential_propagator
 
-    def drift_step(self,psi):
+    def drift_step(self, psi,time_factor=1):
         """
         kinetic part of the evolution
         """
         psi_k = cp.fft.fftn(psi)
-        psi_k *= self.propagator.kinetic_propagator
+        kinetic_propagator = self.propagator.compute_kinetic_propagator(time_factor=time_factor)
+        psi_k *= kinetic_propagator
         return cp.fft.ifftn(psi_k)

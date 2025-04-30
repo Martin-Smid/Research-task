@@ -34,7 +34,7 @@ class Propagator_Class:
             self.h_bar = 1
             self.G = 1
 
-    def compute_kinetic_propagator(self):
+    def compute_kinetic_propagator(self,time_factor=1):
         """
         Compute the kinetic propagator based on Fourier space components.
         Uses the split-step Fourier method formulation.
@@ -49,7 +49,7 @@ class Propagator_Class:
 
         # Create propagator with time factor h/2 (for split-step)
 
-        self.kinetic_propagator = cp.exp(((-1j * (self.h / 2) * k_squared_sum )*(self.h_bar_tilde)), dtype=cp.complex64)
+        self.kinetic_propagator = cp.exp(((-1j * ((self.h*time_factor) / 2) * k_squared_sum )*(self.h_bar_tilde)), dtype=cp.complex64)
         return self.kinetic_propagator
 
     def compute_static_potential_propagator(self, potential_function):
@@ -96,7 +96,6 @@ class Propagator_Class:
 
         self.gravity_potential = gravity_potential
 
-        # Create the propagator with appropriate time factor
 
         if first_step or last_step:
             self.gravity_propagator = cp.exp((-1j * ((self.h*time_factor) / 2) * gravity_potential )/(self.simulation.h_bar_tilde), dtype=cp.complex64)

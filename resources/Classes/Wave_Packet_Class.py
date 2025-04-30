@@ -40,6 +40,7 @@ class Packet():
         self.momentum_propagator = self.compute_momentum_propagator()
 
 
+
         if self.grids is None or len(self.grids) != self.dim:
             raise ValueError("Grids must be provided for each dimension.")
 
@@ -84,8 +85,12 @@ class Packet():
             if not os.path.exists(file_path):
                 raise FileNotFoundError(
                     f"Could not find the specified wave function file '{file_path}'. Raised from Wave_Packet_Class.py")
+            print("před")
             wave_packet = self.create_ground_state(file_path)
+            print(wave_packet)
+            print("po")
             wave_packet *= self.momentum_propagator
+            print(wave_packet)
             return wave_packet
 
         # Start creating the wavefunction

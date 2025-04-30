@@ -8,8 +8,8 @@ from resources.Classes.Wave_vector_class import Wave_vector_class
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-20, 20),(-20, 20),(-20, 20)], # Spatial boundaries
-    N=128,                             # Grid resolution
+    boundaries=[(-5, 5),(-5, 5),(-5, 5)], # Spatial boundaries
+    N=64,                             # Grid resolution
     total_time=1,                   # Total simulation time
     h=0.005,                            # Time step
     order_of_evolution=4,
@@ -20,12 +20,12 @@ sim = Simulation_Class(
 
 vlna = Wave_function(
     packet_type="/home/martin/Downloads/GroundState(1).dat",
-    means=[-0,5,0],
+    means=[-0,0,0],
     st_deviations=[0.5,0.5,0.5],
     simulation=sim,
     mass=1,
     omega=1,
-    momenta=[-5,0,0],
+    momenta=[-1,0,0],
 )
 
 

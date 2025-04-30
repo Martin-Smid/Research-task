@@ -110,8 +110,8 @@ class Simulation_Class:
         self.num_steps = int(self.total_time / self.h)
         self.order_of_evolution = order_of_evolution
 
-        if order_of_evolution not in (2, 4):
-            raise ValueError("order_of_evolution must be either 2 or 4. Raised while initializing Simulation_Class")
+        if order_of_evolution not in (2, 4, 6):
+            raise ValueError("order_of_evolution must be either 2, 4, 6. Raised while initializing Simulation_Class")
 
         # Gravity and potential settings
         self.use_gravity = use_gravity

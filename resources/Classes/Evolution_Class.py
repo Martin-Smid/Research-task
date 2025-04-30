@@ -5,20 +5,20 @@ import datetime
 import pandas as pd
 from resources.Functions.system_fucntions import plot_max_values_on_N
 
-
 class Evolution_Class:
     """
     Class to handle the time evolution of wave functions in the simulation.
-    Uses the split-step Fourier method for propagation.
+    Uses the split-step Fourier method for propagation with orders 2, 4, or 6.
     """
 
-    def __init__(self, simulation, propagator,order=2):
+    def __init__(self, simulation, propagator, order=2):
         """
         Initialize the evolution handler.
 
         Parameters:
             simulation: Simulation_Class instance
             propagator: Propagator_Class instance
+            order: Order of the split-step method (2, 4, or 6)
         """
         self.simulation = simulation
         self.propagator = propagator
@@ -34,7 +34,8 @@ class Evolution_Class:
         self.max_wave_vals_during_evolution = {}
         self.snapshot_directory = None
 
-
+        # Calculate coefficients and pre-compute propagators based on order
+        self._calculate_coefficients_and_propagators()
 
     def evolve(self, combined_psi, save_every=1):
         """
@@ -68,14 +69,22 @@ class Evolution_Class:
 
         # Evolve over time steps
         for step in range(self.num_steps):
-            # Perform the evolution step
+            # Perform the evolution step based on the specified order
             if self.order == 2:
                 psi = self.evolve_wavefunction_split_step_o2(
                     psi, step_index=step, total_steps=self.num_steps
                 )
             elif self.order == 4:
                 psi = self.evolve_wavefunction_split_step_o4(
-                    psi, step_index=step, total_steps=self.num_steps)
+                    psi, step_index=step, total_steps=self.num_steps
+                )
+            elif self.order == 6:
+                psi = self.evolve_wavefunction_split_step_o6(
+                    psi, step_index=step, total_steps=self.num_steps
+                )
+            else:
+                raise ValueError(f"Order {self.order} is not supported. Use 2, 4, or 6.")
+
             # Save wave function at specified intervals
             if step % save_every == 0 and step > 0:
                 print(f"Still working... Step {step} out of {self.num_steps}")
@@ -127,57 +136,214 @@ class Evolution_Class:
         is_first_step = (step_index == 0)
         is_last_step = (step_index == total_steps - 1)
 
-
         psi = self.kick_step(psi, is_first_step, is_last_step)
         psi = self.drift_step(psi)
 
         if is_last_step:
             psi = self.kick_step(psi, is_first_step, is_last_step)
 
-
         # Track maximum values if enabled
         if self.save_max_vals:
             self.max_wave_vals_during_evolution[step_index] = float(abs(psi).max())
         return psi
 
-    def evolve_wavefunction_split_step_o4(self, psi, step_index, total_steps):
-        # Calculate coefficients for 4th-order method
-        v1 = (121.0 / 3924.0) * (12.0 - cp.sqrt(471.0))
-        w = cp.sqrt(3.0 - 12.0 * v1 + 9 * v1 * v1)
-        t2 = 0.25 * (1.0 - cp.sqrt((9.0 * v1 - 4.0 + 2 * w) / (3.0 * v1)))
-        t1 = 0.5 - t2
-        v2 = (1.0 / 6.0) - 4 * v1 * t1 * t1
-        v0 = 1.0 - 2.0 * (v1 + v2)
+    def _calculate_coefficients_and_propagators(self):
+        """
+        Calculate the coefficients for the requested split-step method order
+        and pre-compute all static propagators to optimize performance.
+        """
+        if self.order == 2:
+            # For order 2, just use full time step
+            self.coefficients = {'full': 1.0}
 
+            # Pre-calculate standard propagators
+            self.static_propagators = {
+                'full': self.propagator.compute_static_potential_propagator(
+                    self.simulation.static_potential, time_factor=1.0
+                )
+            }
+            self.kinetic_propagators = {
+                'full': self.propagator.compute_kinetic_propagator(time_factor=1.0)
+            }
+
+        elif self.order == 4:
+            # Calculate coefficients for 4th-order method
+            v1 = (121.0 / 3924.0) * (12.0 - cp.sqrt(471.0))
+            w = cp.sqrt(3.0 - 12.0 * v1 + 9 * v1 * v1)
+            t2 = 0.25 * (1.0 - cp.sqrt((9.0 * v1 - 4.0 + 2 * w) / (3.0 * v1)))
+            t1 = 0.5 - t2
+            v2 = (1.0 / 6.0) - 4 * v1 * t1 * t1
+            v0 = 1.0 - 2.0 * (v1 + v2)
+
+            # Store coefficients
+            self.coefficients = {
+                'v0': v0,
+                'v1': v1,
+                'v2': v2,
+                't1': t1,
+                't2': t2
+            }
+
+            # Define the set of propagators to pre-calculate
+            potential_coeffs = [('v0', v0), ('v1', v1), ('v2', v2)]
+            kinetic_coeffs = [('t1', t1), ('t2', t2)]
+
+        elif self.order == 6:
+            # Calculate coefficients for 6th-order method
+            # These are the optimized coefficients derived from Yoshida's method
+            w1 = -0.117767998417887e1
+            w2 = 0.235573213359357e0
+            w3 = 0.784513610477560e0
+
+            # Potential coefficients
+            v1 = w3 / 2
+            v2 = (w2 + w3) / 2
+            v3 = (w1 + w2) / 2
+            v4 = (w1 + w2) / 2
+            v5 = (w2 + w3) / 2
+            v6 = w3 / 2
+            v0 = 1.0 - 2 * (v1 + v2 + v3 + v4 + v5 + v6)
+            print(v0 + 2*v1+2*v2+2*v3+2*v4+2*v5+2*v6)
+
+            # Kinetic coefficients
+            t1 = w3
+            t2 = w2
+            t3 = w1
+            t4 = w2
+            t5 = w3
+
+            # Store coefficients
+            self.coefficients = {
+                'v0': v0,
+                'v1': v1,
+                'v2': v2,
+                'v3': v3,
+                'v4': v4,
+                'v5': v5,
+                'v6': v6,
+                't1': t1,
+                't2': t2,
+                't3': t3,
+                't4': t4,
+                't5': t5
+            }
+
+            # Define the set of propagators to pre-calculate
+            potential_coeffs = [
+                ('v0', v0), ('v1', v1), ('v2', v2),
+                ('v3', v3), ('v4', v4), ('v5', v5), ('v6', v6)
+            ]
+            kinetic_coeffs = [
+                ('t1', t1), ('t2', t2), ('t3', t3),
+                ('t4', t4), ('t5', t5)
+            ]
+
+        else:
+            raise ValueError(f"Order {self.order} is not supported. Use 2, 4, or 6.")
+
+        # Pre-calculate all needed propagators if not already done for order 2
+        if self.order > 2:
+            # Pre-calculate static potential propagators
+            self.static_propagators = {}
+            for label, factor in potential_coeffs:
+                self.static_propagators[label] = self.propagator.compute_static_potential_propagator(
+                    self.simulation.static_potential, time_factor=factor
+                )
+
+            # Pre-calculate kinetic propagators
+            self.kinetic_propagators = {}
+            for label, factor in kinetic_coeffs:
+                self.kinetic_propagators[label] = self.propagator.compute_kinetic_propagator(
+                    time_factor=factor
+                )
+
+    def evolve_wavefunction_split_step_o4(self, psi, step_index, total_steps):
+        """
+        Evolve the wavefunction using the 4th-order split-step Fourier method.
+
+        Parameters:
+            psi (cp.ndarray): Initial wave function
+            step_index (int): Index of the current step (starting at 0)
+            total_steps (int): Total number of steps in the simulation
+
+        Returns:
+            cp.ndarray: Evolved wave function after one time step
+        """
         # Handle boundary conditions correctly
         is_first_step = (step_index == 0)
         is_last_step = (step_index == total_steps - 1)
 
-        # First half-step potential for first timestep only
-        if is_first_step:
-            psi = self.kick_step(psi, True, False, v2)
-        else:
-            psi = self.kick_step(psi, False, False, v2)
+        # First half-step potential with v2 coefficient
+        psi = self.kick_step(psi, is_first_step, False, 'v2')
 
-        # Main sequence of operations
-        psi = self.drift_step(psi, t2)
-        psi = self.kick_step(psi, False, False, v1)
-        psi = self.drift_step(psi, t1)
-        psi = self.kick_step(psi, False, False, v0)
-        psi = self.drift_step(psi, t1)
-        psi = self.kick_step(psi, False, False, v1)
-        psi = self.drift_step(psi, t2)
+        # Main sequence of operations using pre-calculated propagators
+        psi = self.drift_step(psi, 't2')
+        psi = self.kick_step(psi, False, False, 'v1')
+        psi = self.drift_step(psi, 't1')
+        psi = self.kick_step(psi, False, False, 'v0')
+        psi = self.drift_step(psi, 't1')
+        psi = self.kick_step(psi, False, False, 'v1')
+        psi = self.drift_step(psi, 't2')
 
-        # Last half-step potential for last timestep only
-        if is_last_step:
-            psi = self.kick_step(psi, False, True, v2)
-        else:
-            psi = self.kick_step(psi, False, False, v2)
+        # Last half-step potential with v2 coefficient
+        psi = self.kick_step(psi, False, is_last_step, 'v2')
 
         # Track maximum values if enabled
         if self.save_max_vals:
             self.max_wave_vals_during_evolution[step_index] = float(abs(psi).max())
         return psi
+
+    def evolve_wavefunction_split_step_o6(self, psi, step_index, total_steps):
+        """
+        Evolve the wavefunction using the 6th-order split-step Fourier method.
+
+        Parameters:
+            psi (cp.ndarray): Initial wave function
+            step_index (int): Index of the current step (starting at 0)
+            total_steps (int): Total number of steps in the simulation
+
+        Returns:
+            cp.ndarray: Evolved wave function after one time step
+        """
+        # Handle boundary conditions correctly
+        is_first_step = (step_index == 0)
+        is_last_step = (step_index == total_steps - 1)
+
+        # First half-step potential with v6 coefficient
+        psi = self.kick_step(psi, is_first_step, False, 'v6')
+
+        # Main sequence of operations using pre-calculated propagators
+        psi = self.drift_step(psi, 't5')
+        psi = self.kick_step(psi, False, False, 'v5')
+        psi = self.drift_step(psi, 't4')
+        psi = self.kick_step(psi, False, False, 'v4')
+        psi = self.drift_step(psi, 't3')
+        psi = self.kick_step(psi, False, False, 'v3')
+        psi = self.drift_step(psi, 't2')
+        psi = self.kick_step(psi, False, False, 'v2')
+        psi = self.drift_step(psi, 't1')
+        psi = self.kick_step(psi, False, False, 'v1')
+        psi = self.drift_step(psi, 't1')
+        psi = self.kick_step(psi, False, False, 'v0')
+        psi = self.drift_step(psi, 't1')
+        psi = self.kick_step(psi, False, False, 'v1')
+        psi = self.drift_step(psi, 't2')
+        psi = self.kick_step(psi, False, False, 'v2')
+        psi = self.drift_step(psi, 't3')
+        psi = self.kick_step(psi, False, False, 'v3')
+        psi = self.drift_step(psi, 't4')
+        psi = self.kick_step(psi, False, False, 'v4')
+        psi = self.drift_step(psi, 't5')
+
+        # Last half-step potential with v6 coefficient
+        psi = self.kick_step(psi, False, is_last_step, 'v6')
+
+
+        # Track maximum values if enabled
+        if self.save_max_vals:
+            self.max_wave_vals_during_evolution[step_index] = float(abs(psi).max())
+        return psi
+
     def get_wave_function_at_time(self, time):
         """
         Retrieve the wave function values at a given time.
@@ -216,6 +382,7 @@ class Evolution_Class:
             f.write(f"Total steps: {self.num_steps}\n")
             f.write(f"Time step: {self.h}\n")
             f.write(f"Total time: {self.total_time}\n")
+            f.write(f"Method order: {self.order}\n")
             f.write("Accessible times:\n")
             f.write(",".join([str(t) for t in self.accessible_times]))
 
@@ -281,26 +448,58 @@ class Evolution_Class:
 
         print(f"{self.max_vals_filename} saved")
 
-    def kick_step(self, psi, is_first_step, is_last_step, time_factor=1):
+    def kick_step(self, psi, is_first_step, is_last_step, time_factor_key='full'):
         """
-        takes care of the propagation by potential
-        """
+        Takes care of the propagation by potential.
 
+        Parameters:
+            psi (cp.ndarray): Wave function
+            is_first_step (bool): Whether this is the first step in evolution
+            is_last_step (bool): Whether this is the last step in evolution
+            time_factor_key (str): Key for pre-calculated propagators
+
+        Returns:
+            cp.ndarray: Evolved wave function after potential propagation
+        """
+        # Get coefficient for this step
+        time_factor = self.coefficients[time_factor_key]
+
+
+        # Calculate gravity propagator (which depends on psi)
         if is_first_step or is_last_step:
-            gravity_propagator = self.propagator.compute_gravity_propagator(psi, first_step=is_first_step, last_step=is_last_step, time_factor=time_factor)
-            full_potential_propagator = self.propagator.static_potential_propagator * gravity_propagator
-            return psi * full_potential_propagator
+            gravity_propagator = self.propagator.compute_gravity_propagator(
+                psi, first_step=is_first_step, last_step=is_last_step, time_factor=time_factor
+            )
         else:
-            gravity_propagator = self.propagator.compute_gravity_propagator(psi,time_factor=time_factor)
-            non_gravity_propagator = self.propagator.compute_static_potential_propagator(self.simulation.static_potential,time_factor=time_factor)
-            full_potential_propagator = non_gravity_propagator * gravity_propagator
-            return psi * full_potential_propagator
+            gravity_propagator = self.propagator.compute_gravity_propagator(
+                psi, time_factor=time_factor
+            )
 
-    def drift_step(self, psi,time_factor=1):
+        # Use pre-calculated static potential propagator
+        static_propagator = self.static_propagators[time_factor_key]
+
+
+        # Apply both propagators
+        full_potential_propagator = static_propagator * gravity_propagator
+        return psi * full_potential_propagator
+
+    def drift_step(self, psi, time_factor_key='full'):
         """
-        kinetic part of the evolution
+        Kinetic part of the evolution.
+
+        Parameters:
+            psi (cp.ndarray): Wave function
+            time_factor_key (str): Key for pre-calculated propagators
+
+        Returns:
+            cp.ndarray: Evolved wave function after kinetic propagation
         """
+        # Transform to momentum space
         psi_k = cp.fft.fftn(psi)
-        kinetic_propagator = self.propagator.compute_kinetic_propagator(time_factor=time_factor)
+
+        # Use pre-calculated kinetic propagator
+        kinetic_propagator = self.kinetic_propagators[time_factor_key]
+
+        # Apply propagator and transform back
         psi_k *= kinetic_propagator
         return cp.fft.ifftn(psi_k)

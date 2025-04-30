@@ -10,7 +10,7 @@ sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-20, 20),(-20, 20),(-20, 20)], # Spatial boundaries
     N=128,                             # Grid resolution
-    total_time=8.3 ,                   # Total simulation time
+    total_time=4.3 ,                   # Total simulation time
     h=0.01,                            # Time step
     order_of_evolution=4,
     use_gravity=True , # Enable gravitational effects
@@ -110,7 +110,7 @@ for time in sim.accessible_times:
     wave_slice = wave_values[:, :, z_index]
     levels = np.logspace(np.log10(wave_values[wave_values > 0].min()), np.log10(wave_values.max()), 128)
     plt.contourf(x_mesh_2d, y_mesh_2d, cp.asnumpy(wave_slice).T,
-                 origin="lower", levels=levels, cmap="inferno", norm=LogNorm())
+                 origin="lower", levels=levels, cmap="viridis", norm=LogNorm())
     plt.colorbar(label="|ψ|²", format="%.2e")
     plt.title(f"Wavefunction Probability Density at Time {time}")
     plt.xlabel("x")

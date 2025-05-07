@@ -341,7 +341,9 @@ class Simulation_Class:
 
 
         # Calculate first constraint
-        first_constraint = ((4 * cp.pi) / (3 * cp.pi) * self.h_bar_tilde* min_dx ** 2)
+        print(self.h_bar_tilde)
+
+        first_constraint = ((4) / (3 * cp.pi) * (1/self.h_bar_tilde)* min_dx ** 2)
 
         # Calculate second constraint based on potential
         if self.static_potential is not None:
@@ -354,7 +356,7 @@ class Simulation_Class:
         if phi_max < 1e-10:
             phi_max = 1e-10
 
-        second_constraint = (2 * cp.pi * (self.h_bar/ self.mass_s) * (1 / phi_max))
+        second_constraint = (2 * cp.pi * (self.h_bar_tilde) * (1 / phi_max))
 
         # Maximum allowed time step
         max_allowed_dt = 0.5 * min(float(first_constraint), float(second_constraint))

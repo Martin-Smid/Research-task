@@ -20,6 +20,7 @@ sim = Simulation_Class(
     use_gravity=False,  # Enable gravitational effects
     static_potential=quadratic_potential,
     use_units=True,
+    order_of_evolution=2,
 )
 
 vlna = Wave_function(

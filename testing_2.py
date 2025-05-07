@@ -10,9 +10,9 @@ sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-5, 5),(-5, 5),(-5, 5)], # Spatial boundaries
     N=64,                             # Grid resolution
-    total_time=1,                   # Total simulation time
-    h=0.005,                            # Time step
-    order_of_evolution=4,
+    total_time=0.1,                   # Total simulation time
+    h=0.0001,                            # Time step
+    order_of_evolution=6,
     use_gravity=True , # Enable gravitational effects
     static_potential=None,
     save_max_vals=False,
@@ -25,7 +25,7 @@ vlna = Wave_function(
     simulation=sim,
     mass=1,
     omega=1,
-    momenta=[-1,0,0],
+    momenta=[1,0,0],
 )
 
 
@@ -39,14 +39,14 @@ vlna2 = Wave_function(
     omega=1,
     momenta=[4,0,0],
 )
-Wave_vector1 = Wave_vector_class([vlna], spin=1)
+Wave_vector1 = Wave_vector_class([vlna], spin=0)
 
 
 
 sim.add_wave_function(wave_vector=Wave_vector1.wave_vector)
 
 
-sim.evolve(save_every=25)
+sim.evolve(save_every=50)
 
 x_index = (sim.grids[0].shape[0] // 2)
 y_index = (sim.grids[1].shape[0] //2)

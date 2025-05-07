@@ -93,14 +93,18 @@ class Propagator_Class:
         # Solve Poisson equation for gravitational potential
         gravity_potential = self.solve_poisson(density)
 
-        self.gravity_potential = gravity_potential
+        additional_potential = -4 * cp.pi * self.h_bar_tilde**2 * 1e-20 * density
+
+        self.gravity_potential = gravity_potential + additional_potential
+
+
 
 
         if first_step or last_step:
-            self.gravity_propagator = cp.exp((-1j * ((self.h*time_factor) / 2) * gravity_potential )/(self.simulation.h_bar_tilde), dtype=cp.complex64)
+            self.gravity_propagator = cp.exp((-1j * ((self.h*time_factor) / 2) * self.gravity_potential )/(self.simulation.h_bar_tilde), dtype=cp.complex64)
 
         else:
-            self.gravity_propagator = cp.exp((-1j  * (self.h*time_factor) * gravity_potential)/(self.simulation.h_bar_tilde), dtype=cp.complex64)
+            self.gravity_propagator = cp.exp((-1j  * (self.h*time_factor) * self.gravity_potential)/(self.simulation.h_bar_tilde), dtype=cp.complex64)
 
         return self.gravity_propagator
 

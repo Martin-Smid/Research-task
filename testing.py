@@ -10,9 +10,9 @@ sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-20, 20),(-20, 20),(-20, 20)], # Spatial boundaries
     N=128,                             # Grid resolution
-    total_time=4.3 ,                   # Total simulation time
-    h=0.01,                            # Time step
-    order_of_evolution=4,
+    total_time=37,                   # Total simulation time
+    h=0.001,                            # Time step
+    order_of_evolution=6,
     use_gravity=True , # Enable gravitational effects
     static_potential=gravity_potential,
     save_max_vals=False,
@@ -57,7 +57,7 @@ sim.add_wave_function(vlna)
 #sim.add_wave_function(vlna3)
 
 
-sim.evolve(save_every=75 )
+sim.evolve(save_every=750 )
 
 '''1D
 plt.figure()
@@ -104,6 +104,7 @@ x_mesh_2d, z_mesh_2d = np.meshgrid(sim.grids[0][:,0,0].get(), sim.grids[2][0,0,:
 plt.figure(figsize=(8, 6))
 x_mesh_2d, y_mesh_2d = np.meshgrid(sim.grids[0][:,0,0].get(), sim.grids[1][0,:,0].get())
 for time in sim.accessible_times:
+    print(time)
     wave_values = cp.asnumpy(abs(sim.get_wave_function_at_time(time)) ** 2)
 
     # Take the middle x-slice

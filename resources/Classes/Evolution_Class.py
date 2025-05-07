@@ -189,53 +189,49 @@ class Evolution_Class:
             kinetic_coeffs = [('t1', t1), ('t2', t2)]
 
         elif self.order == 6:
-            # Calculate coefficients for 6th-order method
-            # These are the optimized coefficients derived from Yoshida's method
+
             w1 = -0.117767998417887e1
             w2 = 0.235573213359357e0
             w3 = 0.784513610477560e0
+            w0 = 1 - 2*(w1 + w2 + w3)
 
             # Potential coefficients
             v1 = w3 / 2
             v2 = (w2 + w3) / 2
             v3 = (w1 + w2) / 2
-            v4 = (w1 + w2) / 2
-            v5 = (w2 + w3) / 2
-            v6 = w3 / 2
-            v0 = 1.0 - 2 * (v1 + v2 + v3 + v4 + v5 + v6)
-            print(v0 + 2*v1+2*v2+2*v3+2*v4+2*v5+2*v6)
+            v4 = (w0 + w1) / 2
+
+
+
+
 
             # Kinetic coefficients
             t1 = w3
             t2 = w2
             t3 = w1
-            t4 = w2
-            t5 = w3
+            t4 = w0
+
 
             # Store coefficients
             self.coefficients = {
-                'v0': v0,
                 'v1': v1,
                 'v2': v2,
                 'v3': v3,
                 'v4': v4,
-                'v5': v5,
-                'v6': v6,
                 't1': t1,
                 't2': t2,
                 't3': t3,
                 't4': t4,
-                't5': t5
             }
 
             # Define the set of propagators to pre-calculate
             potential_coeffs = [
-                ('v0', v0), ('v1', v1), ('v2', v2),
-                ('v3', v3), ('v4', v4), ('v5', v5), ('v6', v6)
+                 ('t1', t1), ('t2', t2),
+                ('t3', t3), ('t4', t4),
             ]
             kinetic_coeffs = [
-                ('t1', t1), ('t2', t2), ('t3', t3),
-                ('t4', t4), ('t5', t5)
+                ('v1', v1), ('v2', v2), ('v3', v3),
+                ('v4', v4),
             ]
 
         else:
@@ -278,11 +274,11 @@ class Evolution_Class:
 
         # Main sequence of operations using pre-calculated propagators
         psi = self.drift_step(psi, 't2')
-        psi = self.kick_step(psi, False, False, 'v1')
+        psi = self.kick_step(psi, is_first_step, False, 'v1')
         psi = self.drift_step(psi, 't1')
-        psi = self.kick_step(psi, False, False, 'v0')
+        psi = self.kick_step(psi, is_first_step, False, 'v0')
         psi = self.drift_step(psi, 't1')
-        psi = self.kick_step(psi, False, False, 'v1')
+        psi = self.kick_step(psi, False, is_last_step, 'v1')
         psi = self.drift_step(psi, 't2')
 
         # Last half-step potential with v2 coefficient
@@ -310,33 +306,37 @@ class Evolution_Class:
         is_last_step = (step_index == total_steps - 1)
 
         # First half-step potential with v6 coefficient
-        psi = self.kick_step(psi, is_first_step, False, 'v6')
+
+
+        #psi = self.kick_step(psi, is_first_step, False, 't1')
 
         # Main sequence of operations using pre-calculated propagators
-        psi = self.drift_step(psi, 't5')
-        psi = self.kick_step(psi, False, False, 'v5')
-        psi = self.drift_step(psi, 't4')
-        psi = self.kick_step(psi, False, False, 'v4')
-        psi = self.drift_step(psi, 't3')
-        psi = self.kick_step(psi, False, False, 'v3')
-        psi = self.drift_step(psi, 't2')
-        psi = self.kick_step(psi, False, False, 'v2')
-        psi = self.drift_step(psi, 't1')
-        psi = self.kick_step(psi, False, False, 'v1')
-        psi = self.drift_step(psi, 't1')
-        psi = self.kick_step(psi, False, False, 'v0')
-        psi = self.drift_step(psi, 't1')
-        psi = self.kick_step(psi, False, False, 'v1')
-        psi = self.drift_step(psi, 't2')
-        psi = self.kick_step(psi, False, False, 'v2')
-        psi = self.drift_step(psi, 't3')
-        psi = self.kick_step(psi, False, False, 'v3')
-        psi = self.drift_step(psi, 't4')
-        psi = self.kick_step(psi, False, False, 'v4')
-        psi = self.drift_step(psi, 't5')
+        psi = self.drift_step(psi, 'v1')
+        psi = self.kick_step(psi, False, False, 't1')
+        psi = self.drift_step(psi, 'v2')
+        psi = self.kick_step(psi, False, False, 't2')
+        psi = self.drift_step(psi, 'v3')
+        psi = self.kick_step(psi, False, False, 't3')
+        psi = self.drift_step(psi, 'v4')
+        psi = self.kick_step(psi, False, False, 't4')
+        psi = self.drift_step(psi, 'v4')
+        psi = self.kick_step(psi, False, False, 't3')
+        psi = self.drift_step(psi, 'v3')
+        psi = self.kick_step(psi, False, False, 't2')  # Center
+        psi = self.drift_step(psi, 'v2')
+        psi = self.kick_step(psi, False, False, 't1')
+        psi = self.drift_step(psi, 'v1')
 
-        # Last half-step potential with v6 coefficient
+        ''' psi = self.kick_step(psi, False, False, 'v2')
+        psi = self.drift_step(psi, 't2')
+        psi = self.kick_step(psi, False, False, 'v3')
+        psi = self.drift_step(psi, 't3')
+        psi = self.kick_step(psi, False, False, 'v4')
+        psi = self.drift_step(psi, 't4')
+        psi = self.kick_step(psi, False, False, 'v5')
+        psi = self.drift_step(psi, 't5')
         psi = self.kick_step(psi, False, is_last_step, 'v6')
+        '''
 
 
         # Track maximum values if enabled
@@ -356,8 +356,8 @@ class Evolution_Class:
             cp.ndarray: The wave function at the given time
         """
         # Check if the input time is within range
-        if time < self.accessible_times[0] or time > self.accessible_times[-1]:
-            raise ValueError("Input time is outside the range of accessible times")
+        #if time < self.accessible_times[0] or time > self.accessible_times[-1]:
+        #    raise ValueError("Input time is outside the range of accessible times")
 
         # Find the closest time in the accessible times list
         closest_time_index = min(range(len(self.accessible_times)),

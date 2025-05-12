@@ -144,6 +144,8 @@ class Simulation_Class:
         self.snapshot_directory = None
         self.accessible_times = []
         self.wave_values = []
+        print("using self int - in initialization of sim")
+        self.use_self_int = True
 
     def setup_units(self, sim_units, m_s):
         """
@@ -164,6 +166,7 @@ class Simulation_Class:
 
         # Mass of the particle
         self.mass_s = (m_s * self.eUnits_unit / constants.c ** 2).to(f"{self.mUnits}").value
+        self.c = constants.c.to(f"{self.dUnits}/{self.tUnits}").value
         self.G = constants.G.to(f"{self.dUnits}3/({self.mUnits} {self.tUnits}2)").value
         self.h_bar = constants.hbar.to(f"{self.dUnits}2 {self.mUnits}/{self.tUnits}").value
         self.h_bar_tilde = (self.h_bar / self.mass_s)

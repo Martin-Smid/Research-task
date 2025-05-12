@@ -8,7 +8,7 @@ from resources.Classes.Wave_vector_class import Wave_vector_class
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-5, 5),(-5, 5),(-5, 5)], # Spatial boundaries
+    boundaries=[(-10, 10),(-10, 10),(-10, 10)], # Spatial boundaries
     N=64,                             # Grid resolution
     total_time=0.1,                   # Total simulation time
     h=0.0001,                            # Time step
@@ -25,7 +25,7 @@ vlna = Wave_function(
     simulation=sim,
     mass=1,
     omega=1,
-    momenta=[1,0,0],
+    momenta=[50,50,0],
 )
 
 
@@ -39,7 +39,7 @@ vlna2 = Wave_function(
     omega=1,
     momenta=[4,0,0],
 )
-Wave_vector1 = Wave_vector_class([vlna], spin=0)
+Wave_vector1 = Wave_vector_class([vlna], spin=3)
 
 
 

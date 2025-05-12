@@ -84,18 +84,28 @@ class Propagator_Class:
         Returns:
             cp.ndarray: The gravity propagator in real space
         """
+
         if not self.simulation.use_gravity:
             return cp.ones_like(psi, dtype=cp.complex64)
 
-        # Calculate density from wave function
         density = self.compute_density(psi)
+
+
+
+        if not self.simulation.use_self_int:
+            return cp.ones_like(psi, dtype=cp.complex64)
+        elif self.simulation.use_self_int:
+            self_int_potential = self.get_self_int_potential(density, psi)
+
 
         # Solve Poisson equation for gravitational potential
         gravity_potential = self.solve_poisson(density)
 
-        additional_potential = -4 * cp.pi * self.h_bar_tilde**2 * 1e-20 * density
+        additional_potential = -4 * cp.pi * self.h_bar_tilde**2 * 1e-80 * density
 
-        self.gravity_potential = gravity_potential + additional_potential
+
+
+        self.gravity_potential = gravity_potential + additional_potential + self_int_potential
 
 
 
@@ -106,7 +116,22 @@ class Propagator_Class:
         else:
             self.gravity_propagator = cp.exp((-1j  * (self.h*time_factor) * self.gravity_potential)/(self.simulation.h_bar_tilde), dtype=cp.complex64)
 
+
         return self.gravity_propagator
+
+
+
+    def get_self_int_potential(self, density, psi):
+        lambda_param =  1
+        psi_squared = psi * psi  # Ψ·Ψ
+        psi_conj_squared = cp.conj(psi) * cp.conj(psi)  # Ψ†·Ψ†
+        density_squared = density ** 2  # (Ψ†·Ψ)²
+
+        prefactor = (lambda_param /8)*(self.h_bar * self.simulation.c)*self.simulation.h_bar_tilde**2
+
+        potential = -prefactor * (psi_squared * psi_conj_squared + 2 * density_squared)
+        return potential
+
 
     def compute_density(self, psi):
         """

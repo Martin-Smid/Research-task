@@ -60,6 +60,7 @@ class Evolution_Class:
 
         # Initialize with the provided wave function
         psi = combined_psi.copy()
+
         self.accessible_times.append(0)
 
         # Save the initial state
@@ -135,6 +136,7 @@ class Evolution_Class:
         """
         is_first_step = (step_index == 0)
         is_last_step = (step_index == total_steps - 1)
+
 
         psi = self.kick_step(psi, is_first_step, is_last_step)
         psi = self.drift_step(psi)
@@ -305,38 +307,29 @@ class Evolution_Class:
         is_first_step = (step_index == 0)
         is_last_step = (step_index == total_steps - 1)
 
-        # First half-step potential with v6 coefficient
+
 
 
         #psi = self.kick_step(psi, is_first_step, False, 't1')
 
         # Main sequence of operations using pre-calculated propagators
         psi = self.drift_step(psi, 'v1')
-        psi = self.kick_step(psi, False, False, 't1')
+        psi = self.kick_step(psi, is_first_step, is_last_step, 't1')
         psi = self.drift_step(psi, 'v2')
-        psi = self.kick_step(psi, False, False, 't2')
+        psi = self.kick_step(psi, is_first_step, is_last_step, 't2')
         psi = self.drift_step(psi, 'v3')
-        psi = self.kick_step(psi, False, False, 't3')
+        psi = self.kick_step(psi, is_first_step, is_last_step, 't3')
         psi = self.drift_step(psi, 'v4')
-        psi = self.kick_step(psi, False, False, 't4')
+        psi = self.kick_step(psi, is_first_step, is_last_step, 't4')
         psi = self.drift_step(psi, 'v4')
-        psi = self.kick_step(psi, False, False, 't3')
+        psi = self.kick_step(psi, is_first_step, is_last_step, 't3')
         psi = self.drift_step(psi, 'v3')
-        psi = self.kick_step(psi, False, False, 't2')  # Center
+        psi = self.kick_step(psi, is_first_step, is_last_step, 't2')
         psi = self.drift_step(psi, 'v2')
-        psi = self.kick_step(psi, False, False, 't1')
+        psi = self.kick_step(psi, is_first_step, is_last_step, 't1')
         psi = self.drift_step(psi, 'v1')
 
-        ''' psi = self.kick_step(psi, False, False, 'v2')
-        psi = self.drift_step(psi, 't2')
-        psi = self.kick_step(psi, False, False, 'v3')
-        psi = self.drift_step(psi, 't3')
-        psi = self.kick_step(psi, False, False, 'v4')
-        psi = self.drift_step(psi, 't4')
-        psi = self.kick_step(psi, False, False, 'v5')
-        psi = self.drift_step(psi, 't5')
-        psi = self.kick_step(psi, False, is_last_step, 'v6')
-        '''
+
 
 
         # Track maximum values if enabled
@@ -471,6 +464,7 @@ class Evolution_Class:
                 psi, first_step=is_first_step, last_step=is_last_step, time_factor=time_factor
             )
         else:
+
             gravity_propagator = self.propagator.compute_gravity_propagator(
                 psi, time_factor=time_factor
             )

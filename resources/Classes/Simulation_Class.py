@@ -11,7 +11,7 @@ import os
 import datetime
 import numpy as np
 from astropy import units, constants
-
+np.random.seed(1)
 
 def parameter_check(*types):
     def decorator(func):
@@ -145,7 +145,7 @@ class Simulation_Class:
         self.accessible_times = []
         self.wave_values = []
         print("using self int - in initialization of sim")
-        self.use_self_int = True
+        self.use_self_int = False
 
     def setup_units(self, sim_units, m_s):
         """

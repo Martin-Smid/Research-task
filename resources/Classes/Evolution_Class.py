@@ -4,6 +4,7 @@ import os
 import datetime
 import pandas as pd
 from resources.Functions.system_fucntions import plot_max_values_on_N
+np.random.seed(1)
 
 class Evolution_Class:
     """

@@ -1,10 +1,11 @@
 import numpy as np
 import cupy as cp
 
+
 from resources.Classes.Wave_function_class import *
 from numpy import random
 from resources.Errors.Errors import IncorrectWaveBlueprintError
-
+np.random.seed(1)
 
 class Wave_vector_class:
     """
@@ -45,9 +46,10 @@ class Wave_vector_class:
 
         # Number of polarization states is 2*spin + 1
         num_polarization_states = 2 * spin + 1
-
+        np.random.seed(1)
         self.polarization_coefficients = cp.asarray(np.random.uniform(0, 1, num_polarization_states))
         self.polarization_coefficients = self.polarization_coefficients / cp.linalg.norm(self.polarization_coefficients)
+
 
         self.polarization_phases = cp.asarray(cp.random.uniform(0, 2 * cp.pi, num_polarization_states))
 
@@ -183,13 +185,13 @@ class Wave_vector_class:
             pol_shape = (3, 3, 3)  # 3×3×3 tensor for rank-3
 
             # Create empty tensors for each polarization state
-            p_plus3 = cp.zeros(pol_shape, dtype=cp.complex128)
-            p_plus2 = cp.zeros(pol_shape, dtype=cp.complex128)
-            p_plus1 = cp.zeros(pol_shape, dtype=cp.complex128)
-            p_zero = cp.zeros(pol_shape, dtype=cp.complex128)
-            p_minus1 = cp.zeros(pol_shape, dtype=cp.complex128)
-            p_minus2 = cp.zeros(pol_shape, dtype=cp.complex128)
-            p_minus3 = cp.zeros(pol_shape, dtype=cp.complex128)
+            p_plus3 = cp.zeros(pol_shape, dtype=cp.complex64)
+            p_plus2 = cp.zeros(pol_shape, dtype=cp.complex64)
+            p_plus1 = cp.zeros(pol_shape, dtype=cp.complex64)
+            p_zero = cp.zeros(pol_shape, dtype=cp.complex64)
+            p_minus1 = cp.zeros(pol_shape, dtype=cp.complex64)
+            p_minus2 = cp.zeros(pol_shape, dtype=cp.complex64)
+            p_minus3 = cp.zeros(pol_shape, dtype=cp.complex64)
 
             # Polarization +3
             # Most elements are zero except for specific components

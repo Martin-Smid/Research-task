@@ -1,52 +1,50 @@
 import matplotlib.pyplot as plt
-
 from resources.Classes.Wave_function_class import *
 from resources.Functions.system_fucntions import *
 from matplotlib.colors import LogNorm
 from resources.Classes.Simulation_Class import Simulation_Class
 from resources.Classes.Wave_vector_class import Wave_vector_class
 
+
+
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-10, 10),(-10, 10),(-10, 10)], # Spatial boundaries
-    N=64,                             # Grid resolution
-    total_time=0.1,                   # Total simulation time
-    h=0.0001,                            # Time step
-    order_of_evolution=6,
+    boundaries=[(-50, 50),(-50, 50),(-50, 50)], # Spatial boundaries
+    N=128,                             # Grid resolution
+    total_time=15,                   # Total simulation time
+    h=0.005,                            # Time step
+    order_of_evolution=4,
     use_gravity=True , # Enable gravitational effects
     static_potential=None,
-    save_max_vals=False,
+    save_max_vals=True,
 )
 
-vlna = Wave_function(
-    packet_type="/home/martin/Downloads/GroundState(1).dat",
-    means=[-0,0,0],
-    st_deviations=[0.5,0.5,0.5],
-    simulation=sim,
-    mass=1,
-    omega=1,
-    momenta=[50,50,0],
-)
+centers = np.zeros((20, 3))
+centers[:, 0] = np.random.uniform(-50, 50, 20)
+centers[:, 1] = np.random.uniform(-50, 50, 20)
+centers_list = [list(row) for row in centers]
+
+waves = []
+for i in range(20):
+    vlna = Wave_function(
+        packet_type="/home/martin/Downloads/GroundState(1).dat",
+        means=centers_list[i],  # This will be [random_x, random_y, 0] for each i
+        st_deviations=[0.5, 0.5, 0.5],
+        simulation=sim,
+        mass=1,
+        omega=1,
+        momenta=[0, 0, 0],
+    )
+    waves.append(vlna)
 
 
+#Wave_vector1 = Wave_vector_class([vlna], spin=0)
 
-vlna2 = Wave_function(
-    packet_type="/home/martin/Downloads/GroundState(1).dat",
-    means=[-0,-5,0],
-    st_deviations=[0.5,0.5,0.5],
-    simulation=sim,
-    mass=1,
-    omega=1,
-    momenta=[4,0,0],
-)
-Wave_vector1 = Wave_vector_class([vlna], spin=3)
+for wave in waves:
+    sim.add_wave_function(wave_vector=wave)
 
 
-
-sim.add_wave_function(wave_vector=Wave_vector1.wave_vector)
-
-
-sim.evolve(save_every=50)
+sim.evolve(save_every=25)
 
 x_index = (sim.grids[0].shape[0] // 2)
 y_index = (sim.grids[1].shape[0] //2)

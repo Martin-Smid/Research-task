@@ -1,5 +1,7 @@
 import cupy as cp
 import numpy as np
+np.random.seed(1)
+from astropy import units, constants
 
 
 class Propagator_Class:
@@ -90,22 +92,24 @@ class Propagator_Class:
 
         density = self.compute_density(psi)
 
+        a_s = (1e-80 * units.cm).to(f"{self.simulation.dUnits}").value
 
 
         if not self.simulation.use_self_int:
-            return cp.ones_like(psi, dtype=cp.complex64)
+            self_int_potential = cp.ones_like(psi, dtype=cp.complex64)
         elif self.simulation.use_self_int:
-            self_int_potential = self.get_self_int_potential(density, psi)
+            self_int_potential = self.get_self_int_potential(density, psi, a_s)
 
 
         # Solve Poisson equation for gravitational potential
         gravity_potential = self.solve_poisson(density)
 
-        additional_potential = -4 * cp.pi * self.h_bar_tilde**2 * 1e-80 * density
+
+        additional_potential = -4 * cp.pi * self.h_bar_tilde**2 * a_s * density /self.simulation.h_bar
 
 
 
-        self.gravity_potential = gravity_potential + additional_potential + self_int_potential
+        self.gravity_potential = gravity_potential + self_int_potential
 
 
 
@@ -121,15 +125,18 @@ class Propagator_Class:
 
 
 
-    def get_self_int_potential(self, density, psi):
-        lambda_param =  1
+    def get_self_int_potential(self, density, psi,a_s):
+        lambda_param =  (32*cp.pi*a_s*self.simulation.c/self.simulation.h_bar)
+
         psi_squared = psi * psi  # Ψ·Ψ
         psi_conj_squared = cp.conj(psi) * cp.conj(psi)  # Ψ†·Ψ†
-        density_squared = density ** 2  # (Ψ†·Ψ)²
 
-        prefactor = (lambda_param /8)*(self.h_bar * self.simulation.c)*self.simulation.h_bar_tilde**2
+        prefactor = ((lambda_param )*(self.simulation.c*self.simulation.h_bar)**3) / 8*(self.simulation.mass_s*self.simulation.c**2)**2
 
-        potential = -prefactor * (psi_squared * psi_conj_squared + 2 * density_squared)
+
+
+        potential = -prefactor * ( density)
+
         return potential
 
 

@@ -8,9 +8,9 @@ from resources.Classes.Wave_vector_class import Wave_vector_class
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-20, 20),(-20, 20),(-20, 20)], # Spatial boundaries
-    N=128,                             # Grid resolution
-    total_time=37,                   # Total simulation time
+    boundaries=[(-15, 15),(-15, 15),(-15, 15)], # Spatial boundaries
+    N=64,                             # Grid resolution
+    total_time=33.75,                   # Total simulation time
     h=0.001,                            # Time step
     order_of_evolution=6,
     use_gravity=True , # Enable gravitational effects
@@ -26,7 +26,7 @@ vlna = Wave_function(
     simulation=sim,
     mass=1,
     omega=1,
-    momenta=[0,0.948525,0],
+    momenta=[0,0.958525,0],
 )
 
 vlna2 = Wave_function(

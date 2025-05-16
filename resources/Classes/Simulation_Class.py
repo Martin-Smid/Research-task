@@ -144,7 +144,7 @@ class Simulation_Class:
         self.snapshot_directory = None
         self.accessible_times = []
         self.wave_values = []
-        print("using self int - in initialization of sim")
+
         self.use_self_int = False
 
     def setup_units(self, sim_units, m_s):

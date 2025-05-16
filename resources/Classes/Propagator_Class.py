@@ -105,7 +105,7 @@ class Propagator_Class:
         gravity_potential = self.solve_poisson(density)
 
 
-        additional_potential = -4 * cp.pi * self.h_bar_tilde**2 * a_s * density /self.simulation.h_bar
+        #additional_potential = -4 * cp.pi * self.h_bar_tilde**2 * a_s * density /self.simulation.h_bar
 
 
 
@@ -126,16 +126,14 @@ class Propagator_Class:
 
 
     def get_self_int_potential(self, density, psi,a_s):
-        lambda_param =  (32*cp.pi*a_s*self.simulation.c/self.simulation.h_bar)
+        lambda_param =  (32*cp.pi*a_s*self.simulation.c)/self.simulation.h_bar
+
 
         psi_squared = psi * psi  # Ψ·Ψ
         psi_conj_squared = cp.conj(psi) * cp.conj(psi)  # Ψ†·Ψ†
-
-        prefactor = ((lambda_param )*(self.simulation.c*self.simulation.h_bar)**3) / 8*(self.simulation.mass_s*self.simulation.c**2)**2
-
-
-
-        potential = -prefactor * ( density)
+        my_prefactor = lambda_param*self.simulation.h_bar_tilde**2 / (self.simulation.c)
+        #print(my_prefactor)
+        potential =  my_prefactor * (psi_squared+2*density)
 
         return potential
 

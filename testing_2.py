@@ -5,46 +5,65 @@ from matplotlib.colors import LogNorm
 from resources.Classes.Simulation_Class import Simulation_Class
 from resources.Classes.Wave_vector_class import Wave_vector_class
 
+import numpy as np
 
+np.random.seed(1)
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-50, 50),(-50, 50),(-50, 50)], # Spatial boundaries
-    N=128,                             # Grid resolution
+    boundaries=[(-10, 10),(-10, 10),(-10,10)], # Spatial boundaries
+    N=64,                             # Grid resolution
     total_time=15,                   # Total simulation time
-    h=0.005,                            # Time step
-    order_of_evolution=4,
+    h=0.001,                            # Time step
+    order_of_evolution=2,
     use_gravity=True , # Enable gravitational effects
     static_potential=None,
     save_max_vals=True,
 )
 
-centers = np.zeros((20, 3))
-centers[:, 0] = np.random.uniform(-50, 50, 20)
-centers[:, 1] = np.random.uniform(-50, 50, 20)
+wave = Wave_function(
+    packet_type="/home/martin/Downloads/Modo-1e-80.dat",
+    means=[0,0,0],
+    st_deviations=[0.5, 0.5, 0.5],
+    simulation=sim,
+    mass=1,
+    omega=1,
+    momenta=[0, 0, 0],
+)
+
+w_vect = Wave_vector_class(wave_function=wave,spin=3)
+
+sim.add_wave_function(w_vect.wave_vector)
+sim.evolve(save_every=1000)
+
+'''
+centers = np.zeros((10, 3))
+centers[:, 0] = np.random.uniform(-35, 35, 10)
+centers[:, 1] = np.random.uniform(-35, 35, 10)
 centers_list = [list(row) for row in centers]
 
 waves = []
-for i in range(20):
+for i in range(5):
     vlna = Wave_function(
         packet_type="/home/martin/Downloads/GroundState(1).dat",
-        means=centers_list[i],  # This will be [random_x, random_y, 0] for each i
+        means=centers_list[i],
         st_deviations=[0.5, 0.5, 0.5],
         simulation=sim,
         mass=1,
         omega=1,
         momenta=[0, 0, 0],
     )
-    waves.append(vlna)
+    Wave_vector = Wave_vector_class([vlna], spin=2)
+    waves.append(Wave_vector)
 
 
-#Wave_vector1 = Wave_vector_class([vlna], spin=0)
+print(waves)
 
 for wave in waves:
-    sim.add_wave_function(wave_vector=wave)
+    sim.add_wave_function(wave_vector=wave.wave_vector)
+'''
 
 
-sim.evolve(save_every=25)
 
 x_index = (sim.grids[0].shape[0] // 2)
 y_index = (sim.grids[1].shape[0] //2)
@@ -61,7 +80,7 @@ for time in sim.accessible_times:
     wave_slice = wave_values[:, :, z_index]
     levels = np.logspace(np.log10(wave_values[wave_values > 0].min()), np.log10(wave_values.max()), 128)
     plt.contourf(x_mesh_2d, y_mesh_2d, cp.asnumpy(wave_slice).T,
-                 origin="lower", levels=levels, cmap="inferno", norm=LogNorm())
+                 origin="lower", levels=levels, cmap="inferno",norm=LogNorm())
     plt.colorbar(label="|ψ|²", format="%.2e")
     plt.title(f"Wavefunction Probability Density at Time {time}")
     plt.xlabel("x")

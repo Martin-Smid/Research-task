@@ -12,9 +12,9 @@ np.random.seed(1)
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-10, 10),(-10, 10),(-10,10)], # Spatial boundaries
-    N=64,                             # Grid resolution
-    total_time=15,                   # Total simulation time
-    h=0.001,                            # Time step
+    N=64 ,                             # Grid resolution
+    total_time=100,                   # Total simulation time
+    h=0.01,                            # Time step
     order_of_evolution=2,
     use_gravity=True , # Enable gravitational effects
     static_potential=None,
@@ -22,7 +22,8 @@ sim = Simulation_Class(
 )
 
 wave = Wave_function(
-    packet_type="/home/martin/Downloads/Modo-1e-80.dat",
+    packet_type="/home/martin/Downloads/Modo-1e-77.dat",
+    #packet_type="/home/martin/Downloads/GroundState(1).dat",
     means=[0,0,0],
     st_deviations=[0.5, 0.5, 0.5],
     simulation=sim,
@@ -31,10 +32,10 @@ wave = Wave_function(
     momenta=[0, 0, 0],
 )
 
-w_vect = Wave_vector_class(wave_function=wave,spin=3)
+w_vect = Wave_vector_class(wave_function=wave,spin=0)
 
 sim.add_wave_function(w_vect.wave_vector)
-sim.evolve(save_every=1000)
+sim.evolve(save_every=500)
 
 '''
 centers = np.zeros((10, 3))

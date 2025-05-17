@@ -56,6 +56,8 @@ def calculate_errors_between_num_and_analytical_evolution(wave_function, time_st
     }
 
 def plot_max_values_on_N(simulation_class_instance):
+    import pandas as pd
+    import matplotlib.pyplot as plt
 
     # File name
     filename = simulation_class_instance.max_vals_filename
@@ -70,6 +72,11 @@ def plot_max_values_on_N(simulation_class_instance):
     # Rename columns for clarity
     data.columns = ['Time Step'] + [f"N = {n}" for n in n_values]
 
+    # Normalize the data: (value / first_value) - 1
+    for col in data.columns[1:]:
+        first_val = data[col].iloc[0]
+        data[col] = (data[col] / first_val) - 1  # Now starts at 0
+
     # Plotting
     plt.figure(figsize=(10, 6))
 
@@ -78,12 +85,12 @@ def plot_max_values_on_N(simulation_class_instance):
         plt.plot(data['Time Step'], data[col], label=col)
 
     # Add labels, title, and legend
-    plt.xlabel("Time Step",fontsize=18)
-    plt.ylabel("Max Values", fontsize=18)
+    plt.xlabel("Time Step", fontsize=18)
+    plt.ylabel("Normalized Max Values (Start = 0)", fontsize=18)
     plt.legend(fontsize=15)
     plt.yticks(fontsize=15)
     plt.xticks(fontsize=15)
 
-
     # Show the plot
     plt.show()
+

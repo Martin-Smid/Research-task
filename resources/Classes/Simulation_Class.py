@@ -82,7 +82,7 @@ class Simulation_Class:
     """
 
     @parameter_check(int, list, int, (int, float), (int, float),int, float, bool, object, bool, dict,bool)
-    def __init__(self, dim, boundaries, N, total_time, h,order_of_evolution = 2, m_s=1e-22, use_gravity=False,
+    def __init__(self, dim, boundaries, N, total_time, h,order_of_evolution = 2, m_s=1e-20, use_gravity=False,
                  static_potential=None, save_max_vals=False,
                  sim_units={"dUnits": "kpc", "tUnits": "Gyr", "mUnits": "Msun", "eUnits": "eV"},use_units=True):
         """
@@ -145,7 +145,7 @@ class Simulation_Class:
         self.accessible_times = []
         self.wave_values = []
 
-        self.use_self_int = False
+        self.use_self_int = True
 
     def setup_units(self, sim_units, m_s):
         """
@@ -165,6 +165,7 @@ class Simulation_Class:
                 setattr(self, f"{key}_unit", getattr(units, value))
 
         # Mass of the particle
+        self.m_s = m_s
         self.mass_s = (m_s * self.eUnits_unit / constants.c ** 2).to(f"{self.mUnits}").value
         self.c = constants.c.to(f"{self.dUnits}/{self.tUnits}").value
         self.G = constants.G.to(f"{self.dUnits}3/({self.mUnits} {self.tUnits}2)").value

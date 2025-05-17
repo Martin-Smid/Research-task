@@ -92,7 +92,7 @@ class Propagator_Class:
 
         density = self.compute_density(psi)
 
-        a_s = (1e-80 * units.cm).to(f"{self.simulation.dUnits}").value
+        a_s = (1e-77 * units.cm).to(f"{self.simulation.dUnits}").value
 
 
         if not self.simulation.use_self_int:
@@ -128,10 +128,15 @@ class Propagator_Class:
     def get_self_int_potential(self, density, psi,a_s):
         lambda_param =  (32*cp.pi*a_s*self.simulation.c)/self.simulation.h_bar
 
-
+        #print(lambda_param)
         psi_squared = psi * psi  # Ψ·Ψ
         psi_conj_squared = cp.conj(psi) * cp.conj(psi)  # Ψ†·Ψ†
-        my_prefactor = lambda_param*self.simulation.h_bar_tilde**2 / (self.simulation.c)
+        my_prefactor = (-1/1j)*lambda_param*self.simulation.h_bar_tilde**2 / (4*self.simulation.c)
+        #cte = (self.simulation.h_bar)**3
+        #print(f"cte je {cte}")
+        #mass_cte = self.simulation.c * (self.simulation.mass_s)**2
+        #print(f"mass cte je {mass_cte}")
+        #prefactor = (lambda_param*cte)/ mass_cte
         #print(my_prefactor)
         potential =  my_prefactor * (psi_squared+2*density)
 

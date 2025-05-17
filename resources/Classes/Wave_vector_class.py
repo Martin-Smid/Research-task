@@ -53,8 +53,9 @@ class Wave_vector_class:
 
 
         self.polarization_phases = cp.asarray(cp.random.uniform(0, 2 * cp.pi, num_polarization_states))
-        self.polarization_phases /= cp.linalg.norm(self.polarization_phases)
         #self.polarization_phases = cp.ones(num_polarization_states)
+        self.polarization_phases /= cp.linalg.norm(self.polarization_phases)
+
         # Initialize polarization bases based on spin
         self._initialize_polarization_bases()
 

@@ -92,7 +92,7 @@ class Propagator_Class:
 
         density = self.compute_density(psi)
 
-        a_s = (1e-80 * units.cm).to(f"{self.simulation.dUnits}").value
+        a_s = (1e-77 * units.cm).to(f"{self.simulation.dUnits}").value
 
 
         if not self.simulation.use_self_int:
@@ -141,7 +141,7 @@ class Propagator_Class:
         #print(f"c: {self.simulation.c}")
         potential =  my_prefactor * (psi_squared+2*density)
 
-        return potential
+        return -potential
 
 
     def compute_density(self, psi):
@@ -154,7 +154,7 @@ class Propagator_Class:
         Returns:
             cp.ndarray: The density distribution
         """
-        return cp.abs(psi).astype(cp.float32) ** 2
+        return cp.abs(psi).astype(cp.float64) ** 2
 
     def solve_poisson(self, density):
         """

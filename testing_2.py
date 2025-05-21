@@ -8,12 +8,17 @@ from datetime import datetime
 import os
 import numpy as np
 
-np.random.seed(1)
+
+
+#TODO: change the creation process to be done on CPU instead of gpu
+#TODO: integrate over the ground state to get Mass of the system and normalize that
+#TODO: Try the normal seed thing
+#TODO: move from combined wave to treating each wave individually
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-10, 10),(-10, 10),(-10,10)], # Spatial boundaries
-    N=32 ,                             # Grid resolution
+    boundaries=[(-20, 20),(-20, 20),(-20,20)], # Spatial boundaries
+    N=64,                             # Grid resolution
     total_time=100,                   # Total simulation time
     h=0.01,                            # Time step
     order_of_evolution=2,
@@ -23,8 +28,8 @@ sim = Simulation_Class(
 )
 
 wave = Wave_function(
-    packet_type="/home/martin/Downloads/Modo-1e-80.dat",
-    #packet_type="/home/martin/Downloads/GroundState(1).dat",
+    #packet_type="/home/martin/Downloads/Modo-1e-80.dat",
+    packet_type="/home/martin/Downloads/Modo1e-77.dat",
     means=[0,0,0],
     st_deviations=[0.5, 0.5, 0.5],
     simulation=sim,

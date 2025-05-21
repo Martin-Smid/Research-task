@@ -4,7 +4,8 @@ from resources.Functions.system_fucntions import *
 from matplotlib.colors import LogNorm
 from resources.Classes.Simulation_Class import Simulation_Class
 from resources.Classes.Wave_vector_class import Wave_vector_class
-
+from datetime import datetime
+import os
 import numpy as np
 
 np.random.seed(1)
@@ -12,7 +13,7 @@ np.random.seed(1)
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-10, 10),(-10, 10),(-10,10)], # Spatial boundaries
-    N=64 ,                             # Grid resolution
+    N=32 ,                             # Grid resolution
     total_time=100,                   # Total simulation time
     h=0.01,                            # Time step
     order_of_evolution=2,
@@ -22,7 +23,7 @@ sim = Simulation_Class(
 )
 
 wave = Wave_function(
-    packet_type="/home/martin/Downloads/Modo-1e-77.dat",
+    packet_type="/home/martin/Downloads/Modo-1e-80.dat",
     #packet_type="/home/martin/Downloads/GroundState(1).dat",
     means=[0,0,0],
     st_deviations=[0.5, 0.5, 0.5],
@@ -32,7 +33,7 @@ wave = Wave_function(
     momenta=[0, 0, 0],
 )
 
-w_vect = Wave_vector_class(wave_function=wave,spin=0)
+w_vect = Wave_vector_class(wave_function=wave,spin=2)
 
 sim.add_wave_function(w_vect.wave_vector)
 sim.evolve(save_every=500)
@@ -65,7 +66,7 @@ for wave in waves:
 '''
 
 
-
+current_date = datetime.now().strftime("%y_%d_%H")
 x_index = (sim.grids[0].shape[0] // 2)
 y_index = (sim.grids[1].shape[0] //2)
 z_index = (sim.grids[2].shape[0] //2)
@@ -74,6 +75,10 @@ y_mesh_2d, z_mesh_2d = np.meshgrid(sim.grids[1][0,:,0].get(), sim.grids[2][0,0,:
 x_mesh_2d, z_mesh_2d = np.meshgrid(sim.grids[0][:,0,0].get(), sim.grids[2][0,0,:].get())
 plt.figure(figsize=(8, 6))
 x_mesh_2d, y_mesh_2d = np.meshgrid(sim.grids[0][:,0,0].get(), sim.grids[1][0,:,0].get())
+save_dir = f"resources/data/sim_N{sim.N}_{current_date}"
+if not os.path.exists(save_dir):
+    os.makedirs(save_dir)  # This will create all intermediate directories as needed
+
 for time in sim.accessible_times:
     wave_values = cp.asnumpy(abs(sim.get_wave_function_at_time(time)) ** 2)
 
@@ -87,4 +92,5 @@ for time in sim.accessible_times:
     plt.xlabel("x")
     plt.ylabel("y")
     plt.grid()
-    plt.show()
+    plt.savefig(f"{save_dir}/timestep_{time}.jpg")
+    plt.close()

@@ -19,7 +19,7 @@ sim = Simulation_Class(
     h=0.01,                            # Time step
     use_gravity=False,  # Enable gravitational effects
     static_potential=quadratic_potential,
-    use_units=True,
+    use_units=False,
     order_of_evolution=2,
 )
 

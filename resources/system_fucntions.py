@@ -94,3 +94,4 @@ def plot_max_values_on_N(simulation_class_instance):
     # Show the plot
     plt.show()
 
+

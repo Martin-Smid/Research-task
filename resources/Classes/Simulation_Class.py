@@ -82,7 +82,7 @@ class Simulation_Class:
     """
 
     @parameter_check(int, list, int, (int, float), (int, float),int, float, bool, object, bool, dict,bool)
-    def __init__(self, dim, boundaries, N, total_time, h,order_of_evolution = 2, m_s=1e-20, use_gravity=False,
+    def __init__(self, dim, boundaries, N, total_time, h,order_of_evolution = 2, m_s=10e-22, use_gravity=False,
                  static_potential=None, save_max_vals=False,
                  sim_units={"dUnits": "kpc", "tUnits": "Gyr", "mUnits": "Msun", "eUnits": "eV"},use_units=True):
         """
@@ -145,7 +145,7 @@ class Simulation_Class:
         self.accessible_times = []
         self.wave_values = []
 
-        self.use_self_int = True
+        self.use_self_int =True
 
     def setup_units(self, sim_units, m_s):
         """
@@ -252,11 +252,7 @@ class Simulation_Class:
                       f"a středy {wave_function.means}")
         else:
             try:
-                self.wave_functions.append(wave_vector)
-                self.wave_masses.append(wave_vector.mass)
-                self.wave_momenta.append(wave_vector.momenta)
-                self.wave_omegas.append(wave_vector.omega)
-                self.total_omega += wave_vector.omega
+                self.wave_functions = wave_vector.wave_vector
             except Exception as e:
                 raise ValueError(f"Tried adding either a Wave_vector.wave_vector, list of Wave_functions or Wave_function but failed \n"
                                  f"got the error: {e}"
@@ -287,10 +283,7 @@ class Simulation_Class:
         self.propagator = Propagator_Class(self)
         self.evolution = Evolution_Class(self, self.propagator,order=self.order_of_evolution)
 
-        # Initialize propagators
-        self.propagator.kinetic_propagator = self.propagator.compute_kinetic_propagator()
-        self.propagator.static_potential_propagator = self.propagator.compute_static_potential_propagator(
-            self.static_potential)
+
 
 
 
@@ -308,10 +301,10 @@ class Simulation_Class:
             self.initialize_simulation()
 
         # Delegate the evolution to the Evolution_Class
-        final_psi = self.evolution.evolve(self.combined_psi, save_every)
+        final_wave_functions = self.evolution.evolve(self.wave_functions, save_every)
 
         # Update simulation state
-        self.combined_psi = final_psi
+        self.combined_psi = final_wave_functions
         self.wave_values = self.evolution.wave_values
         self.accessible_times = self.evolution.accessible_times
         self.snapshot_directory = self.evolution.snapshot_directory
@@ -391,10 +384,9 @@ class Simulation_Class:
         """
         Convert the numerical wave function to physical units.
         """
-
-
-        self.total_time = (self.total_time)
-
         # Convert wave function: ψ_sol = ψ̂_sol * (ħ/√G)
         conversion_factor = self.h_bar_tilde / np.sqrt(self.G)
-        self.combined_psi = self.combined_psi  * conversion_factor
+        print(conversion_factor)
+        print("to nad tim")
+        for wf in self.wave_functions:
+            wf.psi = wf.psi  * conversion_factor

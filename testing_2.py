@@ -19,7 +19,7 @@ sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-20, 20),(-20, 20),(-20,20)], # Spatial boundaries
     N=64,                             # Grid resolution
-    total_time=100,                   # Total simulation time
+    total_time=10,                   # Total simulation time
     h=0.01,                            # Time step
     order_of_evolution=2,
     use_gravity=True , # Enable gravitational effects
@@ -28,8 +28,8 @@ sim = Simulation_Class(
 )
 
 wave = Wave_function(
-    #packet_type="/home/martin/Downloads/Modo-1e-80.dat",
-    packet_type="/home/martin/Downloads/Modo1e-77.dat",
+    packet_type="/home/martin/Downloads/Modo-1e-80.dat",
+    #packet_type="resources/solitons/GroundState(1).dat",
     means=[0,0,0],
     st_deviations=[0.5, 0.5, 0.5],
     simulation=sim,
@@ -38,10 +38,10 @@ wave = Wave_function(
     momenta=[0, 0, 0],
 )
 
-w_vect = Wave_vector_class(wave_function=wave,spin=2)
+w_vect = Wave_vector_class(wave_function=wave,spin=3)
 
 sim.add_wave_function(w_vect.wave_vector)
-sim.evolve(save_every=500)
+sim.evolve(save_every=1000)
 
 '''
 centers = np.zeros((10, 3))
@@ -97,5 +97,6 @@ for time in sim.accessible_times:
     plt.xlabel("x")
     plt.ylabel("y")
     plt.grid()
-    plt.savefig(f"{save_dir}/timestep_{time}.jpg")
+    #plt.savefig(f"{save_dir}/timestep_{time}.jpg")
+    plt.show()
     plt.close()

@@ -92,31 +92,23 @@ class Propagator_Class:
 
         density = self.compute_density(psi)
 
-        a_s = (1e-77 * units.cm).to(f"{self.simulation.dUnits}").value
+        a_s = (-1e-80 * units.cm).to(f"{self.simulation.dUnits}").value
 
 
         if not self.simulation.use_self_int:
             self_int_potential = cp.ones_like(psi, dtype=cp.complex64)
         elif self.simulation.use_self_int:
             self_int_potential = self.get_self_int_potential(density, psi, a_s)
+            if first_step:
+                print("byl jsem tu")
 
 
         # Solve Poisson equation for gravitational potential
         gravity_potential = self.solve_poisson(density)
-
-
-        #additional_potential = -4 * cp.pi * self.h_bar_tilde**2 * a_s * density /self.simulation.h_bar
-
-
-
         self.gravity_potential = gravity_potential + self_int_potential
-
-
-
 
         if first_step or last_step:
             self.gravity_propagator = cp.exp((-1j * ((self.h*time_factor) / 2) * self.gravity_potential )/(self.simulation.h_bar_tilde), dtype=cp.complex64)
-
         else:
             self.gravity_propagator = cp.exp((-1j  * (self.h*time_factor) * self.gravity_potential)/(self.simulation.h_bar_tilde), dtype=cp.complex64)
 
@@ -130,18 +122,14 @@ class Propagator_Class:
 
         #print(lambda_param)
         psi_squared = psi * psi  # Ψ·Ψ
-        psi_conj_squared = cp.conj(psi) * cp.conj(psi)  # Ψ†·Ψ†
+        #psi_conj_squared = cp.conj(psi) * cp.conj(psi)  # Ψ†·Ψ†
         my_prefactor = lambda_param*self.simulation.h_bar_tilde**2 / (4*self.simulation.c)
-        cte = (self.simulation.h_bar*self.simulation.c)**3
-        #print(f"cte je {cte}")
-        mass_cte = (self.simulation.c**2 * (self.simulation.mass_s))**2
-        #print(f"mass cte je {mass_cte}")
-        prefactor = (lambda_param*cte)/ mass_cte
-        #print(prefactor)
-        #print(f"c: {self.simulation.c}")
-        potential =  my_prefactor * (psi_squared+2*density)
 
-        return -potential
+
+
+        potential =  my_prefactor * (psi_squared+2*density*psi)
+
+        return potential
 
 
     def compute_density(self, psi):

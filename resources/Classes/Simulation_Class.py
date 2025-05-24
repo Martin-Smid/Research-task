@@ -151,6 +151,7 @@ class Simulation_Class:
         self.use_self_int =self_int
         self.a_s = a_s
         self.desired_soliton_mass = soliton_mass
+        print(self.desired_soliton_mass)
 
     def setup_units(self, sim_units, m_s):
         """
@@ -377,29 +378,21 @@ class Simulation_Class:
         """
         Convert the numerical wave function to physical units.
         """
-        # Convert wave function: ψ_sol = ψ̂_sol * (ħ/√G)
-        conversion_factor = self.h_bar_tilde / np.sqrt(self.G)
 
-        for wf in self.wave_functions:
-            wf.psi = wf.psi  * conversion_factor
+        scaling_lambda = 1
 
-
-
-        #scaling_lambda = self.get_scaling_factor()
-        scaling_lambda = self.get_scaling_factor()
-        for wf in self.wave_functions:
-            wf.psi *= scaling_lambda**2
 
 
 
     def get_scaling_factor(self):
         total_soliton_masses = []
-        print(self.wave_vectors)
         for spin,wave_vector in self.wave_vectors.items():
             total_soliton_mass = 0
             for wf in wave_vector:
                 total_soliton_mass += wf.calclulate_soliton_mass()
             total_soliton_masses.append(total_soliton_mass)
+
+
         scaling_lambda = self.desired_soliton_mass / total_soliton_masses[0]#using only the first one, since they should be all the same
         # the only case when entries are not the same are for the case of using different file for solitons in the same sim and
         # I am not coding that option

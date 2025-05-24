@@ -16,7 +16,7 @@ import numpy as np
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-20, 20),(-20, 20),(-20,20)], # Spatial boundaries
+    boundaries=[(-50, 50),(-50, 50),(-50,50)], # Spatial boundaries
     N=64,                             # Grid resolution
     total_time=12,                   # Total simulation time
     h=0.04,                            # Time step
@@ -25,12 +25,12 @@ sim = Simulation_Class(
     static_potential=None,
     save_max_vals=True,
     a_s=-1e-80,
-    soliton_mass=3.47e6
+    soliton_mass=4e6
 
 )
 wave_vector = Wave_vector_class(
     packet_type="resources/solitons/Modo-1e-80.dat",
-    means=[-0, -0, 0],
+    means=[-5, -5, 0],
     st_deviations=[0.5, 0.5, 0.5],
     simulation=sim,
     mass=1,
@@ -38,9 +38,18 @@ wave_vector = Wave_vector_class(
     momenta=[-0, 0, 0],
     spin=2
 )
-
+wave_vector1 = Wave_vector_class(
+    packet_type="resources/solitons/Modo-1e-80.dat",
+    means=[5, 5, 0],
+    st_deviations=[0.5, 0.5, 0.5],
+    simulation=sim,
+    mass=1,
+    omega=1,
+    momenta=[-0, 0, 0],
+    spin=2
+)
 sim.add_wave_vector(wave_vector)
-
+#sim.add_wave_vector(wave_vector1)
 
 sim.evolve(save_every=100)
 

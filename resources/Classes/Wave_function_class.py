@@ -1,6 +1,6 @@
 
 from scipy.constants import gravitational_constant
-
+from scipy.interpolate import interp1d
 from resources.Functions.Schrodinger_eq_functions import *
 from resources.Classes.Simulation_Class import Simulation_Class
 from resources.Classes.Wave_Packet_Class import Packet
@@ -47,7 +47,17 @@ class Wave_function():  # Streamlined and unified evolution logic
             mass=self.mass,
             omega=self.omega,
             dim=self.dim, )
+
+
         self.psi = self.packet_creator.create_psi_0()
+        self.rescale_psi_to_phys_units()
+        self.soliton_mass = self.calclulate_soliton_mass()
+        self.scaling_lambda = self.simulation.desired_soliton_mass / self.soliton_mass
+        self.psi = self._rescale_psi_to_new_scale_based_on_mass()
+
+
+        print("toto je z wf")
+        print(self.soliton_mass)
 
         self.potential = potential
         self.gravity_potential = gravity_potential
@@ -62,8 +72,33 @@ class Wave_function():  # Streamlined and unified evolution logic
     def calculate_density(self):
         return cp.abs(self.psi).astype(cp.float32) ** 2
 
+    def rescale_psi_to_phys_units(self):
+        # Convert wave function: ψ_sol = ψ̂_sol * (ħ/√G)
+        conversion_factor = self.simulation.h_bar_tilde / np.sqrt(self.simulation.G)
+        self.psi *= conversion_factor
 
 
+    def _rescale_psi_to_new_scale_based_on_mass(self):
+        data = self.packet_creator.read_ground_state_data(self.packet_type)
+
+        r_values = data[:, 0]
+        r_values /= self.scaling_lambda
+        phi_values = data[:, 1]
+        phi_values *= self.scaling_lambda**2
+
+        interp_phi = interp1d(r_values, phi_values, kind='linear',
+                              bounds_error=False, fill_value=0.0)
+
+        # Compute r at each grid point
+        r_distance = np.zeros_like(self.grids[0])
+        for dim in range(self.dim):
+            r_distance += (self.grids[dim] - self.means[dim]) ** 2
+        r_distance = np.sqrt(r_distance)
+
+        # Interpolate φ at each grid point
+        psi = interp_phi(r_distance)
+
+        return psi.astype(np.complex64)
 
 
 

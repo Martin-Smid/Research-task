@@ -172,9 +172,8 @@ class Packet():
             file_path (str): Path to the file containing wave function data.
             The expected format is:
             #r phi U
-            0.0 1.0 -4.756424826198888
+            0.0 1.0 -4.75
             ...
-
         Returns:
             numpy.ndarray: The loaded wave function data as a numpy array.
         """
@@ -196,7 +195,6 @@ class Packet():
                     # U is at index 2, but we don't need it
                     data.append([r, phi])
 
-            # Converting to cupy array
             return np.array(data)
 
         except FileNotFoundError:

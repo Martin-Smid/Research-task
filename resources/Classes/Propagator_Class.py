@@ -92,7 +92,7 @@ class Propagator_Class:
 
         #density = self.compute_density(psi)
 
-        a_s = (-1e-80 * units.cm).to(f"{self.simulation.dUnits}").value
+        a_s = (self.simulation.a_s * units.cm).to(f"{self.simulation.dUnits}").value
 
 
         if not self.simulation.use_self_int:

@@ -27,39 +27,41 @@ class Wave_vector_class:
         wave_vector (list): The resulting combined wave function
     """
 
-    def __init__(self, wave_function, spin=0):
+    def __init__(self, spin=0, **wave_function_kwargs):
         """
-        Initialize a Wave_vector_class instance.
+        Initialize a Wave_vector_class instance, automatically constructing the required Wave_function(s)
+        from the given keyword arguments.
 
         Args:
-            wave_function (Wave_function_class or list): The wave function blueprint(s) to use
-            spin (int, optional): The spin state (0, 1, 2, or 3). Defaults to 0.
+            spin (int): The spin state (0, 1, 2, or 3). Defaults to 0.
+            **wave_function_kwargs: All the arguments required to construct a Wave_function instance.
         """
+        from resources.Classes.Wave_function_class import Wave_function
+
         self.spin = spin
 
-        # Validate spin value
         if spin not in [0, 1, 2, 3]:
             raise ValueError("Spin must be 0, 1, 2, or 3")
 
-        # Validate and set wave_blueprint
-        self.wave_blueprint = self._validate_wave_blueprint(wave_function)
+        # How many wave functions to generate
+        count_map = {0: 1, 1: 1, 2: 1, 3: 1}  # could default to more if needed
+        num_wavefunctions = count_map[spin]
 
-        # Number of polarization states is 2*spin + 1
-        num_polarization_states = 2 * spin + 1
+        # Build the wave_blueprint: a list of Wave_function instances
+        self.wave_blueprint = [Wave_function(**wave_function_kwargs) for _ in range(num_wavefunctions)]
+
+        # Continue as before
+        self._setup_vector()
+
+    def _setup_vector(self):
         np.random.seed(1)
+        num_polarization_states = 2 * self.spin + 1
         self.polarization_coefficients = cp.asarray(np.random.uniform(0, 1, num_polarization_states))
-        #self.polarization_coefficients = cp.ones(num_polarization_states)
         self.polarization_coefficients = self.polarization_coefficients / cp.linalg.norm(self.polarization_coefficients)
-
-
         self.polarization_phases = cp.asarray(cp.random.uniform(0, 2 * cp.pi, num_polarization_states))
-        #self.polarization_phases = cp.ones(num_polarization_states)
         self.polarization_phases /= cp.linalg.norm(self.polarization_phases)
 
-        # Initialize polarization bases based on spin
         self._initialize_polarization_bases()
-
-        # Calculate the combined wave function
         self.wave_vector = self._create_combined_wave_function()
 
     def _validate_wave_blueprint(self, wave_blueprint):

@@ -34,7 +34,7 @@ vlna = Wave_function(
 )
 # Iterate over reduced time steps for better visualization
 
-sim.add_wave_function(vlna)
+sim.add_wave_vector(vlna)
 
 
 sim.evolve(save_every=50)

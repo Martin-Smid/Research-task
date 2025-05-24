@@ -65,8 +65,8 @@ vlna2 = Wave_function(
 
 )
 
-sim.add_wave_function(vlna)
-sim.add_wave_function(vlna2)
+sim.add_wave_vector(vlna)
+sim.add_wave_vector(vlna2)
 
 sim.evolve(save_every=2000)
 

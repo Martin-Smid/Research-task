@@ -2,7 +2,7 @@ from cupy import asnumpy
 
 from resources.Classes.Wave_function_class import *
 from resources.Functions.system_fucntions import *
-
+from resources.Classes.Wave_vector_class import Wave_vector_class
 
 # Setup parameters for the domain
 a, b = -10, 10  # Domain boundaries
@@ -19,29 +19,22 @@ sim = Simulation_Class(
     h=0.01,                            # Time step
     use_gravity=False,  # Enable gravitational effects
     static_potential=quadratic_potential,
-    use_units=False,
+    use_units=True,
     order_of_evolution=2,
+    self_int=False
 )
 
 vlna = Wave_function(
     packet_type="LHO",
     means=[0],
-    st_deviations=[0.1],
+    st_deviations=[0.2],
     simulation=sim,
     mass=1,
     omega=1,
     momenta=[0],
 )
-vlna2 = Wave_function(
-    packet_type="LHO",
-    means=[5],
-    st_deviations=[0.1],
-    simulation=sim,
-    mass=1,
-    omega=1,
-    momenta=[0],
-)
-sim.add_wave_function(vlna)
+
+sim.add_wave_vector([vlna])
 #sim.add_wave_function(vlna2)
 
 

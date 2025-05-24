@@ -9,6 +9,7 @@ import sys
 import inspect
 import os
 import datetime
+from itertools import chain
 import numpy as np
 from astropy import units, constants
 np.random.seed(1)
@@ -81,10 +82,10 @@ class Simulation_Class:
     separate classes.
     """
 
-    @parameter_check(int, list, int, (int, float), (int, float),int, float, bool, object, bool, dict,bool,bool)
+    @parameter_check(int, list, int, (int, float), (int, float),int, float, bool, object, bool, dict,bool,bool,float)
     def __init__(self, dim, boundaries, N, total_time, h,order_of_evolution = 2, m_s=10e-22, use_gravity=False,
                  static_potential=None, save_max_vals=False,
-                 sim_units={"dUnits": "kpc", "tUnits": "Gyr", "mUnits": "Msun", "eUnits": "eV"},use_units=True,self_int=True):
+                 sim_units={"dUnits": "kpc", "tUnits": "Gyr", "mUnits": "Msun", "eUnits": "eV"},use_units=True,self_int=True,a_s=-10e-80):
         """
         Initialize the simulation parameters and setup.
 
@@ -127,6 +128,7 @@ class Simulation_Class:
         self.k_space = self.create_k_space()
 
         # Initialize wave functions storage
+        self.wave_vectors = {}
         self.wave_functions = []  # List to store Wave_function instances
         self.wave_masses = []
         self.wave_momenta = []
@@ -146,6 +148,7 @@ class Simulation_Class:
         self.wave_values = []
 
         self.use_self_int =self_int
+        self.a_s = a_s
 
     def setup_units(self, sim_units, m_s):
         """
@@ -231,7 +234,7 @@ class Simulation_Class:
         k_space = cp.meshgrid(*k_components, indexing='ij')
         return k_space
 
-    def add_wave_function(self, wave_vector):
+    def add_wave_vector(self, wave_vector):
         """
         Add a wave function to the simulation.
 
@@ -240,19 +243,18 @@ class Simulation_Class:
         """
         if isinstance(wave_vector, list):
             for wave_function in wave_vector:
-
                 self.wave_functions.append(wave_function)
-                self.wave_masses.append(wave_function.mass)
-                self.wave_momenta.append(wave_function.momenta)
-                self.wave_omegas.append(wave_function.omega)
-                self.total_omega += wave_function.omega
-
-                print(f"přidal jsem {wave_function}")
-                print(f"s hodntami {wave_function.psi}"
-                      f"a středy {wave_function.means}")
         else:
+
             try:
-                self.wave_functions = wave_vector.wave_vector
+                spin = wave_vector.spin
+                if spin not in self.wave_vectors:
+                    self.wave_vectors[spin] = wave_vector.wave_vector
+                else:
+                    for i, w_vect_component in enumerate(wave_vector.wave_vector):
+                        self.wave_vectors[spin][i].psi += w_vect_component.psi
+                self.wave_functions.append(wave_vector.wave_vector)
+
             except Exception as e:
                 raise ValueError(f"Tried adding either a Wave_vector.wave_vector, list of Wave_functions or Wave_function but failed \n"
                                  f"got the error: {e}"
@@ -266,11 +268,7 @@ class Simulation_Class:
         print(f"pracuji s {self.wave_functions}")
         if not self.wave_functions:
             raise ValueError("No wave functions added to the simulation")
-
-        # Combine all wave functions into one
-        self.combined_psi = cp.zeros_like(self.wave_functions[0].psi, dtype=cp.complex64)
-        for wave_func in self.wave_functions:
-            self.combined_psi += wave_func.psi
+        self.wave_functions = list(chain.from_iterable(self.wave_functions))
 
         if not self.check_time_step_restriction():
             return
@@ -278,8 +276,6 @@ class Simulation_Class:
         if self.use_units:
             self.calculate_physical_units()
 
-
-        # Create the propagator and evolution classes
         self.propagator = Propagator_Class(self)
         self.evolution = Evolution_Class(self, self.propagator,order=self.order_of_evolution)
 
@@ -297,10 +293,7 @@ class Simulation_Class:
         Parameters:
             save_every (int): How often to save the wave function during evolution
         """
-        if self.combined_psi is None:
-            self.initialize_simulation()
-
-        # Delegate the evolution to the Evolution_Class
+        self.initialize_simulation()
         final_wave_functions = self.evolution.evolve(self.wave_functions, save_every)
 
         # Update simulation state

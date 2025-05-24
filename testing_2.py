@@ -17,31 +17,42 @@ import numpy as np
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-20, 20),(-20, 20),(-20,20)], # Spatial boundaries
-    N=32,                             # Grid resolution
+    boundaries=[(-50, 50),(-50, 50),(-20,20)], # Spatial boundaries
+    N=128,                             # Grid resolution
     total_time=10,                   # Total simulation time
     h=0.01,                            # Time step
     order_of_evolution=2,
     use_gravity=True , # Enable gravitational effects
     static_potential=None,
     save_max_vals=True,
+    a_s=-1e-80
 )
-
-wave = Wave_function(
-    packet_type="/home/martin/Downloads/Modo-1e-80.dat",
-    #packet_type="resources/solitons/GroundState(1).dat",
-    means=[0,0,0],
+wave_vector = Wave_vector_class(
+    packet_type="resources/solitons/Modo-1e-80.dat",
+    means=[-25, -25, 0],
+    st_deviations=[0.5, 0.5, 0.5],
+    simulation=sim,
+    mass=1,
+    omega=1,
+    momenta=[-0, 0, 0],
+    spin=1
+)
+wave_vector1 = Wave_vector_class(
+    packet_type="resources/solitons/Modo-1e-80.dat",
+    means=[25, 25, 0],
     st_deviations=[0.5, 0.5, 0.5],
     simulation=sim,
     mass=1,
     omega=1,
     momenta=[0, 0, 0],
+    spin=2
 )
 
-w_vect = Wave_vector_class(wave_function=wave,spin=1)
 
-sim.add_wave_function(w_vect.wave_vector)
-sim.evolve(save_every=250)
+sim.add_wave_vector(wave_vector)
+sim.add_wave_vector(wave_vector1)
+
+sim.evolve(save_every=100)
 
 '''
 centers = np.zeros((10, 3))

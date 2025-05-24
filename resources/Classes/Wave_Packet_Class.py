@@ -2,6 +2,7 @@ from resources.Functions.Schrodinger_eq_functions import *
 from resources.Errors.Errors import *
 import numpy as np
 import os
+from scipy.interpolate import interp1d
 import pandas as pd
 
 class Packet():
@@ -82,13 +83,11 @@ class Packet():
         if is_file:
             # If `packet_type` is a path, treat it as a file
             file_path = self.packet_type
-            M_original = self.compute_original_soliton_mass(file_path)
-            print(f"Original soliton mass: {M_original}")
             if not os.path.exists(file_path):
                 raise FileNotFoundError(
                     f"Could not find the specified wave function file '{file_path}'. Raised from Wave_Packet_Class.py")
 
-            wave_packet = self.create_ground_state(file_path)
+            wave_packet = self._create_ground_state(file_path)
 
             wave_packet *= self.momentum_propagator
 
@@ -121,10 +120,8 @@ class Packet():
             Returns:
                     np.ndarray: The normalized Gaussian wavefunction.
             """
-        # Convert means and st_deviations to cupy arrays
         means_arr = np.array(self.means)
         st_deviations_arr = np.array(self.st_deviations)
-
         # Stack grids for proper broadcasting
         # grids_stacked = np.stack(self.grids, axis=0)
         psi_0 = np.ones_like(self.grids[0])
@@ -135,38 +132,35 @@ class Packet():
         # psi_0 = normalize_wavefunction(psi_0, dx_total)
         return psi_0 + 0j
 
-    def create_ground_state(self, file_path):
+    def _create_ground_state(self, file_path):
         """
-        Creates a ground state wave packet from data file.
+        Creates a ground state wave packet from data file using interpolation.
 
         Parameters:
             file_path (str): Path to the file containing ground state data.
 
         Returns:
-            np.ndarray: The normalized ground state wavefunction.
+            np.ndarray: The interpolated ground state wavefunction.
         """
 
         data = self.read_ground_state_data(file_path)
 
-        # Extract radial distance and wave function values
-        r_values = data[:, 0]  # First column is r (sorted in file)
-        phi_values = data[:, 1]  # Second column is phi
+        # Extract r and phi
+        r_values = data[:, 0]
+        phi_values = data[:, 1]
 
-        # Compute r_distance efficiently for all grid points
+        # Interpolator for phi(r)
+        interp_phi = interp1d(r_values, phi_values, kind='linear',
+                              bounds_error=False, fill_value=0.0)
+
+        # Compute r at each grid point
         r_distance = np.zeros_like(self.grids[0])
         for dim in range(self.dim):
             r_distance += (self.grids[dim] - self.means[dim]) ** 2
         r_distance = np.sqrt(r_distance)
 
-
-        closest_r_indices = np.searchsorted(r_values, r_distance)
-
-        # Ensure indices stay within bounds
-        closest_r_indices = np.clip(closest_r_indices, 0, len(r_values) - 1)
-
-        # Assign phi_values based on the found indices
-        psi_0 = phi_values[closest_r_indices]
-
+        # Interpolate φ at each grid point
+        psi_0 = interp_phi(r_distance)
 
         return psi_0.astype(np.complex64)
 

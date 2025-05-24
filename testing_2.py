@@ -10,26 +10,27 @@ import numpy as np
 
 
 
-#TODO: change the creation process to be done on CPU instead of gpu
+
 #TODO: integrate over the ground state to get Mass of the system and normalize that
 #TODO: Try the normal seed thing
-#TODO: move from combined wave to treating each wave individually
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-50, 50),(-50, 50),(-20,20)], # Spatial boundaries
-    N=32,                             # Grid resolution
-    total_time=0.5,                   # Total simulation time
-    h=0.01,                            # Time step
+    boundaries=[(-20, 20),(-20, 20),(-20,20)], # Spatial boundaries
+    N=64,                             # Grid resolution
+    total_time=12,                   # Total simulation time
+    h=0.04,                            # Time step
     order_of_evolution=2,
     use_gravity=True , # Enable gravitational effects
     static_potential=None,
     save_max_vals=True,
-    a_s=-1e-80
+    a_s=-1e-80,
+    soliton_mass=3.47e6
+
 )
 wave_vector = Wave_vector_class(
     packet_type="resources/solitons/Modo-1e-80.dat",
-    means=[-25, -25, 0],
+    means=[-0, -0, 0],
     st_deviations=[0.5, 0.5, 0.5],
     simulation=sim,
     mass=1,
@@ -37,8 +38,6 @@ wave_vector = Wave_vector_class(
     momenta=[-0, 0, 0],
     spin=2
 )
-
-
 
 sim.add_wave_vector(wave_vector)
 

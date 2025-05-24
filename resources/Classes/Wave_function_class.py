@@ -54,8 +54,13 @@ class Wave_function():  # Streamlined and unified evolution logic
 
 
     def calclulate_soliton_mass(self):
-        self.soliton_mass = self.packet_creator.compute_original_soliton_mass(self.packet_type)
+        density = np.abs(self.psi) ** 2
+        volume_element = np.prod(self.dx)
+        mass = np.sum(density)*volume_element
+        return mass
 
+    def calculate_density(self):
+        return cp.abs(self.psi).astype(cp.float32) ** 2
 
 
 

@@ -218,7 +218,7 @@ class Evolution_Class:
         """Calculate the total density ρ = Σ|ψᵢ|² from all wave functions."""
         total_density = cp.zeros_like(wave_functions[0].psi, dtype=cp.float64)
         for wf in wave_functions:
-            density_i = cp.abs(wf.psi).astype(cp.float64) ** 2
+            density_i = wf.calculate_density()
             total_density += density_i
         return total_density
 

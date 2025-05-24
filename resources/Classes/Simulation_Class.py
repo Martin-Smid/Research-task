@@ -147,8 +147,10 @@ class Simulation_Class:
         self.accessible_times = []
         self.wave_values = []
 
+
         self.use_self_int =self_int
         self.a_s = a_s
+        self.desired_soliton_mass = soliton_mass
 
     def setup_units(self, sim_units, m_s):
         """
@@ -168,7 +170,7 @@ class Simulation_Class:
                 setattr(self, f"{key}_unit", getattr(units, value))
 
         # Mass of the particle
-        self.desired_soliton_mass = soliton_mass
+
 
         self.m_s = m_s
         self.mass_s = (m_s * self.eUnits_unit / constants.c ** 2).to(f"{self.mUnits}").value

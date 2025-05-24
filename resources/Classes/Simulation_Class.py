@@ -81,10 +81,10 @@ class Simulation_Class:
     separate classes.
     """
 
-    @parameter_check(int, list, int, (int, float), (int, float),int, float, bool, object, bool, dict,bool)
+    @parameter_check(int, list, int, (int, float), (int, float),int, float, bool, object, bool, dict,bool,bool)
     def __init__(self, dim, boundaries, N, total_time, h,order_of_evolution = 2, m_s=10e-22, use_gravity=False,
                  static_potential=None, save_max_vals=False,
-                 sim_units={"dUnits": "kpc", "tUnits": "Gyr", "mUnits": "Msun", "eUnits": "eV"},use_units=True):
+                 sim_units={"dUnits": "kpc", "tUnits": "Gyr", "mUnits": "Msun", "eUnits": "eV"},use_units=True,self_int=True):
         """
         Initialize the simulation parameters and setup.
 
@@ -145,7 +145,7 @@ class Simulation_Class:
         self.accessible_times = []
         self.wave_values = []
 
-        self.use_self_int =True
+        self.use_self_int =self_int
 
     def setup_units(self, sim_units, m_s):
         """
@@ -334,11 +334,7 @@ class Simulation_Class:
         # Get the minimum Δx (most restrictive)
         min_dx = min(self.dx)
 
-        # Constants (in natural units)
 
-
-        # Calculate first constraint
-        print(self.h_bar_tilde)
 
         first_constraint = ((4) / (3 * cp.pi) * (1/self.h_bar_tilde)* min_dx ** 2)
 
@@ -386,7 +382,5 @@ class Simulation_Class:
         """
         # Convert wave function: ψ_sol = ψ̂_sol * (ħ/√G)
         conversion_factor = self.h_bar_tilde / np.sqrt(self.G)
-        print(conversion_factor)
-        print("to nad tim")
         for wf in self.wave_functions:
             wf.psi = wf.psi  * conversion_factor

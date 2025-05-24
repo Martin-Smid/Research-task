@@ -147,11 +147,14 @@ class Evolution_Class:
         is_last_step = (step_index == total_steps - 1)
 
 
-        #density_at_step = self.compute_density(summed_wf)/len(wave_functions)
+        total_density = self.compute_density(wave_functions)
+
+
+
 
         # Kick step for all wave functions
         for wf in wave_functions:
-            wf.psi = self.kick_step(wf.psi, is_first_step, is_last_step)
+            wf.psi = self.kick_step(wf.psi,total_density, is_first_step, is_last_step)
 
         # Drift step for all wave functions
         for wf in wave_functions:
@@ -160,7 +163,7 @@ class Evolution_Class:
         # Final kick step for last iteration
         if is_last_step:
             for wf in wave_functions:
-                wf.psi = self.kick_step(wf.psi, is_first_step, is_last_step)
+                wf.psi = self.kick_step(wf.psi,total_density, is_first_step, is_last_step)
 
         # Track maximum values if enabled
         if self.save_max_vals:
@@ -523,7 +526,7 @@ class Evolution_Class:
         print(f"{self.max_vals_filename} saved")
 
 
-    def kick_step(self, psi, is_first_step, is_last_step, time_factor_key='full'):
+    def kick_step(self, psi,density, is_first_step, is_last_step, time_factor_key='full'):
         """
         Takes care of the propagation by potential.
 
@@ -542,11 +545,11 @@ class Evolution_Class:
         # Calculate gravity propagator (which depends on psi)
         if is_first_step or is_last_step:
             gravity_propagator = self.propagator.compute_gravity_propagator(
-                psi, first_step=is_first_step, last_step=is_last_step, time_factor=time_factor
+                psi,density, first_step=is_first_step, last_step=is_last_step, time_factor=time_factor
             )
         else:
             gravity_propagator = self.propagator.compute_gravity_propagator(
-                psi, time_factor=time_factor
+                psi, density,time_factor=time_factor
             )
 
         # Use pre-calculated static potential propagator
@@ -578,3 +581,19 @@ class Evolution_Class:
         return cp.fft.ifftn(psi_k)
 
 
+    def compute_density(self, wave_functions):
+        """
+        Calculate the density ρ = |ψ|².
+
+        Parameters:
+            psi: Wave function
+
+        Returns:
+            cp.ndarray: The density distribution
+        """
+        total_density = cp.zeros_like(wave_functions[0].psi)
+        for wf in wave_functions:
+            density_i = cp.abs(wf.psi).astype(cp.float64) ** 2
+            total_density += density_i
+
+        return total_density

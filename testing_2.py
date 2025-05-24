@@ -18,7 +18,7 @@ import numpy as np
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-20, 20),(-20, 20),(-20,20)], # Spatial boundaries
-    N=64,                             # Grid resolution
+    N=32,                             # Grid resolution
     total_time=10,                   # Total simulation time
     h=0.01,                            # Time step
     order_of_evolution=2,
@@ -38,10 +38,10 @@ wave = Wave_function(
     momenta=[0, 0, 0],
 )
 
-w_vect = Wave_vector_class(wave_function=wave,spin=3)
+w_vect = Wave_vector_class(wave_function=wave,spin=1)
 
 sim.add_wave_function(w_vect.wave_vector)
-sim.evolve(save_every=1000)
+sim.evolve(save_every=250)
 
 '''
 centers = np.zeros((10, 3))

@@ -74,7 +74,7 @@ class Propagator_Class:
 
         return self.static_potential_propagator
 
-    def compute_gravity_propagator(self, psi, first_step=False, last_step=False,time_factor=1):
+    def compute_gravity_propagator(self, psi, density,first_step=False, last_step=False,time_factor=1):
         """
         Compute the gravitational potential propagator based on current wave function density.
 
@@ -90,7 +90,7 @@ class Propagator_Class:
         if not self.simulation.use_gravity:
             return cp.ones_like(psi, dtype=cp.complex64)
 
-        density = self.compute_density(psi)
+        #density = self.compute_density(psi)
 
         a_s = (-1e-80 * units.cm).to(f"{self.simulation.dUnits}").value
 
@@ -99,8 +99,7 @@ class Propagator_Class:
             self_int_potential = cp.ones_like(psi, dtype=cp.complex64)
         elif self.simulation.use_self_int:
             self_int_potential = self.get_self_int_potential(density, psi, a_s)
-            if first_step:
-                print("byl jsem tu")
+
 
 
         # Solve Poisson equation for gravitational potential
@@ -132,17 +131,7 @@ class Propagator_Class:
         return potential
 
 
-    def compute_density(self, psi):
-        """
-        Calculate the density ρ = |ψ|².
 
-        Parameters:
-            psi: Wave function
-
-        Returns:
-            cp.ndarray: The density distribution
-        """
-        return cp.abs(psi).astype(cp.float64) ** 2
 
     def solve_poisson(self, density):
         """

@@ -1,6 +1,6 @@
 from resources.Functions.Schrodinger_eq_functions import *
 from resources.Errors.Errors import *
-import cupy as cp
+import numpy as np
 import os
 import pandas as pd
 
@@ -19,7 +19,7 @@ class Packet():
             packet_type (str): Type of the wave packet ('gaussian', 'LHO', etc.).
             means (list): Mean positions for the wave packet in each dimension.
             st_deviations (list): Standard deviations for the wave packet in each dimension.
-            grids (list[cp.ndarray]): Precomputed grids for the domain (one grid per dimension).
+            grids (list[np.ndarray]): Precomputed grids for the domain (one grid per dimension).
             dx (list[float]): List of grid spacings for each dimension.
             mass (float): Mass of the particle in the wave packet.
             omega (float): Frequency of the harmonic oscillator.
@@ -48,14 +48,14 @@ class Packet():
         """Compute the kinetic propagator based on Fourier space components."""
         # Use single-precision floats to save memory
         momenta = [
-            1j * cp.array((momentum / self.h_bar_tilde) * grid, dtype=cp.float32)
+            1j * np.array((momentum / self.h_bar_tilde) * grid, dtype=np.float32)
             for momentum, grid in zip(self.momenta, self.grids)]
-        summed_momenta = cp.zeros_like(momenta[0])
+        summed_momenta = np.zeros_like(momenta[0])
         for momentum in momenta:
             summed_momenta += momentum
 
 
-        return cp.exp(summed_momenta)
+        return np.exp(summed_momenta)
 
     def create_psi_0(self):
         """
@@ -82,6 +82,8 @@ class Packet():
         if is_file:
             # If `packet_type` is a path, treat it as a file
             file_path = self.packet_type
+            M_original = self.compute_original_soliton_mass(file_path)
+            print(f"Original soliton mass: {M_original}")
             if not os.path.exists(file_path):
                 raise FileNotFoundError(
                     f"Could not find the specified wave function file '{file_path}'. Raised from Wave_Packet_Class.py")
@@ -117,19 +119,19 @@ class Packet():
             Creates a Gaussian wave packet based on the provided means and standard deviations.
 
             Returns:
-                cp.ndarray: The normalized Gaussian wavefunction.
+                    np.ndarray: The normalized Gaussian wavefunction.
             """
         # Convert means and st_deviations to cupy arrays
-        means_arr = cp.array(self.means)
-        st_deviations_arr = cp.array(self.st_deviations)
+        means_arr = np.array(self.means)
+        st_deviations_arr = np.array(self.st_deviations)
 
         # Stack grids for proper broadcasting
-        # grids_stacked = cp.stack(self.grids, axis=0)
-        psi_0 = cp.ones_like(self.grids[0])
+        # grids_stacked = np.stack(self.grids, axis=0)
+        psi_0 = np.ones_like(self.grids[0])
         for i in range(len(self.grids)):
             psi_0 *= gaussian_packet(self.grids[i], means_arr[i], st_deviations_arr[i])
 
-        dx_total = cp.prod(cp.array(self.dx))  # Total grid spacing in all dimensions
+        dx_total = np.prod(np.array(self.dx))  # Total grid spacing in all dimensions
         # psi_0 = normalize_wavefunction(psi_0, dx_total)
         return psi_0 + 0j
 
@@ -141,7 +143,7 @@ class Packet():
             file_path (str): Path to the file containing ground state data.
 
         Returns:
-            cp.ndarray: The normalized ground state wavefunction.
+            np.ndarray: The normalized ground state wavefunction.
         """
 
         data = self.read_ground_state_data(file_path)
@@ -151,22 +153,22 @@ class Packet():
         phi_values = data[:, 1]  # Second column is phi
 
         # Compute r_distance efficiently for all grid points
-        r_distance = cp.zeros_like(self.grids[0])
+        r_distance = np.zeros_like(self.grids[0])
         for dim in range(self.dim):
             r_distance += (self.grids[dim] - self.means[dim]) ** 2
-        r_distance = cp.sqrt(r_distance)
+        r_distance = np.sqrt(r_distance)
 
 
-        closest_r_indices = cp.searchsorted(r_values, r_distance)
+        closest_r_indices = np.searchsorted(r_values, r_distance)
 
         # Ensure indices stay within bounds
-        closest_r_indices = cp.clip(closest_r_indices, 0, len(r_values) - 1)
+        closest_r_indices = np.clip(closest_r_indices, 0, len(r_values) - 1)
 
         # Assign phi_values based on the found indices
         psi_0 = phi_values[closest_r_indices]
 
 
-        return psi_0.astype(cp.complex64)
+        return psi_0.astype(np.complex64)
 
     def read_ground_state_data(self, file_path):
         """
@@ -201,7 +203,7 @@ class Packet():
                     data.append([r, phi])
 
             # Converting to cupy array
-            return cp.array(data)
+            return np.array(data)
 
         except FileNotFoundError:
             raise FileNotFoundError(f"File '{file_path}' not found.")
@@ -216,11 +218,38 @@ class Packet():
         Creates a wave packet for the linear harmonic oscillator (LHO).
 
         Returns:
-            cp.ndarray: The normalized LHO wavefunction.
+            np.ndarray: The normalized LHO wavefunction.
         """
         # Pass self to lin_harmonic_oscillator
         psi_0 = lin_harmonic_oscillator(self)
 
         # Normalize the wavefunction over all dimensions
-        dx_total = cp.prod(cp.array(self.dx))
+        dx_total = np.prod(np.array(self.dx))
         return psi_0 + 0j
+
+    def compute_original_soliton_mass(self, file_path):
+        """
+        Compute the mass of the original soliton from file data,
+        assuming spherical symmetry: M = 4π ∫ |phi(r)|² * r² dr
+
+        Parameters:
+            file_path (str): Path to the file with r and phi values.
+
+        Returns:
+            float: The computed original soliton mass.
+        """
+        # Load data from file using CPU (NumPy)
+        data = self.read_ground_state_data(file_path)
+
+        r = data[:, 0]
+        phi = data[:, 1]
+        # Compute density = |phi(r)|^2, assuming real phi
+        density = phi ** 2
+        # Compute integrand: ρ(r) * r²
+        integrand = density * r ** 2
+        # Integrate using the trapezoidal rule
+        mass_integral = np.trapz(integrand, x=r)
+        # Multiply by 4π for spherical symmetry
+        M_original = 4 * np.pi * mass_integral
+        return M_original
+

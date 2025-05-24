@@ -82,10 +82,10 @@ class Simulation_Class:
     separate classes.
     """
 
-    @parameter_check(int, list, int, (int, float), (int, float),int, float, bool, object, bool, dict,bool,bool,float)
+    @parameter_check(int, list, int, (int, float), (int, float),int, float, bool, object, bool, dict,bool,bool,float,float)
     def __init__(self, dim, boundaries, N, total_time, h,order_of_evolution = 2, m_s=10e-22, use_gravity=False,
                  static_potential=None, save_max_vals=False,
-                 sim_units={"dUnits": "kpc", "tUnits": "Gyr", "mUnits": "Msun", "eUnits": "eV"},use_units=True,self_int=True,a_s=-10e-80):
+                 sim_units={"dUnits": "kpc", "tUnits": "Gyr", "mUnits": "Msun", "eUnits": "eV"},use_units=True,self_int=True,a_s=-10e-80, soliton_mass=1e6):
         """
         Initialize the simulation parameters and setup.
 
@@ -168,6 +168,8 @@ class Simulation_Class:
                 setattr(self, f"{key}_unit", getattr(units, value))
 
         # Mass of the particle
+        self.desired_soliton_mass = soliton_mass
+
         self.m_s = m_s
         self.mass_s = (m_s * self.eUnits_unit / constants.c ** 2).to(f"{self.mUnits}").value
         self.c = constants.c.to(f"{self.dUnits}/{self.tUnits}").value
@@ -212,10 +214,10 @@ class Simulation_Class:
             # If the boundaries are valid, unpack them
             dx_dim = (b - a) / (self.N - 1)
             dx_values.append(dx_dim)
-            grids.append(cp.linspace(a, b, self.N, endpoint=False))
+            grids.append(np.linspace(a, b, self.N, endpoint=False))
 
         # Generate multidimensional grids
-        mesh = cp.meshgrid(*grids, indexing="ij")
+        mesh = np.meshgrid(*grids, indexing="ij")
         return dx_values, mesh
 
     def create_k_space(self):
@@ -227,11 +229,11 @@ class Simulation_Class:
         """
         # Create k-space components with single-precision floats
         k_components = [
-            2 * cp.pi * cp.fft.fftfreq(self.N, d=self.dx[i]).astype(cp.float32)
+            2 * np.pi * cp.fft.fftfreq(self.N, d=self.dx[i]).astype(cp.float32)
             for i in range(self.dim)
         ]
         # Create multidimensional k-space
-        k_space = cp.meshgrid(*k_components, indexing='ij')
+        k_space = np.meshgrid(*k_components, indexing='ij')
         return k_space
 
     def add_wave_vector(self, wave_vector):
@@ -270,11 +272,13 @@ class Simulation_Class:
             raise ValueError("No wave functions added to the simulation")
         self.wave_functions = list(chain.from_iterable(self.wave_functions))
 
+        if self.use_units:
+            self.calculate_physical_units()
+
         if not self.check_time_step_restriction():
             return
 
-        if self.use_units:
-            self.calculate_physical_units()
+
 
         self.propagator = Propagator_Class(self)
         self.evolution = Evolution_Class(self, self.propagator,order=self.order_of_evolution)
@@ -327,8 +331,6 @@ class Simulation_Class:
         # Get the minimum Δx (most restrictive)
         min_dx = min(self.dx)
 
-
-
         first_constraint = ((4) / (3 * cp.pi) * (1/self.h_bar_tilde)* min_dx ** 2)
 
         # Calculate second constraint based on potential
@@ -377,3 +379,8 @@ class Simulation_Class:
         conversion_factor = self.h_bar_tilde / np.sqrt(self.G)
         for wf in self.wave_functions:
             wf.psi = wf.psi  * conversion_factor
+            wf.calclulate_soliton_mass()
+            #scaling_lambda = self.desired_soliton_mass / wf.soliton_mass
+            scaling_lambda = 1
+            wf.psi *= scaling_lambda
+

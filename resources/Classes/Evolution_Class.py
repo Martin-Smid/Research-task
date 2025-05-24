@@ -102,7 +102,8 @@ class Evolution_Class:
             4: self._evolve_order_4,
             6: self._evolve_order_6
         }
-
+        for wf in wave_functions:
+            wf.psi = cp.asarray(wf.psi)
         if self.order not in evolution_methods:
             raise ValueError(f"Order {self.order} is not supported. Use 2, 4, or 6.")
 

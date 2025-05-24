@@ -1,5 +1,5 @@
 import numpy as np
-import cupy as cp
+
 
 
 from resources.Classes.Wave_function_class import *
@@ -56,10 +56,10 @@ class Wave_vector_class:
     def _setup_vector(self):
         np.random.seed(1)
         num_polarization_states = 2 * self.spin + 1
-        self.polarization_coefficients = cp.asarray(np.random.uniform(0, 1, num_polarization_states))
-        self.polarization_coefficients = self.polarization_coefficients / cp.linalg.norm(self.polarization_coefficients)
-        self.polarization_phases = cp.asarray(cp.random.uniform(0, 2 * cp.pi, num_polarization_states))
-        self.polarization_phases /= cp.linalg.norm(self.polarization_phases)
+        self.polarization_coefficients = np.asarray(np.random.uniform(0, 1, num_polarization_states))
+        self.polarization_coefficients = self.polarization_coefficients / np.linalg.norm(self.polarization_coefficients)
+        self.polarization_phases = np.asarray(np.random.uniform(0, 2 * np.pi, num_polarization_states))
+        self.polarization_phases /= np.linalg.norm(self.polarization_phases)
 
         self._initialize_polarization_bases()
         self.wave_vector = self._create_combined_wave_function()
@@ -135,49 +135,49 @@ class Wave_vector_class:
         """
         if self.spin == 0:
             # Spin 0 has a single scalar state
-            self.polarization_bases = [cp.array(1)]
+            self.polarization_bases = [np.array(1)]
 
         elif self.spin == 1:
             # Spin 1 has three vector states with polarizations -1, 0, +1
             self.polarization_bases = [
-                1 / cp.sqrt(2) * cp.array([1, +1j, 0]),  # Polarization +1
-                1 / cp.sqrt(2) * cp.array([1, -1j, 0]),  # Polarization -1
-                cp.array([0, 0, 1])  # Polarization 0
+                1 / np.sqrt(2) * np.array([1, +1j, 0]),  # Polarization +1
+                1 / np.sqrt(2) * np.array([1, -1j, 0]),  # Polarization -1
+                np.array([0, 0, 1])  # Polarization 0
             ]
 
         elif self.spin == 2:
             # Spin 2 has five tensor states with polarizations -2, -1, 0, +1, +2
             self.polarization_bases = [
                 # Polarization +2
-                1 / 2 * cp.array([
+                1 / 2 * np.array([
                     [1, 1j, 0],
                     [1j, -1, 0],
                     [0, 0, 0]
                 ]),
 
                 # Polarization +1
-                1 / 2 * cp.array([
+                1 / 2 * np.array([
                     [0, 0, 1],
                     [0, 0, 1j],
                     [1, 1j, 0]
                 ]),
 
                 # Polarization 0
-                1 / cp.sqrt(6) * cp.array([
+                1 / np.sqrt(6) * np.array([
                     [-1, 0, 0],
                     [0, -1, 0],
                     [0, 0, 2]
                 ]),
 
                 # Polarization -1
-                1 / 2 * cp.array([
+                1 / 2 * np.array([
                     [0, 0, 1],
                     [0, 0, -1j],
                     [1, -1j, 0]
                 ]),
 
                 # Polarization -2
-                1 / 2 * cp.array([
+                1 / 2 * np.array([
                     [1, -1j, 0],
                     [-1j, -1, 0],
                     [0, 0, 0]
@@ -190,13 +190,13 @@ class Wave_vector_class:
             pol_shape = (3, 3, 3)  # 3×3×3 tensor for rank-3
 
             # Create empty tensors for each polarization state
-            p_plus3 = cp.zeros(pol_shape, dtype=cp.complex64)
-            p_plus2 = cp.zeros(pol_shape, dtype=cp.complex64)
-            p_plus1 = cp.zeros(pol_shape, dtype=cp.complex64)
-            p_zero = cp.zeros(pol_shape, dtype=cp.complex64)
-            p_minus1 = cp.zeros(pol_shape, dtype=cp.complex64)
-            p_minus2 = cp.zeros(pol_shape, dtype=cp.complex64)
-            p_minus3 = cp.zeros(pol_shape, dtype=cp.complex64)
+            p_plus3 = np.zeros(pol_shape, dtype=np.complex64)
+            p_plus2 = np.zeros(pol_shape, dtype=np.complex64)
+            p_plus1 = np.zeros(pol_shape, dtype=np.complex64)
+            p_zero = np.zeros(pol_shape, dtype=np.complex64)
+            p_minus1 = np.zeros(pol_shape, dtype=np.complex64)
+            p_minus2 = np.zeros(pol_shape, dtype=np.complex64)
+            p_minus3 = np.zeros(pol_shape, dtype=np.complex64)
 
             # Polarization +3
             # Most elements are zero except for specific components
@@ -204,7 +204,7 @@ class Wave_vector_class:
             p_plus3[0, 0, 1] = p_plus3[0, 1, 0] = p_plus3[1, 0, 0] = 3j
             p_plus3[0, 1, 1] = p_plus3[1, 0, 1] = p_plus3[1, 1, 0] = -3
             p_plus3[1, 1, 1] = -1j
-            p_plus3 = p_plus3 / (2 * cp.sqrt(10))  # Normalization factor
+            p_plus3 = p_plus3 / (2 * np.sqrt(10))  # Normalization factor
 
             # Polarization +2
             # Fill select components for the +2 polarization
@@ -212,25 +212,25 @@ class Wave_vector_class:
             p_plus2[0, 1, 2] = p_plus2[0, 2, 1] = p_plus2[1, 0, 2] = p_plus2[1, 2, 0] = p_plus2[2, 0, 1] = p_plus2[
                 2, 1, 0] = 1j
             p_plus2[1, 1, 2] = p_plus2[1, 2, 1] = p_plus2[2, 1, 1] = -1
-            p_plus2 = p_plus2 / (2 * cp.sqrt(15))  # Normalization factor
+            p_plus2 = p_plus2 / (2 * np.sqrt(15))  # Normalization factor
 
             # Polarization +1
             # Fill select components for the +1 polarization
             p_plus1[0, 2, 2] = p_plus1[2, 0, 2] = p_plus1[2, 2, 0] = 1
             p_plus1[1, 2, 2] = p_plus1[2, 1, 2] = p_plus1[2, 2, 1] = 1j
-            p_plus1 = p_plus1 / (2 * cp.sqrt(5))  # Normalization factor
+            p_plus1 = p_plus1 / (2 * np.sqrt(5))  # Normalization factor
 
             # Polarization 0
             # The zero polarization state is typically diagonal
             p_zero[0, 0, 0] = p_zero[1, 1, 1] = -3
             p_zero[2, 2, 2] = 6
-            p_zero = p_zero / (6 * cp.sqrt(10))  # Normalization factor
+            p_zero = p_zero / (6 * np.sqrt(10))  # Normalization factor
 
             # Polarization -1
             # Conjugate of +1 polarization
             p_minus1[0, 2, 2] = p_minus1[2, 0, 2] = p_minus1[2, 2, 0] = 1
             p_minus1[1, 2, 2] = p_minus1[2, 1, 2] = p_minus1[2, 2, 1] = -1j
-            p_minus1 = p_minus1 / (2 * cp.sqrt(5))  # Normalization factor
+            p_minus1 = p_minus1 / (2 * np.sqrt(5))  # Normalization factor
 
             # Polarization -2
             # Conjugate of +2 polarization
@@ -238,7 +238,7 @@ class Wave_vector_class:
             p_minus2[0, 1, 2] = p_minus2[0, 2, 1] = p_minus2[1, 0, 2] = p_minus2[1, 2, 0] = p_minus2[2, 0, 1] = \
             p_minus2[2, 1, 0] = -1j
             p_minus2[1, 1, 2] = p_minus2[1, 2, 1] = p_minus2[2, 1, 1] = -1
-            p_minus2 = p_minus2 / (2 * cp.sqrt(15))  # Normalization factor
+            p_minus2 = p_minus2 / (2 * np.sqrt(15))  # Normalization factor
 
             # Polarization -3
             # Conjugate of +3 polarization
@@ -246,7 +246,7 @@ class Wave_vector_class:
             p_minus3[0, 0, 1] = p_minus3[0, 1, 0] = p_minus3[1, 0, 0] = -3j
             p_minus3[0, 1, 1] = p_minus3[1, 0, 1] = p_minus3[1, 1, 0] = -3
             p_minus3[1, 1, 1] = 1j
-            p_minus3 = p_minus3 / (2 * cp.sqrt(10))  # Normalization factor
+            p_minus3 = p_minus3 / (2 * np.sqrt(10))  # Normalization factor
 
             # Store all polarization bases in a list
             self.polarization_bases = [
@@ -282,7 +282,7 @@ class Wave_vector_class:
         if self.spin == 0:
             # For spin 0, create a single new wave function with updated psi
             new_wave_function = copy.deepcopy(self.wave_blueprint[0])
-            new_wave_function.psi = self.wave_blueprint[0].psi * self.polarization_coefficients[0] * cp.exp(
+            new_wave_function.psi = self.wave_blueprint[0].psi * self.polarization_coefficients[0] * np.exp(
                 -1j * self.polarization_phases[0])
             wave_vector = [new_wave_function]
 
@@ -292,10 +292,10 @@ class Wave_vector_class:
                 # Use a single wave function as blueprint for all polarizations
                 # Compute the weighted sum of the three polarization states
                 weighted_bases = [self.polarization_bases[p] * self.polarization_coefficients[p] *
-                                  cp.exp(-1j * self.polarization_phases[p]) for p in range(3)]
+                                  np.exp(-1j * self.polarization_phases[p]) for p in range(3)]
 
                 # Sum these weighted bases to get the combined coefficient vector
-                combined_coefficients = cp.sum(cp.array(weighted_bases), axis=0)
+                combined_coefficients = np.sum(np.array(weighted_bases), axis=0)
 
                 # For each component of the vector, create a new wave function
                 for i in range(len(combined_coefficients)):
@@ -306,7 +306,7 @@ class Wave_vector_class:
                 # Use three separate wave functions, one for each polarization
                 for p in range(3):
                     new_wave_function = copy.deepcopy(self.wave_blueprint[p])
-                    new_wave_function.psi = self.wave_blueprint[p].psi * self.polarization_coefficients[p] * cp.exp(
+                    new_wave_function.psi = self.wave_blueprint[p].psi * self.polarization_coefficients[p] * np.exp(
                         -1j * self.polarization_phases[p])
                     wave_vector.append(new_wave_function)
 
@@ -315,10 +315,10 @@ class Wave_vector_class:
                 # Use a single wave function as blueprint for all polarizations
                 # Compute the weighted sum of the five polarization states
                 weighted_bases = [self.polarization_bases[p] * self.polarization_coefficients[p] *
-                                  cp.exp(-1j * self.polarization_phases[p]) for p in range(5)]
+                                  np.exp(-1j * self.polarization_phases[p]) for p in range(5)]
 
                 # Sum these weighted bases to get the combined coefficient tensor
-                combined_coefficients = cp.sum(cp.array(weighted_bases), axis=0)
+                combined_coefficients = np.sum(np.array(weighted_bases), axis=0)
 
                 # For each component of the tensor, create a new wave function
                 for i in range(combined_coefficients.shape[0]):
@@ -336,11 +336,11 @@ class Wave_vector_class:
                             break
 
                         # Find which components to apply from each polarization state
-                        polarization_sum = cp.zeros((), dtype=cp.complex128)
+                        polarization_sum = np.zeros((), dtype=np.complex128)
                         for p in range(5):  # 5 polarization states for spin 2
                             if i < self.polarization_bases[p].shape[0] and j < self.polarization_bases[p].shape[1]:
                                 polarization_sum += self.polarization_bases[p][i, j] * self.polarization_coefficients[
-                                    p] * cp.exp(
+                                    p] * np.exp(
                                     -1j * self.polarization_phases[p])
 
                         new_wave_function = copy.deepcopy(self.wave_blueprint[idx % 3])
@@ -355,11 +355,11 @@ class Wave_vector_class:
                         new_wave_function = copy.deepcopy(self.wave_blueprint[idx])
 
                         # Find which components to apply from each polarization state
-                        polarization_sum = cp.zeros((), dtype=cp.complex128)
+                        polarization_sum = np.zeros((), dtype=np.complex128)
                         for p in range(5):  # 5 polarization states for spin 2
                             if i < self.polarization_bases[p].shape[0] and j < self.polarization_bases[p].shape[1]:
                                 polarization_sum += self.polarization_bases[p][i, j] * self.polarization_coefficients[
-                                    p] * cp.exp(
+                                    p] * np.exp(
                                     -1j * self.polarization_phases[p])
 
                         new_wave_function.psi = self.wave_blueprint[idx].psi * polarization_sum
@@ -372,10 +372,10 @@ class Wave_vector_class:
                 # Use a single wave function as blueprint for all polarizations
                 # Compute the weighted sum of the seven polarization states
                 weighted_bases = [self.polarization_bases[p] * self.polarization_coefficients[p] *
-                                  cp.exp(-1j * self.polarization_phases[p]) for p in range(7)]
+                                  np.exp(-1j * self.polarization_phases[p]) for p in range(7)]
 
                 # Sum these weighted bases to get the combined coefficient tensor
-                combined_coefficients = cp.sum(cp.array(weighted_bases), axis=0)
+                combined_coefficients = np.sum(np.array(weighted_bases), axis=0)
 
                 # For each component of the rank-3 tensor, create a new wave function
                 for i in range(combined_coefficients.shape[0]):
@@ -395,10 +395,10 @@ class Wave_vector_class:
                                 break
 
                             # Find which components to apply from each polarization state
-                            polarization_sum = cp.zeros((), dtype=cp.complex128)
+                            polarization_sum = np.zeros((), dtype=np.complex128)
                             for p in range(7):  # 7 polarization states for spin 3
                                 polarization_sum += self.polarization_bases[p][i, j, k] * \
-                                                    self.polarization_coefficients[p] * cp.exp(
+                                                    self.polarization_coefficients[p] * np.exp(
                                     -1j * self.polarization_phases[p])
 
                             new_wave_function = copy.deepcopy(self.wave_blueprint[idx % 3])
@@ -416,10 +416,10 @@ class Wave_vector_class:
                                 break
 
                             # Find which components to apply from each polarization state
-                            polarization_sum = cp.zeros((), dtype=cp.complex128)
+                            polarization_sum = np.zeros((), dtype=np.complex128)
                             for p in range(7):  # 7 polarization states for spin 3
                                 polarization_sum += self.polarization_bases[p][i, j, k] * \
-                                                    self.polarization_coefficients[p] * cp.exp(
+                                                    self.polarization_coefficients[p] * np.exp(
                                     -1j * self.polarization_phases[p])
 
                             new_wave_function = copy.deepcopy(self.wave_blueprint[idx % 9])
@@ -436,10 +436,10 @@ class Wave_vector_class:
                             new_wave_function = copy.deepcopy(self.wave_blueprint[idx])
 
                             # Find which components to apply from each polarization state
-                            polarization_sum = cp.zeros((), dtype=cp.complex128)
+                            polarization_sum = np.zeros((), dtype=np.complex128)
                             for p in range(7):  # 7 polarization states for spin 3
                                 polarization_sum += self.polarization_bases[p][i, j, k] * \
-                                                    self.polarization_coefficients[p] * cp.exp(
+                                                    self.polarization_coefficients[p] * np.exp(
                                     -1j * self.polarization_phases[p])
 
                             new_wave_function.psi = self.wave_blueprint[idx].psi * polarization_sum

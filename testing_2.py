@@ -18,8 +18,8 @@ import numpy as np
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-50, 50),(-50, 50),(-20,20)], # Spatial boundaries
-    N=128,                             # Grid resolution
-    total_time=10,                   # Total simulation time
+    N=32,                             # Grid resolution
+    total_time=0.5,                   # Total simulation time
     h=0.01,                            # Time step
     order_of_evolution=2,
     use_gravity=True , # Enable gravitational effects
@@ -35,22 +35,13 @@ wave_vector = Wave_vector_class(
     mass=1,
     omega=1,
     momenta=[-0, 0, 0],
-    spin=1
-)
-wave_vector1 = Wave_vector_class(
-    packet_type="resources/solitons/Modo-1e-80.dat",
-    means=[25, 25, 0],
-    st_deviations=[0.5, 0.5, 0.5],
-    simulation=sim,
-    mass=1,
-    omega=1,
-    momenta=[0, 0, 0],
     spin=2
 )
 
 
+
 sim.add_wave_vector(wave_vector)
-sim.add_wave_vector(wave_vector1)
+
 
 sim.evolve(save_every=100)
 
@@ -87,10 +78,10 @@ x_index = (sim.grids[0].shape[0] // 2)
 y_index = (sim.grids[1].shape[0] //2)
 z_index = (sim.grids[2].shape[0] //2)
 # For the YZ plane plotting
-y_mesh_2d, z_mesh_2d = np.meshgrid(sim.grids[1][0,:,0].get(), sim.grids[2][0,0,:].get())
-x_mesh_2d, z_mesh_2d = np.meshgrid(sim.grids[0][:,0,0].get(), sim.grids[2][0,0,:].get())
+y_mesh_2d, z_mesh_2d = np.meshgrid(sim.grids[1][0,:,0], sim.grids[2][0,0,:])
+x_mesh_2d, z_mesh_2d = np.meshgrid(sim.grids[0][:,0,0], sim.grids[2][0,0,:])
 plt.figure(figsize=(8, 6))
-x_mesh_2d, y_mesh_2d = np.meshgrid(sim.grids[0][:,0,0].get(), sim.grids[1][0,:,0].get())
+x_mesh_2d, y_mesh_2d = np.meshgrid(sim.grids[0][:,0,0], sim.grids[1][0,:,0])
 save_dir = f"resources/data/sim_N{sim.N}_{current_date}"
 if not os.path.exists(save_dir):
     os.makedirs(save_dir)  # This will create all intermediate directories as needed

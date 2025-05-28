@@ -11,8 +11,7 @@ import numpy as np
 
 
 
-#TODO: integrate over the ground state to get Mass of the system and normalize that
-#TODO: Try the normal seed thing
+#TODO recrete plot 1 and 6, using 12 and 13 and 21, do not bother with tau dyn for now
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation

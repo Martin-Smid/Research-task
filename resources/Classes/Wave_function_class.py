@@ -12,7 +12,7 @@ from astropy import units, constants
 
 class Wave_function():  # Streamlined and unified evolution logic
     def __init__(self,simulation,packet_type="gaussian", momenta=[0], means=[0], st_deviations=[0.1],
-                 potential=None, gravity_potential=None, mass=1, omega=1, **kwargs):
+                 potential=None, gravity_potential=None, mass=1, omega=1,desired_soliton_mass=1e6, **kwargs):
         """
         Initialize a wave function with optional gravitational potential.
 
@@ -50,14 +50,18 @@ class Wave_function():  # Streamlined and unified evolution logic
 
 
         self.psi = self.packet_creator.create_psi_0()
-        self.rescale_psi_to_phys_units()
-        self.soliton_mass = self.calclulate_soliton_mass()
-        self.scaling_lambda = self.simulation.desired_soliton_mass / self.soliton_mass
+        self.desired_soliton_mass = desired_soliton_mass
+        print(f"passed mass is {desired_soliton_mass}")
+        #self.rescale_psi_to_phys_units()
+        self.soliton_mass = self.calculate_soliton_mass_from_spherical_data()
+        print(f"calclulated mass is {self.soliton_mass}")
+        self.scaling_lambda = self.desired_soliton_mass / self.soliton_mass
+        print(self.scaling_lambda)
+        print("above is lambda")
         self.psi = self._rescale_psi_to_new_scale_based_on_mass()
 
-
-        print("toto je z wf")
-        print(self.soliton_mass)
+        massss = self.calclulate_soliton_mass()
+        print(massss)
 
         self.potential = potential
         self.gravity_potential = gravity_potential
@@ -69,13 +73,27 @@ class Wave_function():  # Streamlined and unified evolution logic
         mass = np.sum(density)*volume_element
         return mass
 
+    def calculate_soliton_mass_from_spherical_data(self):
+        data = self.packet_creator.read_ground_state_data(self.packet_type)
+        r_values = data[:, 0]
+        phi_values = data[:, 1]
+        phi_values *= self.simulation.h_bar_tilde / np.sqrt(self.simulation.G)
+
+        density = np.abs(phi_values) ** 2  # rho(r) = |psi(r)|^2
+
+        # Use trapezoidal integration for M = ∫ rho(r) * 4πr² dr
+        integrand = 4 * np.pi * r_values ** 2 * density
+        mass = np.trapz(integrand, r_values)
+
+        return mass
+
     def calculate_density(self):
         return cp.abs(self.psi).astype(cp.float32) ** 2
 
     def rescale_psi_to_phys_units(self):
         # Convert wave function: ψ_sol = ψ̂_sol * (ħ/√G)
-        conversion_factor = self.simulation.h_bar_tilde / np.sqrt(self.simulation.G)
-        self.psi *= conversion_factor
+        self.conversion_factor = self.simulation.h_bar_tilde / np.sqrt(self.simulation.G)
+        self.psi *= self.conversion_factor
 
 
     def _rescale_psi_to_new_scale_based_on_mass(self):
@@ -83,7 +101,9 @@ class Wave_function():  # Streamlined and unified evolution logic
 
         r_values = data[:, 0]
         r_values /= self.scaling_lambda
+        print(max(r_values))
         phi_values = data[:, 1]
+        phi_values *=  self.simulation.h_bar_tilde / np.sqrt(self.simulation.G)
         phi_values *= self.scaling_lambda**2
 
         interp_phi = interp1d(r_values, phi_values, kind='linear',

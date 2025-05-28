@@ -82,10 +82,10 @@ class Simulation_Class:
     separate classes.
     """
 
-    @parameter_check(int, list, int, (int, float), (int, float),int, float, bool, object, bool, dict,bool,bool,float,float)
+    @parameter_check(int, list, int, (int, float), (int, float),int, float, bool, object, bool, dict,bool,bool,float)
     def __init__(self, dim, boundaries, N, total_time, h,order_of_evolution = 2, m_s=10e-22, use_gravity=False,
                  static_potential=None, save_max_vals=False,
-                 sim_units={"dUnits": "kpc", "tUnits": "Gyr", "mUnits": "Msun", "eUnits": "eV"},use_units=True,self_int=True,a_s=-10e-80, soliton_mass=1e6):
+                 sim_units={"dUnits": "kpc", "tUnits": "Gyr", "mUnits": "Msun", "eUnits": "eV"},use_units=True,self_int=True,a_s=-10e-80,):
         """
         Initialize the simulation parameters and setup.
 
@@ -150,8 +150,8 @@ class Simulation_Class:
 
         self.use_self_int =self_int
         self.a_s = a_s
-        self.desired_soliton_mass = soliton_mass
-        print(self.desired_soliton_mass)
+
+
 
     def setup_units(self, sim_units, m_s):
         """
@@ -275,6 +275,8 @@ class Simulation_Class:
             raise ValueError("No wave functions added to the simulation")
         self.wave_functions = list(chain.from_iterable(self.wave_functions))
 
+
+        #TODO: make it so that its possible to use sim without units
         if self.use_units:
             self.calculate_physical_units()
 
@@ -384,16 +386,3 @@ class Simulation_Class:
 
 
 
-    def get_scaling_factor(self):
-        total_soliton_masses = []
-        for spin,wave_vector in self.wave_vectors.items():
-            total_soliton_mass = 0
-            for wf in wave_vector:
-                total_soliton_mass += wf.calclulate_soliton_mass()
-            total_soliton_masses.append(total_soliton_mass)
-
-
-        scaling_lambda = self.desired_soliton_mass / total_soliton_masses[0]#using only the first one, since they should be all the same
-        # the only case when entries are not the same are for the case of using different file for solitons in the same sim and
-        # I am not coding that option
-        return scaling_lambda

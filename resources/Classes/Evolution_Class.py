@@ -65,6 +65,8 @@ class Evolution_Class:
 
             # Save snapshots at specified intervals
             if step % save_every == 0 and step > 0:
+                #self.compute_energies()
+                #TODO: add computation of energy from 12 and 13
                 self._save_snapshots(wave_functions, step, save_every)
 
             # Memory cleanup

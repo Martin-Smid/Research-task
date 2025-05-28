@@ -16,38 +16,31 @@ import numpy as np
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-50, 50),(-50, 50),(-50,50)], # Spatial boundaries
+    boundaries=[(-0.1, 0.1),(-0.1, 0.1),(-0.1,0.1)], # Spatial boundaries
     N=64,                             # Grid resolution
-    total_time=12,                   # Total simulation time
-    h=0.04,                            # Time step
+    total_time=0.001,                   # Total simulation time
+    h=0.000001,                            # Time step
     order_of_evolution=2,
     use_gravity=True , # Enable gravitational effects
     static_potential=None,
     save_max_vals=True,
     a_s=-1e-80,
-    soliton_mass=4e6
+
+    self_int=True
 
 )
 wave_vector = Wave_vector_class(
     packet_type="resources/solitons/Modo-1e-80.dat",
-    means=[-5, -5, 0],
+    means=[-0, -0, 0],
     st_deviations=[0.5, 0.5, 0.5],
     simulation=sim,
     mass=1,
     omega=1,
     momenta=[-0, 0, 0],
-    spin=2
+    spin=1,
+    desired_soliton_mass=4e8,
 )
-wave_vector1 = Wave_vector_class(
-    packet_type="resources/solitons/Modo-1e-80.dat",
-    means=[5, 5, 0],
-    st_deviations=[0.5, 0.5, 0.5],
-    simulation=sim,
-    mass=1,
-    omega=1,
-    momenta=[-0, 0, 0],
-    spin=2
-)
+
 sim.add_wave_vector(wave_vector)
 #sim.add_wave_vector(wave_vector1)
 
@@ -96,10 +89,10 @@ if not os.path.exists(save_dir):
 
 for time in sim.accessible_times:
     wave_values = cp.asnumpy(abs(sim.get_wave_function_at_time(time)) ** 2)
-
+    print(wave_values)
     # Take the middle x-slice
     wave_slice = wave_values[:, :, z_index]
-    levels = np.logspace(np.log10(wave_values[wave_values > 0].min()), np.log10(wave_values.max()), 128)
+    levels = np.logspace(np.log10(wave_values[wave_values > 0].min()), np.log10(wave_values.max()), 64)
     plt.contourf(x_mesh_2d, y_mesh_2d, cp.asnumpy(wave_slice).T,
                  origin="lower", levels=levels, cmap="inferno",norm=LogNorm())
     plt.colorbar(label="|ψ|²", format="%.2e")

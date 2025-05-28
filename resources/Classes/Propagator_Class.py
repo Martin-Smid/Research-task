@@ -49,7 +49,6 @@ class Propagator_Class:
         for k in self.k_space:
             k_squared_sum += k ** 2
 
-        # Create propagator with time factor h/2 (for split-step)
 
         self.kinetic_propagator = cp.exp(((-1j * ((self.h*time_factor) / 2) * k_squared_sum )*(self.h_bar_tilde)), dtype=cp.complex64)
         return self.kinetic_propagator

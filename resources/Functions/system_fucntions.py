@@ -76,7 +76,8 @@ def plot_max_values_on_N(simulation_class_instance):
     # Normalize the data: (value / first_value) - 1
     for col in data.columns[1:]:
         first_val = data[col].iloc[0]
-        data[col] = (data[col] / first_val) - 1  # Now starts at 0
+        data[col] = (data[col] / first_val) ** 0.25  # λρ(t) = (ρc^f / ρc^i)^{1/4}
+
 
     # Plotting
     plt.figure(figsize=(10, 6))

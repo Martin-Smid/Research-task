@@ -15,62 +15,69 @@ import numpy as np
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-0.1, 0.1),(-0.1, 0.1),(-0.1,0.1)], # Spatial boundaries
+    boundaries=[(-10, 10),(-10, 10),(-10,10)], # Spatial boundaries
     N=64,                             # Grid resolution
-    total_time=0.001,                   # Total simulation time
-    h=0.000001,                            # Time step
+    total_time=5,                   # Total simulation time
+    h=0.01,                            # Time step
     order_of_evolution=2,
     use_gravity=True , # Enable gravitational effects
     static_potential=None,
     save_max_vals=True,
     a_s=-1e-80,
 
-    self_int=True
+    self_int=False
 
 )
-wave_vector = Wave_vector_class(
-    packet_type="resources/solitons/Modo-1e-80.dat",
-    means=[-0, -0, 0],
-    st_deviations=[0.5, 0.5, 0.5],
-    simulation=sim,
-    mass=1,
-    omega=1,
-    momenta=[-0, 0, 0],
-    spin=1,
-    desired_soliton_mass=4e8,
-)
+def generate_random_position(boundary):
+    low, high = boundary
+    return [np.random.uniform(low, high), np.random.uniform(low, high), 0.0]
 
-sim.add_wave_vector(wave_vector)
-#sim.add_wave_vector(wave_vector1)
+def is_far_enough(new_pos, existing_positions, min_dist):
+    for pos in existing_positions:
+        if np.linalg.norm(np.array(new_pos) - np.array(pos)) < min_dist:
+            return False
+    return True
 
-sim.evolve(save_every=100)
+waves = []
+positions = []
+min_separation = 0.5 # Adjust based on soliton radius
+boundary = [-8,8]  # Same for all dimensions
 
-'''
+for i in range(25):
+    while True:
+        means = generate_random_position(boundary)
+        if is_far_enough(means, positions, min_separation):
+            positions.append(means)
+            break
+
+    print(f"Wave {i+1} position: {means}")
+
+    vlna = Wave_vector_class(
+        packet_type="resources/solitons/GroundState(1).dat",
+        means=means,
+        st_deviations=[0.5, 0.5, 0.5],
+        simulation=sim,
+        mass=1,
+        omega=1,
+        momenta=[0.0, 0.0, 0.0],
+        spin=1,
+        desired_soliton_mass=3.3181e6,
+    )
+    waves.append(vlna)
+
+for wave in waves:
+    sim.add_wave_vector(wave_vector=wave)
+
+
+sim.evolve(save_every=25)
+
+
+
 centers = np.zeros((10, 3))
 centers[:, 0] = np.random.uniform(-35, 35, 10)
 centers[:, 1] = np.random.uniform(-35, 35, 10)
 centers_list = [list(row) for row in centers]
 
-waves = []
-for i in range(5):
-    vlna = Wave_function(
-        packet_type="/home/martin/Downloads/GroundState(1).dat",
-        means=centers_list[i],
-        st_deviations=[0.5, 0.5, 0.5],
-        simulation=sim,
-        mass=1,
-        omega=1,
-        momenta=[0, 0, 0],
-    )
-    Wave_vector = Wave_vector_class([vlna], spin=2)
-    waves.append(Wave_vector)
-
-
-print(waves)
-
-for wave in waves:
-    sim.add_wave_function(wave_vector=wave.wave_vector)
-'''
 
 
 current_date = datetime.now().strftime("%y_%d_%H")

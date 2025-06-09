@@ -118,6 +118,8 @@ class Evolution_Class:
         if self.save_max_vals:
             self._track_max_values(wave_functions, step)
 
+
+
         return wave_functions
 
     def _evolve_order_2(self, wave_functions, is_first, is_last):
@@ -134,6 +136,7 @@ class Evolution_Class:
         if is_last:
             total_density = self._compute_total_density(wave_functions)
             self._kick_all_wave_functions(wave_functions, total_density, is_first, is_last)
+
 
         return wave_functions
 
@@ -222,14 +225,14 @@ class Evolution_Class:
         for wf in wave_functions:
             density_i = wf.calculate_density()
             total_density += density_i
+
         return total_density
 
     def _track_max_values(self, wave_functions, step):
         """Track maximum values during evolution."""
-        summed_wf = wave_functions[0].psi.copy()
-        for wf in wave_functions[1:]:
-            summed_wf += wf.psi
-        self.max_wave_vals_during_evolution[step] = float(abs(summed_wf).max())
+        total_density = self._compute_total_density(wave_functions)
+
+        self.max_wave_vals_during_evolution[step] = float(abs(total_density).max())
 
     def _save_snapshots(self, wave_functions, step, save_every):
         """Save wave function snapshots at current step."""

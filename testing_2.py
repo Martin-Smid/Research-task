@@ -17,7 +17,7 @@ sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-10, 10),(-10, 10),(-10,10)], # Spatial boundaries
     N=64,                             # Grid resolution
-    total_time=5,                   # Total simulation time
+    total_time=20,                   # Total simulation time
     h=0.01,                            # Time step
     order_of_evolution=2,
     use_gravity=True , # Enable gravitational effects
@@ -60,16 +60,17 @@ for i in range(25):
         mass=1,
         omega=1,
         momenta=[0.0, 0.0, 0.0],
-        spin=1,
+        spin=2,
         desired_soliton_mass=3.3181e6,
     )
     waves.append(vlna)
+
 
 for wave in waves:
     sim.add_wave_vector(wave_vector=wave)
 
 
-sim.evolve(save_every=25)
+sim.evolve(save_every=200)
 
 
 
@@ -106,6 +107,6 @@ for time in sim.accessible_times:
     plt.xlabel("x")
     plt.ylabel("y")
     plt.grid()
-    #plt.savefig(f"{save_dir}/timestep_{time}.jpg")
+    plt.savefig(f"{save_dir}/timestep_{time}.jpg")
     plt.show()
     plt.close()

@@ -249,15 +249,25 @@ class Simulation_Class:
         if isinstance(wave_vector, list):
             for wave_function in wave_vector:
                 self.wave_functions.append(wave_function)
+                print("nebo jdu sem")
         else:
 
             try:
                 spin = wave_vector.spin
                 if spin not in self.wave_vectors:
                     self.wave_vectors[spin] = wave_vector.wave_vector
+                    print("existuju někdy tady?")
+                    print(self.wave_vectors)
                 else:
+                    print("nebo dokonce sem")
                     for i, w_vect_component in enumerate(wave_vector.wave_vector):
+                        print(f" i je {i}")
+                        print(f"component {w_vect_component}")
+
                         self.wave_vectors[spin][i].psi += w_vect_component.psi
+                        print(self.wave_vectors)
+                print(f"tohle končím s len {len(wave_vector.wave_vector)} {wave_vector}")
+                print(f"a nejspíš bych měl pracovat s len {len(self.wave_vectors)} {self.wave_vectors}")
                 self.wave_functions.append(wave_vector.wave_vector)
 
             except Exception as e:
@@ -270,11 +280,14 @@ class Simulation_Class:
         Initialize the combined wave function and propagators before evolution.
         Sets up the Propagator and Evolution helper classes.
         """
-        print(f"pracuji s {self.wave_functions}")
+
         if not self.wave_functions:
             raise ValueError("No wave functions added to the simulation")
-        self.wave_functions = list(chain.from_iterable(self.wave_functions))
-
+        vlnky = []
+        for spin in self.wave_vectors:
+            vlnky.append(self.wave_vectors[spin])
+        self.wave_functions = list(chain.from_iterable(vlnky))
+        print(f"pracuji s len {len(self.wave_functions)}{self.wave_functions}")
 
         #TODO: make it so that its possible to use sim without units
         if self.use_units:

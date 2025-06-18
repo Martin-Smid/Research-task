@@ -5,7 +5,7 @@ import numpy as np
 from resources.Classes.Wave_function_class import *
 from numpy import random
 from resources.Errors.Errors import IncorrectWaveBlueprintError
-np.random.seed(1)
+np.random.seed(12345)
 
 class Wave_vector_class:
     """
@@ -50,16 +50,18 @@ class Wave_vector_class:
         # Build the wave_blueprint: a list of Wave_function instances
         self.wave_blueprint = [Wave_function(**wave_function_kwargs) for _ in range(num_wavefunctions)]
 
+
         # Continue as before
         self._setup_vector()
 
     def _setup_vector(self):
-        np.random.seed(1)
+
         num_polarization_states = 2 * self.spin + 1
-        self.polarization_coefficients = np.asarray(np.random.uniform(0, 1, num_polarization_states))
+        self.polarization_coefficients = np.asarray(np.random.uniform(-1, 1, num_polarization_states))
+        print(self.polarization_coefficients)
         self.polarization_coefficients = self.polarization_coefficients / np.linalg.norm(self.polarization_coefficients)
         self.polarization_phases = np.asarray(np.random.uniform(0, 2 * np.pi, num_polarization_states))
-        self.polarization_phases /= np.linalg.norm(self.polarization_phases)
+        #self.polarization_phases /= np.linalg.norm(self.polarization_phases)
 
         self._initialize_polarization_bases()
         self.wave_vector = self._create_combined_wave_function()

@@ -15,10 +15,10 @@ import numpy as np
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-25, 25),(-25, 25),(-25,25)], # Spatial boundaries
-    N=256,                             # Grid resolution
-    total_time=25,                   # Total simulation time
-    h=0.004,                            # Time step
+    boundaries=[(-50, 50),(-50, 50),(-50,50)], # Spatial boundaries
+    N=128,                             # Grid resolution
+    total_time=4,                   # Total simulation time
+    h=0.001,                            # Time step
     order_of_evolution=2,
     use_gravity=True , # Enable gravitational effects
     static_potential=None,
@@ -40,10 +40,10 @@ def is_far_enough(new_pos, existing_positions, min_dist):
 
 waves = []
 positions = []
-min_separation = 0.5 # Adjust based on soliton radius
-boundary = [-20,20]  # Same for all dimensions
+min_separation = 5 # Adjust based on soliton radius
+boundary = [-45,45]  # Same for all dimensions
 
-for i in range(25):
+for i in range(5):
     while True:
         means = generate_random_position(boundary)
         if is_far_enough(means, positions, min_separation):
@@ -60,8 +60,8 @@ for i in range(25):
         mass=1,
         omega=1,
         momenta=[0.0, 0.0, 0.0],
-        spin=1,
-        desired_soliton_mass=3.3181e6,
+        spin=0,
+        desired_soliton_mass=5.3090068e7,
     )
     waves.append(vlna)
 
@@ -69,7 +69,7 @@ for wave in waves:
     sim.add_wave_vector(wave_vector=wave)
 
 
-sim.evolve(save_every=125)
+sim.evolve(save_every=1000)
 
 
 

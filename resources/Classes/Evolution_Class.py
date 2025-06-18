@@ -400,33 +400,40 @@ class Evolution_Class:
         cp.get_default_memory_pool().free_all_blocks()
 
     def _save_max_values(self):
-        """Save maximum values during evolution to CSV."""
+        """Save maximum values during evolution to CSV, including resolution and spin."""
         self.max_vals_filename = "resources/data/max_values.csv"
         header = [
             "# This file contains the maximum values of wave functions at specific steps along the time evolution.",
             "# The first row contains the corresponding N - the resolution of the saved simulation.",
+            "# The second row contains the spin of the wavefunction in the corresponding simulation.",
             "# The first column is the time step, and subsequent columns are max values for a given simulation.",
         ]
+
+        # Připrav vícenásobné sloupce (MultiIndex)
+        resolution = int(self.simulation.N)
+        spin = self.simulation.spin  # musí být uložen v Simulation
+
+        col_tuples = [(f"N{resolution}", f"s={spin}")]
+        columns = pd.MultiIndex.from_tuples(col_tuples)
 
         new_data = pd.DataFrame.from_dict(
             self.max_wave_vals_during_evolution,
             orient="index",
-            columns=[f"{int(self.simulation.N)}"]
+            columns=columns
         )
 
         if os.path.exists(self.max_vals_filename):
-            existing_data = pd.read_csv(self.max_vals_filename, index_col=0, comment="#")
-            new_column_name = f"{int(self.simulation.N)}"
-            new_data.columns = [new_column_name]
+            existing_data = pd.read_csv(self.max_vals_filename, header=[0, 1], index_col=0, comment="#")
             updated_data = pd.concat([existing_data, new_data], axis=1)
 
             with open(self.max_vals_filename, "w") as file:
                 file.write("\n".join(header) + "\n")
-            updated_data.to_csv(self.max_vals_filename, mode="a")
+            updated_data.to_csv(self.max_vals_filename)
         else:
             with open(self.max_vals_filename, "w") as file:
                 file.write("\n".join(header) + "\n")
-            new_data.to_csv(self.max_vals_filename, mode="a")
+            new_data.to_csv(self.max_vals_filename)
 
         print(f"{self.max_vals_filename} saved")
+
 

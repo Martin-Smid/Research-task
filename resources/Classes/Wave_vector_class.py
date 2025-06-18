@@ -89,7 +89,8 @@ class Wave_vector_class:
         for idx in self.index_combinations:
             value = full_tensor[idx]
             new_wf = copy.deepcopy(self.wave_blueprint)
-            new_wf.psi = self.wave_blueprint.psi * value
+
+            new_wf.psi = self.wave_blueprint.psi * value * self.wave_blueprint.packet_creator.momentum_propagator
             new_wf.multiplicity = self.index_multiplicities[idx]
             new_wf.psi *= 1 / np.sqrt(new_wf.multiplicity)
 

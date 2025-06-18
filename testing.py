@@ -28,8 +28,10 @@ wave_vector = Wave_vector_class(
     simulation=sim,
     mass=1,
     omega=1,
-    momenta=[0, 0.958525, 0],
-    spin=1
+    momenta=[0, 0.947, 0],
+    spin=0,
+    desired_soliton_mass=53090068
+
 )
 
 
@@ -80,12 +82,12 @@ x_index = (sim.grids[0].shape[0] // 2)
 y_index = (sim.grids[1].shape[0] //2)
 z_index = (sim.grids[2].shape[0] //2)
 # For the YZ plane plotting
-y_mesh_2d, z_mesh_2d = np.meshgrid(sim.grids[1][0,:,0].get(), sim.grids[2][0,0,:].get())
-x_mesh_2d, z_mesh_2d = np.meshgrid(sim.grids[0][:,0,0].get(), sim.grids[2][0,0,:].get())
+y_mesh_2d, z_mesh_2d = np.meshgrid(sim.grids[1][0,:,0], sim.grids[2][0,0,:])
+x_mesh_2d, z_mesh_2d = np.meshgrid(sim.grids[0][:,0,0], sim.grids[2][0,0,:])
 plt.figure(figsize=(8, 6))
-x_mesh_2d, y_mesh_2d = np.meshgrid(sim.grids[0][:,0,0].get(), sim.grids[1][0,:,0].get())
+x_mesh_2d, y_mesh_2d = np.meshgrid(sim.grids[0][:,0,0], sim.grids[1][0,:,0])
 for time in sim.accessible_times:
-    print(time)
+
     wave_values = cp.asnumpy(abs(sim.get_wave_function_at_time(time)) ** 2)
 
     # Take the middle x-slice

@@ -60,41 +60,36 @@ def plot_max_values_on_N(simulation_class_instance):
     import pandas as pd
     import matplotlib.pyplot as plt
 
-    # File name
     filename = simulation_class_instance.max_vals_filename
 
-    # Read the CSV file, skipping comment lines (lines starting with '#')
-    data = pd.read_csv(filename, comment='#')
+    # Načti s MultiIndex ve sloupcích (dva řádky záhlaví), ignoruj komentáře
+    data = pd.read_csv(filename, comment='#', header=[0, 1], index_col=0)
 
-    # Extract the first row (N values) for column names
-    n_values = data.columns[1:]  # Skip the first column (time step)
-    n_values = [float(n) for n in n_values]  # Convert to float for proper naming
+    # Vytvoř seznam legendárních popisků (N a spin)
+    labels = [f"N = {n.replace('N', '')}, spin = {s.replace('s=', '')}"
+              for (n, s) in data.columns]
 
-    # Rename columns for clarity
-    data.columns = ['Time Step'] + [f"N = {n}" for n in n_values]
-
-    # Normalize the data: (value / first_value) - 1
-    for col in data.columns[1:]:
+    # Normalizuj každou složku
+    for col in data.columns:
         first_val = data[col].iloc[0]
-        data[col] = (data[col] / first_val) ** 0.25  # λρ(t) = (ρc^f / ρc^i)^{1/4}
-
+        data[col] = (data[col] / first_val) ** 0.25
 
     # Plotting
     plt.figure(figsize=(10, 6))
 
-    # Plot each column of data (except the first column, which is the x-axis)
-    for col in data.columns[1:]:
-        plt.plot(data['Time Step'], data[col], label=col)
+    for col, label in zip(data.columns, labels):
+        plt.plot(data.index, data[col], label=label)
 
-    # Add labels, title, and legend
+    # Osa a legenda
     plt.xlabel("Time Step", fontsize=18)
     plt.ylabel("Normalized Max Values (Start = 0)", fontsize=18)
-    plt.legend(fontsize=15)
-    plt.yticks(fontsize=15)
-    plt.xticks(fontsize=15)
+    plt.legend(fontsize=12)
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
 
-    # Show the plot
+    plt.tight_layout()
     plt.show()
+
 
 
 import numpy as np

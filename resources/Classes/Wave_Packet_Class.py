@@ -49,7 +49,7 @@ class Packet():
         """Compute the kinetic propagator based on Fourier space components."""
         # Use single-precision floats to save memory
         momenta = [
-            1j * np.array((momentum / self.h_bar_tilde) * grid, dtype=np.float32)
+            1j * np.array((momentum / self.h_bar_tilde) * grid , dtype=np.float32)
             for momentum, grid in zip(self.momenta, self.grids)]
         summed_momenta = np.zeros_like(momenta[0])
         for momentum in momenta:
@@ -89,7 +89,7 @@ class Packet():
 
             wave_packet = self._create_ground_state(file_path)
 
-            wave_packet *= self.momentum_propagator
+            #wave_packet *= self.momentum_propagator
 
             return wave_packet
 

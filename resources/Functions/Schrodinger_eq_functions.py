@@ -56,11 +56,15 @@ def gravity_potential(simulation_instance, mass_multiplier=1, center=None):
     # Set default center to middle of the grid if not specified
     if center is None:
         center = [0, 0, 0]  # You can change this to grid center if needed
-
-
+    
+    # Ensure all operations are done with CuPy
     r_squared = cp.zeros_like(simulation_instance.grids[0])
     for dim in range(simulation_instance.dim):
-        r_squared += (simulation_instance.grids[dim] - center[dim]) ** 2
+        # Convert grid to CuPy if it's not already
+        grid = cp.asarray(simulation_instance.grids[dim]) if not isinstance(simulation_instance.grids[dim], cp.ndarray) else simulation_instance.grids[dim]
+        # Convert center to CuPy array if it's a list or numpy array
+        center_dim = cp.asarray(center[dim]) if not isinstance(center[dim], cp.ndarray) else center[dim]
+        r_squared += (grid - center_dim) ** 2
 
 
     epsilon = min(simulation_instance.dx)
@@ -71,7 +75,7 @@ def gravity_potential(simulation_instance, mass_multiplier=1, center=None):
 
     mass = 1000000
     G = simulation_instance.G
-    print(G)
+    print(mass*G)
 
     # Calculate potential
     potential = -(G * mass) / r

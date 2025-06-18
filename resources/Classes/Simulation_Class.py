@@ -270,6 +270,7 @@ class Simulation_Class:
                 print(f"a nejspíš bych měl pracovat s len {len(self.wave_vectors)} {self.wave_vectors}")
                 #self.wave_functions.append(wave_vector.wave_vector)
                 self.num_of_w_vects_in_sim +=1
+                self.spin = wave_vector.spin
 
             except Exception as e:
                 raise ValueError(f"Tried adding either a Wave_vector.wave_vector, list of Wave_functions or Wave_function but failed \n"

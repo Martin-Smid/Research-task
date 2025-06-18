@@ -18,9 +18,9 @@ import numpy as np
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-15, 15),(-15, 15),(-15,15)], # Spatial boundaries
-    N=128,                             # Grid resolution
-    total_time=3,                   # Total simulation time
+    boundaries=[(-15, 15),(-15,15),(-15,15)], # Spatial boundaries
+    N=64,                             # Grid resolution
+    total_time=5,                   # Total simulation time
     h=0.01,                            # Time step
     order_of_evolution=2,
     use_gravity=True , # Enable gravitational effects
@@ -44,7 +44,7 @@ def is_far_enough(new_pos, existing_positions, min_dist):
 waves = []
 positions = []
 min_separation = 5 # Adjust based on soliton radius
-boundary = [-1,1]  # Same for all dimensions
+boundary = [-8,8]  # Same for all dimensions
 
 for i in range(1):
     while True:
@@ -62,8 +62,8 @@ for i in range(1):
         simulation=sim,
         mass=1,
         omega=1,
-        momenta=[0.0, 0.0, 0.0],
-        spin=4,
+        momenta=[0.0, 3, 0.0],
+        spin=0,
         desired_soliton_mass=5.3090068e7,
     )
     waves.append(vlna)

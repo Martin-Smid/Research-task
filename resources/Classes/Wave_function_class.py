@@ -33,8 +33,10 @@ class Wave_function():  # Streamlined and unified evolution logic
         self.dx = simulation.dx
         self.grids = simulation.grids
         self.momenta = momenta
+
         self.mass = self.simulation.mass_s
         self.h_bar_tilde = self.simulation.h_bar_tilde
+
         self.omega = omega
         self.packet_type = packet_type
         self.packet_creator = Packet(
@@ -89,6 +91,7 @@ class Wave_function():  # Streamlined and unified evolution logic
         return mass
 
     def calculate_density(self):
+
         return cp.abs(self.multiplicity*self.psi).astype(cp.float32) ** 2
 
     def rescale_psi_to_phys_units(self):

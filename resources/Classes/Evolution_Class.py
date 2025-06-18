@@ -57,11 +57,6 @@ class Evolution_Class:
         self.num_wave_functions = len(wave_functions)
 
 
-
-        # argmax to find position of maximum
-        # create concentric sphere around the ceter with growing radius and commpute density in each shell
-        # plot the values of radius and the density recorded at different time steps
-
         for wf in wave_functions:
             wf.psi = cp.asarray(wf.psi)
 

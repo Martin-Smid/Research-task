@@ -24,6 +24,7 @@ class Wave_function():  # Streamlined and unified evolution logic
         self.simulation = simulation
         self.dim = simulation.dim
         self.boundaries = simulation.boundaries
+        self.multiplicity = 1
         self.N = simulation.N
         self.means = means
         self.total_time = simulation.total_time
@@ -88,7 +89,7 @@ class Wave_function():  # Streamlined and unified evolution logic
         return mass
 
     def calculate_density(self):
-        return cp.abs(self.psi).astype(cp.float32) ** 2
+        return cp.abs(self.multiplicity*self.psi).astype(cp.float32) ** 2
 
     def rescale_psi_to_phys_units(self):
         # Convert wave function: ψ_sol = ψ̂_sol * (ħ/√G)

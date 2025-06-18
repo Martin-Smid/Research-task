@@ -252,7 +252,6 @@ class Simulation_Class:
                 self.wave_functions.append(wave_function)
                 print("nebo jdu sem")
         else:
-
             try:
                 spin = wave_vector.spin
                 if spin not in self.wave_vectors:
@@ -269,7 +268,7 @@ class Simulation_Class:
                         print(self.wave_vectors)
                 print(f"tohle končím s len {len(wave_vector.wave_vector)} {wave_vector}")
                 print(f"a nejspíš bych měl pracovat s len {len(self.wave_vectors)} {self.wave_vectors}")
-                self.wave_functions.append(wave_vector.wave_vector)
+                #self.wave_functions.append(wave_vector.wave_vector)
                 self.num_of_w_vects_in_sim +=1
 
             except Exception as e:
@@ -283,11 +282,11 @@ class Simulation_Class:
         Sets up the Propagator and Evolution helper classes.
         """
 
-        if not self.wave_functions:
-            raise ValueError("No wave functions added to the simulation")
+
         vlnky = []
         for spin in self.wave_vectors:
             vlnky.append(self.wave_vectors[spin])
+        self.wave_vectors = {}
         self.wave_functions = list(chain.from_iterable(vlnky))
         print(f"pracuji s len {len(self.wave_functions)}{self.wave_functions}")
 

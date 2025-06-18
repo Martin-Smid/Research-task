@@ -1,6 +1,13 @@
 from resources.Functions.Schrodinger_eq_functions import *
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
+import os
+import glob
+import re
+from pathlib import Path
 
 def calculate_errors_between_num_and_analytical_evolution(wave_function, time_step):
     """
@@ -94,16 +101,10 @@ def plot_max_values_on_N(simulation_class_instance):
     plt.xticks(fontsize=15)
 
     # Show the plot
-    plt.show()
+    plt.savefig("resources/data/max_vals.png", dpi=300)
 
 
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.colors import LogNorm
-import os
-import glob
-import re
-from pathlib import Path
+
 
 
 def plot_wave_function_snapshots(snapshot_dir, wf_number, z_index=None,

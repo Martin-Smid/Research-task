@@ -88,10 +88,10 @@ def plot_max_values_on_N(simulation_class_instance):
 
     # Add labels, title, and legend
     plt.xlabel("Time Step", fontsize=18)
-    plt.ylabel("Normalized Max Values (Start = 0)", fontsize=18)
+    plt.ylabel("Normalized Max Values", fontsize=18)
     plt.legend(fontsize=15)
     plt.yticks(fontsize=15)
     plt.xticks(fontsize=15)
 
     # Show the plot
-    plt.show()
+    plt.savefig("resources/data/max_vals.png", dpi=300)

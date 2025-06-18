@@ -226,10 +226,9 @@ class Evolution_Class:
 
     def _track_max_values(self, wave_functions, step):
         """Track maximum values during evolution."""
-        summed_wf = wave_functions[0].psi.copy()
-        for wf in wave_functions[1:]:
-            summed_wf += wf.psi
-        self.max_wave_vals_during_evolution[step] = float(abs(summed_wf).max())
+        total_density = self._compute_total_density(wave_functions)
+
+        self.max_wave_vals_during_evolution[step] = float(abs(total_density).max())
 
     def _save_snapshots(self, wave_functions, step, save_every):
         """Save wave function snapshots at current step."""
@@ -360,7 +359,7 @@ class Evolution_Class:
         """Cleanup and finalize evolution process."""
         if self.save_max_vals:
             self._save_max_values()
-            plot_y_or_n = input("Should I plot these values? (y/n/del): ")
+            plot_y_or_n = "y"
             if plot_y_or_n == "y":
                 plot_max_values_on_N(self)
             elif plot_y_or_n == "del":

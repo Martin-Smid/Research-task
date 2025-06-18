@@ -15,10 +15,10 @@ import numpy as np
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-10, 10),(-10, 10),(-10,10)], # Spatial boundaries
-    N=64,                             # Grid resolution
-    total_time=5,                   # Total simulation time
-    h=0.01,                            # Time step
+    boundaries=[(-25, 25),(-25, 25),(-25,25)], # Spatial boundaries
+    N=256,                             # Grid resolution
+    total_time=25,                   # Total simulation time
+    h=0.004,                            # Time step
     order_of_evolution=2,
     use_gravity=True , # Enable gravitational effects
     static_potential=None,
@@ -41,7 +41,7 @@ def is_far_enough(new_pos, existing_positions, min_dist):
 waves = []
 positions = []
 min_separation = 0.5 # Adjust based on soliton radius
-boundary = [-8,8]  # Same for all dimensions
+boundary = [-20,20]  # Same for all dimensions
 
 for i in range(25):
     while True:
@@ -69,7 +69,7 @@ for wave in waves:
     sim.add_wave_vector(wave_vector=wave)
 
 
-sim.evolve(save_every=25)
+sim.evolve(save_every=125)
 
 
 
@@ -95,7 +95,6 @@ if not os.path.exists(save_dir):
 
 for time in sim.accessible_times:
     wave_values = cp.asnumpy(abs(sim.get_wave_function_at_time(time)) ** 2)
-    print(wave_values)
     # Take the middle x-slice
     wave_slice = wave_values[:, :, z_index]
     levels = np.logspace(np.log10(wave_values[wave_values > 0].min()), np.log10(wave_values.max()), 64)
@@ -106,6 +105,6 @@ for time in sim.accessible_times:
     plt.xlabel("x")
     plt.ylabel("y")
     plt.grid()
-    #plt.savefig(f"{save_dir}/timestep_{time}.jpg")
-    plt.show()
+    plt.savefig(f"{save_dir}/timestep_{time}.jpg")
+    #plt.show()
     plt.close()

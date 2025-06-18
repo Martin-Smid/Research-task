@@ -61,7 +61,7 @@ class Wave_function():  # Streamlined and unified evolution logic
         self.psi = self._rescale_psi_to_new_scale_based_on_mass()
 
         massss = self.calclulate_soliton_mass()
-        print(massss)
+        print(f"{massss} sol massss")
 
         self.potential = potential
         self.gravity_potential = gravity_potential

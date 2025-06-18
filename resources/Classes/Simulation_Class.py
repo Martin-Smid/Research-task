@@ -83,7 +83,7 @@ class Simulation_Class:
     """
 
     @parameter_check(int, list, int, (int, float), (int, float),int, float, bool, object, bool, dict,bool,bool,float)
-    def __init__(self, dim, boundaries, N, total_time, h,order_of_evolution = 2, m_s=10e-22, use_gravity=False,
+    def __init__(self, dim, boundaries, N, total_time, h,order_of_evolution = 2, m_s=2.5e-22, use_gravity=False,
                  static_potential=None, save_max_vals=False,
                  sim_units={"dUnits": "kpc", "tUnits": "Gyr", "mUnits": "Msun", "eUnits": "eV"},use_units=True,self_int=True,a_s=-10e-80,):
         """
@@ -146,6 +146,7 @@ class Simulation_Class:
         self.snapshot_directory = None
         self.accessible_times = []
         self.wave_values = []
+        self.num_of_w_vects_in_sim = 0
 
 
         self.use_self_int =self_int
@@ -269,6 +270,7 @@ class Simulation_Class:
                 print(f"tohle končím s len {len(wave_vector.wave_vector)} {wave_vector}")
                 print(f"a nejspíš bych měl pracovat s len {len(self.wave_vectors)} {self.wave_vectors}")
                 self.wave_functions.append(wave_vector.wave_vector)
+                self.num_of_w_vects_in_sim +=1
 
             except Exception as e:
                 raise ValueError(f"Tried adding either a Wave_vector.wave_vector, list of Wave_functions or Wave_function but failed \n"

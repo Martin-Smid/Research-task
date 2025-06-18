@@ -56,8 +56,13 @@ class Evolution_Class:
         save_every = max(1, save_every)
         self.num_wave_functions = len(wave_functions)
 
+
         # Setup save directory and initialize storage
         self._setup_evolution_storage(wave_functions)
+
+
+
+
 
         # Main evolution loop
         for step in range(self.num_steps):
@@ -125,6 +130,19 @@ class Evolution_Class:
     def _evolve_order_2(self, wave_functions, is_first, is_last):
         """Second-order split-step evolution."""
         total_density = self._compute_total_density(wave_functions)
+
+        mass_diff = (
+                    (abs(total_density).sum()
+                            * (
+                                    int(self.simulation.boundaries[0][1] - self.simulation.boundaries[0][0])
+                                    / (self.simulation.N )
+                            )** 3
+                    ) / wave_functions[0].soliton_mass) - self.simulation.num_of_w_vects_in_sim
+
+
+
+        if ( mass_diff > 1e-2):
+            print("mass diff is greater than 1e-2, might want to increase the resolution")
 
         # Kick step
         self._kick_all_wave_functions(wave_functions, total_density, is_first, is_last)

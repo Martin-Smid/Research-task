@@ -15,9 +15,9 @@ import numpy as np
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-10, 10),(-10, 10),(-10,10)], # Spatial boundaries
+    boundaries=[(-20, 20),(-20, 20),(-20,20)], # Spatial boundaries
     N=64,                             # Grid resolution
-    total_time=20,                   # Total simulation time
+    total_time=1,                   # Total simulation time
     h=0.01,                            # Time step
     order_of_evolution=2,
     use_gravity=True , # Enable gravitational effects
@@ -40,8 +40,8 @@ def is_far_enough(new_pos, existing_positions, min_dist):
 
 waves = []
 positions = []
-min_separation = 0.5 # Adjust based on soliton radius
-boundary = [-8,8]  # Same for all dimensions
+min_separation = 4 # Adjust based on soliton radius
+boundary = [-18,18]  # Same for all dimensions
 
 for i in range(25):
     while True:
@@ -60,8 +60,8 @@ for i in range(25):
         mass=1,
         omega=1,
         momenta=[0.0, 0.0, 0.0],
-        spin=2,
-        desired_soliton_mass=3.3181e6,
+        spin=1,
+        desired_soliton_mass=5.3090068e7,
     )
     waves.append(vlna)
 
@@ -96,7 +96,6 @@ if not os.path.exists(save_dir):
 
 for time in sim.accessible_times:
     wave_values = cp.asnumpy(abs(sim.get_wave_function_at_time(time)) ** 2)
-    print(wave_values)
     # Take the middle x-slice
     wave_slice = wave_values[:, :, z_index]
     levels = np.logspace(np.log10(wave_values[wave_values > 0].min()), np.log10(wave_values.max()), 64)

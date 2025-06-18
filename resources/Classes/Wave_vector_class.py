@@ -1,5 +1,7 @@
 import numpy as np
 
+from sympy.physics.quantum.cg import CG
+from sympy import S
 
 
 from resources.Classes.Wave_function_class import *
@@ -40,11 +42,8 @@ class Wave_vector_class:
 
         self.spin = spin
 
-        if spin not in [0, 1, 2, 3]:
-            raise ValueError("Spin must be 0, 1, 2, or 3")
-
         # How many wave functions to generate
-        count_map = {0: 1, 1: 1, 2: 1, 3: 1}  # could default to more if needed
+        count_map = {0: 1, 1: 1, 2: 1, 3: 1,4:1}  # could default to more if needed
         num_wavefunctions = count_map[spin]
 
         # Build the wave_blueprint: a list of Wave_function instances
@@ -125,141 +124,7 @@ class Wave_vector_class:
                 provided=type(wave_blueprint))
 
     def _initialize_polarization_bases(self):
-        """
-        Initialize the basis vectors/tensors for the polarization states based on spin.
-
-        For spin 0: Single scalar state
-        For spin 1: Three vector states with polarizations -1, 0, +1
-        For spin 2: Five tensor states with polarizations -2, -1, 0, +1, +2
-        For spin 3: Seven rank-3 tensor states with polarizations -3, -2, -1, 0, +1, +2, +3
-
-        All tensors are stored as CuPy arrays for GPU acceleration.
-        """
-        if self.spin == 0:
-            # Spin 0 has a single scalar state
-            self.polarization_bases = [np.array(1)]
-
-        elif self.spin == 1:
-            # Spin 1 has three vector states with polarizations -1, 0, +1
-            self.polarization_bases = [
-                1 / np.sqrt(2) * np.array([1, +1j, 0]),  # Polarization +1
-                1 / np.sqrt(2) * np.array([1, -1j, 0]),  # Polarization -1
-                np.array([0, 0, 1])  # Polarization 0
-            ]
-
-        elif self.spin == 2:
-            # Spin 2 has five tensor states with polarizations -2, -1, 0, +1, +2
-            self.polarization_bases = [
-                # Polarization +2
-                1 / 2 * np.array([
-                    [1, 1j, 0],
-                    [1j, -1, 0],
-                    [0, 0, 0]
-                ]),
-
-                # Polarization +1
-                1 / 2 * np.array([
-                    [0, 0, 1],
-                    [0, 0, 1j],
-                    [1, 1j, 0]
-                ]),
-
-                # Polarization 0
-                1 / np.sqrt(6) * np.array([
-                    [-1, 0, 0],
-                    [0, -1, 0],
-                    [0, 0, 2]
-                ]),
-
-                # Polarization -1
-                1 / 2 * np.array([
-                    [0, 0, 1],
-                    [0, 0, -1j],
-                    [1, -1j, 0]
-                ]),
-
-                # Polarization -2
-                1 / 2 * np.array([
-                    [1, -1j, 0],
-                    [-1j, -1, 0],
-                    [0, 0, 0]
-                ])
-            ]
-
-        elif self.spin == 3:
-            # Spin 3 has seven rank-3 tensor states with polarizations -3, -2, -1, 0, +1, +2, +3
-            # Initialize empty 3D arrays for each polarization state
-            pol_shape = (3, 3, 3)  # 3×3×3 tensor for rank-3
-
-            # Create empty tensors for each polarization state
-            p_plus3 = np.zeros(pol_shape, dtype=np.complex64)
-            p_plus2 = np.zeros(pol_shape, dtype=np.complex64)
-            p_plus1 = np.zeros(pol_shape, dtype=np.complex64)
-            p_zero = np.zeros(pol_shape, dtype=np.complex64)
-            p_minus1 = np.zeros(pol_shape, dtype=np.complex64)
-            p_minus2 = np.zeros(pol_shape, dtype=np.complex64)
-            p_minus3 = np.zeros(pol_shape, dtype=np.complex64)
-
-            # Polarization +3
-            # Most elements are zero except for specific components
-            p_plus3[0, 0, 0] = 1
-            p_plus3[0, 0, 1] = p_plus3[0, 1, 0] = p_plus3[1, 0, 0] = 3j
-            p_plus3[0, 1, 1] = p_plus3[1, 0, 1] = p_plus3[1, 1, 0] = -3
-            p_plus3[1, 1, 1] = -1j
-            p_plus3 = p_plus3 / (2 * np.sqrt(10))  # Normalization factor
-
-            # Polarization +2
-            # Fill select components for the +2 polarization
-            p_plus2[0, 0, 2] = p_plus2[0, 2, 0] = p_plus2[2, 0, 0] = 1
-            p_plus2[0, 1, 2] = p_plus2[0, 2, 1] = p_plus2[1, 0, 2] = p_plus2[1, 2, 0] = p_plus2[2, 0, 1] = p_plus2[
-                2, 1, 0] = 1j
-            p_plus2[1, 1, 2] = p_plus2[1, 2, 1] = p_plus2[2, 1, 1] = -1
-            p_plus2 = p_plus2 / (2 * np.sqrt(15))  # Normalization factor
-
-            # Polarization +1
-            # Fill select components for the +1 polarization
-            p_plus1[0, 2, 2] = p_plus1[2, 0, 2] = p_plus1[2, 2, 0] = 1
-            p_plus1[1, 2, 2] = p_plus1[2, 1, 2] = p_plus1[2, 2, 1] = 1j
-            p_plus1 = p_plus1 / (2 * np.sqrt(5))  # Normalization factor
-
-            # Polarization 0
-            # The zero polarization state is typically diagonal
-            p_zero[0, 0, 0] = p_zero[1, 1, 1] = -3
-            p_zero[2, 2, 2] = 6
-            p_zero = p_zero / (6 * np.sqrt(10))  # Normalization factor
-
-            # Polarization -1
-            # Conjugate of +1 polarization
-            p_minus1[0, 2, 2] = p_minus1[2, 0, 2] = p_minus1[2, 2, 0] = 1
-            p_minus1[1, 2, 2] = p_minus1[2, 1, 2] = p_minus1[2, 2, 1] = -1j
-            p_minus1 = p_minus1 / (2 * np.sqrt(5))  # Normalization factor
-
-            # Polarization -2
-            # Conjugate of +2 polarization
-            p_minus2[0, 0, 2] = p_minus2[0, 2, 0] = p_minus2[2, 0, 0] = 1
-            p_minus2[0, 1, 2] = p_minus2[0, 2, 1] = p_minus2[1, 0, 2] = p_minus2[1, 2, 0] = p_minus2[2, 0, 1] = \
-            p_minus2[2, 1, 0] = -1j
-            p_minus2[1, 1, 2] = p_minus2[1, 2, 1] = p_minus2[2, 1, 1] = -1
-            p_minus2 = p_minus2 / (2 * np.sqrt(15))  # Normalization factor
-
-            # Polarization -3
-            # Conjugate of +3 polarization
-            p_minus3[0, 0, 0] = 1
-            p_minus3[0, 0, 1] = p_minus3[0, 1, 0] = p_minus3[1, 0, 0] = -3j
-            p_minus3[0, 1, 1] = p_minus3[1, 0, 1] = p_minus3[1, 1, 0] = -3
-            p_minus3[1, 1, 1] = 1j
-            p_minus3 = p_minus3 / (2 * np.sqrt(10))  # Normalization factor
-
-            # Store all polarization bases in a list
-            self.polarization_bases = [
-                p_plus3,  # Polarization +3
-                p_plus2,  # Polarization +2
-                p_plus1,  # Polarization +1
-                p_zero,  # Polarization 0
-                p_minus1,  # Polarization -1
-                p_minus2,  # Polarization -2
-                p_minus3  # Polarization -3
-            ]
+        self.polarization_bases = self.generate_spin_basis()
 
     def _create_combined_wave_function(self):
         """
@@ -449,3 +314,80 @@ class Wave_vector_class:
                             idx += 1
 
         return wave_vector
+
+    def generate_spin_basis(self):
+        """
+        Generate polarization bases for arbitrary integer spin using Clebsch-Gordan coefficients.
+
+        Args:
+            spin (int): Total spin (e.g., 0, 1, 2, 3...)
+
+        Returns:
+            list of numpy.ndarray: Tensors representing each m state (m = -s ... +s)
+        """
+        spin = self.spin
+
+        if spin == 0:
+            return [np.array(1.0)]
+
+        dim = 3  # Spatial dimension
+        m_values = range(-spin, spin + 1)
+        basis = []
+
+        # Define unit vectors for spin-1 states
+        e_m = {
+            -1: np.array([1, -1j, 0]) / np.sqrt(2),
+            0: np.array([0, 0, 1]),
+            1: np.array([-1, -1j, 0]) / np.sqrt(2),
+        }
+
+        # Iterate over all m for given spin
+        for m in m_values:
+            tensor = np.zeros([dim] * spin, dtype=complex)
+
+            # Sum over all m1, m2, ..., ms such that sum(mi) = m
+            def recursive_combination(ms=(), total=0):
+                if len(ms) == spin:
+                    if total == m:
+                        # Get full CG coefficient product
+                        cg_total = 1
+                        valid = True
+                        for i in range(spin - 1):
+                            j1 = i + 1 if i > 0 else 1
+                            m1 = sum(ms[:i + 1]) if i > 0 else ms[i]
+                            j2 = 1
+                            m2 = ms[i + 1]
+                            j_total = j1 + j2
+                            cg_obj = CG(S(j1), S(m1), S(j2), S(m2), S(j_total), S(m1 + m2))
+                            cg = cg_obj.doit()
+
+                            if cg == 0:
+                                valid = False
+                                break
+                            cg_total *= cg
+
+                        if not valid:
+                            return
+
+                        # Build tensor product of vectors
+                        vecs = [e_m[mi] for mi in ms]
+                        component = vecs[0]
+                        for v in vecs[1:]:
+                            component = np.tensordot(component, v, axes=0)
+                        tensor[:] += float(cg_total) * component
+
+
+                else:
+                    for mi in [-1, 0, 1]:
+                        recursive_combination(ms + (mi,), total + mi)
+
+            recursive_combination()
+
+            # Normalize the tensor
+            norm = np.linalg.norm(tensor)
+            if norm != 0:
+                tensor = tensor / norm
+
+            basis.append(tensor)
+
+        return basis

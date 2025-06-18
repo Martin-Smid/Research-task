@@ -62,11 +62,11 @@ class Evolution_Class:
         # create concentric sphere around the ceter with growing radius and commpute density in each shell
         # plot the values of radius and the density recorded at different time steps
 
-
-        # Setup save directory and initialize storage
-        self._setup_evolution_storage(wave_functions)
         for wf in wave_functions:
             wf.psi = cp.asarray(wf.psi)
+
+            # Setup save directory and initialize storage
+        self._setup_evolution_storage(wave_functions)
 
         total_density = self._compute_total_density(wave_functions)
 
@@ -79,9 +79,9 @@ class Evolution_Class:
                              ) / wave_functions[0].soliton_mass) - self.simulation.num_of_w_vects_in_sim
 
         if (mass_diff > 1e-2):
-            print("mass diff is greater than 1e-2, might want to increase the resolution")
+            print(f"mass diff {mass_diff} is greater than 1e-2, might want to increase the resolution")
         else:
-            print(f"mass diff is {mass_diff}")
+            print(f"mass diff is {mass_diff:.6f} Msun")
 
 
 

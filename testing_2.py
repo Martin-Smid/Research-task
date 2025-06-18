@@ -12,6 +12,9 @@ import numpy as np
 
 
 #TODO recrete plot 1 and 6, using 12 and 13 and 21, do not bother with tau dyn for now
+#TODO: make the sim more effective, delete the created wave after adding it to the simulation
+#TODO: find the spin 3 basis and fix the thing
+#TODO into safe file not just N but spin also and show N and spin in legend
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
@@ -40,10 +43,10 @@ def is_far_enough(new_pos, existing_positions, min_dist):
 
 waves = []
 positions = []
-min_separation = 5 # Adjust based on soliton radius
-boundary = [-45,45]  # Same for all dimensions
+min_separation = 4 # Adjust based on soliton radius
+boundary = [-18,18]  # Same for all dimensions
 
-for i in range(5):
+for i in range(25):
     while True:
         means = generate_random_position(boundary)
         if is_far_enough(means, positions, min_separation):
@@ -60,16 +63,17 @@ for i in range(5):
         mass=1,
         omega=1,
         momenta=[0.0, 0.0, 0.0],
-        spin=0,
+        spin=1,
         desired_soliton_mass=5.3090068e7,
     )
     waves.append(vlna)
+
 
 for wave in waves:
     sim.add_wave_vector(wave_vector=wave)
 
 
-sim.evolve(save_every=1000)
+sim.evolve(save_every=200)
 
 
 
@@ -106,5 +110,5 @@ for time in sim.accessible_times:
     plt.ylabel("y")
     plt.grid()
     plt.savefig(f"{save_dir}/timestep_{time}.jpg")
-    #plt.show()
+    plt.show()
     plt.close()

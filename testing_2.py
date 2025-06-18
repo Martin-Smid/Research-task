@@ -10,22 +10,24 @@ import numpy as np
 
 
 
-
+#TODO: use the symmetries of the wave vector to reduce the necessary number of waves in evolution
 #TODO recrete plot 1 and 6, using 12 and 13 and 21, do not bother with tau dyn for now
+#TODO: make the sim more effective, delete the created wave after adding it to the simulation
+#TODO: find the spin 3 basis and fix the thing
 
 sim = Simulation_Class(
-    dim=3,                             # 2D simulation
-    boundaries=[(-20, 20),(-20, 20),(-20,20)], # Spatial boundaries
+    dim=3,                             # 3D simulation
+    boundaries=[(-50, 50),(-50, 50),(-50,50)], # Spatial boundaries
     N=64,                             # Grid resolution
-    total_time=1,                   # Total simulation time
+    total_time=3,                   # Total simulation time
     h=0.01,                            # Time step
     order_of_evolution=2,
     use_gravity=True , # Enable gravitational effects
     static_potential=None,
     save_max_vals=True,
-    a_s=-1e-80,
+    a_s=1e-80,
 
-    self_int=False
+    self_int=True
 
 )
 def generate_random_position(boundary):
@@ -41,9 +43,9 @@ def is_far_enough(new_pos, existing_positions, min_dist):
 waves = []
 positions = []
 min_separation = 4 # Adjust based on soliton radius
-boundary = [-18,18]  # Same for all dimensions
+boundary = [-8,8]  # Same for all dimensions
 
-for i in range(25):
+for i in range(1):
     while True:
         means = generate_random_position(boundary)
         if is_far_enough(means, positions, min_separation):
@@ -53,7 +55,7 @@ for i in range(25):
     print(f"Wave {i+1} position: {means}")
 
     vlna = Wave_vector_class(
-        packet_type="resources/solitons/GroundState(1).dat",
+        packet_type="resources/solitons/Modo-1e-80.dat",
         means=means,
         st_deviations=[0.5, 0.5, 0.5],
         simulation=sim,

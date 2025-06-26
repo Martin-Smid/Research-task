@@ -54,9 +54,9 @@ class Wave_vector_class:
 
         basis = []
         for m in range(-self.spin, self.spin + 1):
-            tensor = np.zeros([3] * self.spin, dtype=complex)
+            tensor = np.zeros([3] * self.spin, dtype=complex) #Creates a tensor with dimensions 3×3×...×3 (spin times)
 
-            def build(ms=(), total=0):
+            def build(ms=(), total=0): #ms are magnetic quantum numbers, total is their sum
                 if len(ms) == self.spin:
                     if total != m:
                         return
@@ -65,6 +65,11 @@ class Wave_vector_class:
                     for v in vecs[1:]:
                         t = np.tensordot(t, v, axes=0)
                     tensor[:] += t
+                    '''
+                    This creates a list of spherical basis vectors corresponding to each magnetic quantum number in the tuple ms
+                    for spin 2: vecs = [e_m[-1], e_m[1]]
+                                vecs = [np.array([1, -1j, 0]) / np.sqrt(2), np.array([-1, -1j, 0]) / np.sqrt(2)] 
+                    '''
                 else:
                     for mi in [-1, 0, 1]:
                         build(ms + (mi,), total + mi)

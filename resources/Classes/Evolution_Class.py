@@ -39,6 +39,9 @@ class Evolution_Class:
         self.snapshot_directory = None
         self.num_wave_functions = 0
 
+        self.energy_log = []
+
+
         # Pre-compute propagators and coefficients
         self._calculate_coefficients_and_propagators()
 
@@ -80,6 +83,7 @@ class Evolution_Class:
 
         # Main evolution loop
         for step in range(self.num_steps):
+            self.total_energy = 0
             save_step=False
             # Save snapshots at specified intervals
             if step % save_every == 0 and step > 0:
@@ -151,7 +155,8 @@ class Evolution_Class:
 
         # Drift step
         compute_kin_en = save_step
-        self._drift_all_wave_functions(wave_functions, compute_kinetic=compute_kin_en)
+
+        self._drift_all_wave_functions(wave_functions,is_first, compute_kinetic=compute_kin_en)
 
 
 
@@ -244,28 +249,33 @@ class Evolution_Class:
             full_potential_propagator = static_propagator * gravity_propagator
             wf.psi *= full_potential_propagator
 
-    def _drift_all_wave_functions(self, wave_functions, compute_kinetic=False, time_factor_key='full'):
+    def _drift_all_wave_functions(self, wave_functions,is_first, compute_kinetic=False, time_factor_key='full'):
 
         """Apply drift step to all wave functions."""
         kinetic_propagator = self.kinetic_propagators[time_factor_key]
-        if compute_kinetic:
+        print(is_first)
+        if compute_kinetic or is_first:
+            print("jsem tu")
             dx = np.prod(self.simulation.dx)
             k_squared = sum(k ** 2 for k in self.simulation.k_space)
-            total_kinetic_energy = 0.0
+            total_kin_en = 0
         for wf in wave_functions:
             # Transform to momentum space
             psi_k = cp.fft.fftn(wf.psi)
             #if save step compute the kinetic energy
-            if compute_kinetic:
+            if compute_kinetic or is_first:
                 grad_squared = k_squared * cp.abs(psi_k) ** 2
                 partials_squared = cp.fft.ifftn(grad_squared).real
-                total_kinetic_energy += 0.5 * self.simulation.h_bar_tilde ** 2 * cp.sum(partials_squared) * dx
+                total_kin_en += 0.5 * self.simulation.h_bar_tilde ** 2 * cp.sum(partials_squared) * dx
+                self.last_kinetic_energy = total_kin_en
+
+
             # Apply kinetic propagator
             psi_k *= kinetic_propagator
             # Transform back
             wf.psi = cp.fft.ifftn(psi_k)
-        if compute_kinetic:
-            print(total_kinetic_energy)
+
+
 
     def _compute_total_density(self, wave_functions):
         """Calculate the total density ρ = Σ|ψᵢ|² from all wave functions."""
@@ -420,6 +430,10 @@ class Evolution_Class:
                     print(f"File '{self.max_vals_filename}' has been deleted.")
                 else:
                     print(f"File '{self.max_vals_filename}' does not exist.")
+        energy_path = os.path.join(self.snapshot_directory, "energy.txt")
+        df = pd.DataFrame(self.energy_log)
+        df.to_csv(energy_path, index=False, float_format="%.6e")
+        print(f"Energy log saved to: {energy_path}")
 
         print("Evolution completed successfully")
         print(f"Saved times are {self.accessible_times}")
@@ -486,10 +500,23 @@ class Evolution_Class:
         """
         dx = np.prod(self.simulation.dx)
         #potential = self.simulation.static_potential(self.simulation) DODĚLAT AŽ NEBUDU LÍNEJ
-
         total_density = total_density
+        self.last_potential_energy = cp.sum(total_density) * dx  # TODO: use real potential later
+        K = self.last_kinetic_energy
+        W = self.last_potential_energy
+        E = K + W
+        W_over_E = W / cp.abs(E)
 
-        potential_energy = cp.sum( total_density) * dx #přidat do cp.sum(potential*tot density)
-        print(f"[Step {self.simulation.h * self.num_steps:.2e}] Potential Energy: {potential_energy.item():.6e}")
-        return potential_energy
+        t = self.simulation.h * len(self.accessible_times)
+
+        self.energy_log.append({
+            "time": float(t),
+            "K": float(K),
+            "W": float(W),
+            "E": float(E),
+            "W/|E|": float(W_over_E)
+        })
+
+
+
 

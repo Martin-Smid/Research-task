@@ -15,7 +15,7 @@ import numpy as np
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-15, 15),(-15,15),(-15,15)], # Spatial boundaries
+    boundaries=[(-20, 20),(-20,20),(-20,20)], # Spatial boundaries
     N=64,                             # Grid resolution
     total_time=1,                   # Total simulation time
     h=0.01,                            # Time step
@@ -39,10 +39,10 @@ def is_far_enough(new_pos, existing_positions, min_dist):
 
 waves = []
 positions = []
-min_separation = 5 # Adjust based on soliton radius
-boundary = [-5,5]  # Same for all dimensions
+min_separation = 3 # Adjust based on soliton radius
+boundary = [-15,15]  # Same for all dimensions
 
-for i in range(1):
+for i in range(10):
     while True:
         means = generate_random_position(boundary)
         if is_far_enough(means, positions, min_separation):
@@ -59,7 +59,7 @@ for i in range(1):
         mass=1,
         omega=1,
         momenta=[0.0, 0.0, 0.0],
-        spin=2,
+        spin=0,
         desired_soliton_mass=5.3090068e7,
     )
     sim.add_wave_vector(wave_vector=vlna)

@@ -40,7 +40,7 @@ def is_far_enough(new_pos, existing_positions, min_dist):
 waves = []
 positions = []
 min_separation = 3 # Adjust based on soliton radius
-boundary = [-15,15]  # Same for all dimensions
+boundary = [-5,5]  # Same for all dimensions
 
 for i in range(10):
     while True:

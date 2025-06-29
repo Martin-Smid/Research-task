@@ -92,6 +92,8 @@ class Evolution_Class:
             wave_functions = self._perform_evolution_step(wave_functions, step, save_step)
             if step % save_every == 0 and step > 0:
                 self._save_snapshots(wave_functions, step, save_every)
+                self.compute_kinetic_energy(wave_functions)
+                self._compute_potential_energy(wave_functions, total_density)
 
             # Memory cleanup
             cp.get_default_memory_pool().free_all_blocks()
@@ -148,15 +150,14 @@ class Evolution_Class:
     def _evolve_order_2(self, wave_functions, is_first, is_last,save_step):
         """Second-order split-step evolution."""
         total_density = self._compute_total_density(wave_functions)
-        if save_step:
-            self._compute_potential_energy(wave_functions, total_density)
+
         # Kick step
         self._kick_all_wave_functions(wave_functions, total_density, is_first, is_last)
 
         # Drift step
         compute_kin_en = save_step
 
-        self._drift_all_wave_functions(wave_functions,is_first, compute_kinetic=compute_kin_en)
+        self._drift_all_wave_functions(wave_functions)
 
 
 
@@ -188,10 +189,8 @@ class Evolution_Class:
 
             else:  # drift
                 is_last_drift = save_step and (i == len(steps) - 2)
-                self._drift_all_wave_functions(wave_functions, compute_kinetic=is_last_drift, time_factor_key=coeff_key)
-        if save_step:
-            total_density = self._compute_total_density(wave_functions)
-            self._compute_potential_energy(wave_functions, total_density)
+                self._drift_all_wave_functions(wave_functions, time_factor_key=coeff_key)
+
 
         return wave_functions
 
@@ -218,11 +217,9 @@ class Evolution_Class:
                 is_last_drift = save_step and (i == len(steps) - 1)
 
 
-                self._drift_all_wave_functions(wave_functions, compute_kinetic=is_last_drift, time_factor_key=coeff_key)
+                self._drift_all_wave_functions(wave_functions, time_factor_key=coeff_key)
 
-        if save_step:
-            total_density = self._compute_total_density(wave_functions)
-            self._compute_potential_energy(wave_functions, total_density)
+
 
         return wave_functions
 
@@ -249,27 +246,14 @@ class Evolution_Class:
             full_potential_propagator = static_propagator * gravity_propagator
             wf.psi *= full_potential_propagator
 
-    def _drift_all_wave_functions(self, wave_functions,is_first, compute_kinetic=False, time_factor_key='full'):
+    def _drift_all_wave_functions(self, wave_functions, time_factor_key='full'):
 
         """Apply drift step to all wave functions."""
         kinetic_propagator = self.kinetic_propagators[time_factor_key]
-        print(is_first)
-        if compute_kinetic or is_first:
-            print("jsem tu")
-            dx = np.prod(self.simulation.dx)
-            k_squared = sum(k ** 2 for k in self.simulation.k_space)
-            total_kin_en = 0
+
         for wf in wave_functions:
             # Transform to momentum space
             psi_k = cp.fft.fftn(wf.psi)
-            #if save step compute the kinetic energy
-            if compute_kinetic or is_first:
-                grad_squared = k_squared * cp.abs(psi_k) ** 2
-                partials_squared = cp.fft.ifftn(grad_squared).real
-                total_kin_en += 0.5 * self.simulation.h_bar_tilde ** 2 * cp.sum(partials_squared) * dx
-                self.last_kinetic_energy = total_kin_en
-
-
             # Apply kinetic propagator
             psi_k *= kinetic_propagator
             # Transform back
@@ -476,22 +460,6 @@ class Evolution_Class:
 
         print(f"{self.max_vals_filename} saved")
 
-    '''def _compute_kinetic_energy(self,wave_functions):
-        """
-         Compute the kinetic energy of the wavefunction using 'k_squared' method in furier space.
-        """
-        k_squared = sum(k ** 2 for k in self.simulation.k_space)
-        dx = np.prod(self.simulation.dx)
-
-        total_kinetic_energy = 0.0
-        for wf in wave_functions:
-            psi_k = cp.fft.fftn(wf.psi)
-            grad_squared = k_squared * cp.abs(psi_k) ** 2
-            partials_squared = cp.fft.ifftn(grad_squared).real
-            total_kinetic_energy += 0.5 * self.simulation.h_bar_tilde ** 2 * cp.sum(partials_squared) * dx
-        print(total_kinetic_energy)
-        return total_kinetic_energy
-        '''
 
     def _compute_potential_energy(self,wave_functions,total_density):
         """
@@ -517,6 +485,19 @@ class Evolution_Class:
             "W/|E|": float(W_over_E)
         })
 
+    def compute_kinetic_energy(self,wave_functions):
+        """
+        Compute the kinetic energy of the wavefunction using 'gradient'  method.
+        """
+        dx = np.prod(self.simulation.dx)
+        k_space = self.simulation.k_space
+        kinetic_energy = 0
+        for wf in wave_functions:
+            partials_squared = 0
+            for i, k_i in enumerate(k_space):
+                grad_i = cp.fft.ifftn(-1j * k_i * cp.fft.fftn(wf.psi))
+                partials_squared += cp.abs(grad_i) ** 2
+            part_kin_en = 0.5 * self.simulation.h_bar_tilde ** 2 * cp.sum(partials_squared) * dx
+            kinetic_energy += part_kin_en
 
-
-
+        self.last_kinetic_energy = kinetic_energy

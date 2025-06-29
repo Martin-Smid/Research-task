@@ -10,24 +10,20 @@ import numpy as np
 
 
 
-#TODO: use the symmetries of the wave vector to reduce the necessary number of waves in evolution
 #TODO recrete plot 1 and 6, using 12 and 13 and 21, do not bother with tau dyn for now
-#TODO: make the sim more effective, delete the created wave after adding it to the simulation
-#TODO: find the spin 3 basis and fix the thing
-#TODO into safe file not just N but spin also and show N and spin in legend
+
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-15, 15),(-15,15),(-15,15)], # Spatial boundaries
     N=64,                             # Grid resolution
-    total_time=5,                   # Total simulation time
+    total_time=1,                   # Total simulation time
     h=0.01,                            # Time step
     order_of_evolution=2,
     use_gravity=True , # Enable gravitational effects
     static_potential=None,
     save_max_vals=True,
     a_s=-1e-80,
-
     self_int=True
 
 )
@@ -44,7 +40,7 @@ def is_far_enough(new_pos, existing_positions, min_dist):
 waves = []
 positions = []
 min_separation = 5 # Adjust based on soliton radius
-boundary = [-8,8]  # Same for all dimensions
+boundary = [-5,5]  # Same for all dimensions
 
 for i in range(1):
     while True:
@@ -62,20 +58,17 @@ for i in range(1):
         simulation=sim,
         mass=1,
         omega=1,
-        momenta=[0.0, 3, 0.0],
-        spin=0,
+        momenta=[0.0, 0.0, 0.0],
+        spin=2,
         desired_soliton_mass=5.3090068e7,
     )
-    waves.append(vlna)
+    sim.add_wave_vector(wave_vector=vlna)
     del vlna
     cp._default_memory_pool.free_all_blocks()
 
-for wave in waves:
-    sim.add_wave_vector(wave_vector=wave)
-    del wave
 
 
-sim.evolve(save_every=250)
+sim.evolve(save_every=25)
 
 
 

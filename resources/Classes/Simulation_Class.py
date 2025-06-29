@@ -204,6 +204,8 @@ class Simulation_Class:
         dx_values = []
         grids = []
 
+        self.dV = int(self.boundaries[0][1] - self.boundaries[0][0]) / self.N
+
         for i, (a, b) in enumerate(self.boundaries):
             if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
                 raise BoundaryFormatError(

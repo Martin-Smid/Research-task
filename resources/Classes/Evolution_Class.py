@@ -67,12 +67,8 @@ class Evolution_Class:
 
         mass_diff = (
                             (abs(total_density).sum()
-                             * (
-                                     int(self.simulation.boundaries[0][1] - self.simulation.boundaries[0][0])
-                                     / (self.simulation.N)
-                             ) ** 3
-                             ) / wave_functions[0].soliton_mass) - self.simulation.num_of_w_vects_in_sim
-
+                             * (self.simulation.dV ** 3)
+                             )/ wave_functions[0].soliton_mass) - self.simulation.num_of_w_vects_in_sim
         if (mass_diff > 1e-2):
             print(f"mass diff {mass_diff} is greater than 1e-2, might want to increase the resolution")
         else:
@@ -84,12 +80,13 @@ class Evolution_Class:
 
         # Main evolution loop
         for step in range(self.num_steps):
-            wave_functions = self._perform_evolution_step(wave_functions, step)
-
+            save_step=False
             # Save snapshots at specified intervals
             if step % save_every == 0 and step > 0:
-                #self.compute_energies()
-                #TODO: add computation of energy from 12 and 13
+                save_step = True
+
+            wave_functions = self._perform_evolution_step(wave_functions, step, save_step)
+            if step % save_every == 0 and step > 0:
                 self._save_snapshots(wave_functions, step, save_every)
 
             # Memory cleanup
@@ -120,7 +117,7 @@ class Evolution_Class:
             np.save(initial_path, cp.asnumpy(wf.psi))
             self.wave_values[wf_idx].append(initial_path)
 
-    def _perform_evolution_step(self, wave_functions, step):
+    def _perform_evolution_step(self, wave_functions, step,save_step):
         """Perform a single evolution step based on the order."""
         evolution_methods = {
             2: self._evolve_order_2,
@@ -134,7 +131,7 @@ class Evolution_Class:
         is_first = (step == 0)
         is_last = (step == self.num_steps - 1)
 
-        wave_functions = evolution_methods[self.order](wave_functions, is_first, is_last)
+        wave_functions = evolution_methods[self.order](wave_functions, is_first, is_last,save_step)
 
         # Track maximum values if enabled
         if self.save_max_vals:
@@ -144,15 +141,20 @@ class Evolution_Class:
 
         return wave_functions
 
-    def _evolve_order_2(self, wave_functions, is_first, is_last):
+    def _evolve_order_2(self, wave_functions, is_first, is_last,save_step):
         """Second-order split-step evolution."""
         total_density = self._compute_total_density(wave_functions)
-
+        if save_step:
+            self._compute_potential_energy(wave_functions, total_density)
         # Kick step
         self._kick_all_wave_functions(wave_functions, total_density, is_first, is_last)
 
         # Drift step
-        self._drift_all_wave_functions(wave_functions)
+        compute_kin_en = save_step
+        self._drift_all_wave_functions(wave_functions, compute_kinetic=compute_kin_en)
+
+
+
 
         # Final kick for last step
         if is_last:
@@ -162,7 +164,7 @@ class Evolution_Class:
 
         return wave_functions
 
-    def _evolve_order_4(self, wave_functions, is_first, is_last):
+    def _evolve_order_4(self, wave_functions, is_first, is_last,save_step):
         """Fourth-order split-step evolution."""
         # Step sequence for 4th order
         steps = [
@@ -178,12 +180,17 @@ class Evolution_Class:
                 first_op = is_first and i == 0
                 last_op = is_last and i == len(steps) - 1
                 self._kick_all_wave_functions(wave_functions, total_density, first_op, last_op, coeff_key)
+
             else:  # drift
-                self._drift_all_wave_functions(wave_functions, coeff_key)
+                is_last_drift = save_step and (i == len(steps) - 2)
+                self._drift_all_wave_functions(wave_functions, compute_kinetic=is_last_drift, time_factor_key=coeff_key)
+        if save_step:
+            total_density = self._compute_total_density(wave_functions)
+            self._compute_potential_energy(wave_functions, total_density)
 
         return wave_functions
 
-    def _evolve_order_6(self, wave_functions, is_first, is_last):
+    def _evolve_order_6(self, wave_functions, is_first, is_last,save_step):
         """Sixth-order split-step evolution."""
         # Step sequence for 6th order (symmetric)
         steps = [
@@ -201,8 +208,16 @@ class Evolution_Class:
                 first_kick = is_first and i == kick_indices[0]
                 last_kick = is_last and i == kick_indices[-1]
                 self._kick_all_wave_functions(wave_functions, total_density, first_kick, last_kick, coeff_key)
+
             else:  # drift
-                self._drift_all_wave_functions(wave_functions, coeff_key)
+                is_last_drift = save_step and (i == len(steps) - 1)
+
+
+                self._drift_all_wave_functions(wave_functions, compute_kinetic=is_last_drift, time_factor_key=coeff_key)
+
+        if save_step:
+            total_density = self._compute_total_density(wave_functions)
+            self._compute_potential_energy(wave_functions, total_density)
 
         return wave_functions
 
@@ -229,17 +244,28 @@ class Evolution_Class:
             full_potential_propagator = static_propagator * gravity_propagator
             wf.psi *= full_potential_propagator
 
-    def _drift_all_wave_functions(self, wave_functions, time_factor_key='full'):
+    def _drift_all_wave_functions(self, wave_functions, compute_kinetic=False, time_factor_key='full'):
+
         """Apply drift step to all wave functions."""
         kinetic_propagator = self.kinetic_propagators[time_factor_key]
-
+        if compute_kinetic:
+            dx = np.prod(self.simulation.dx)
+            k_squared = sum(k ** 2 for k in self.simulation.k_space)
+            total_kinetic_energy = 0.0
         for wf in wave_functions:
             # Transform to momentum space
             psi_k = cp.fft.fftn(wf.psi)
+            #if save step compute the kinetic energy
+            if compute_kinetic:
+                grad_squared = k_squared * cp.abs(psi_k) ** 2
+                partials_squared = cp.fft.ifftn(grad_squared).real
+                total_kinetic_energy += 0.5 * self.simulation.h_bar_tilde ** 2 * cp.sum(partials_squared) * dx
             # Apply kinetic propagator
             psi_k *= kinetic_propagator
             # Transform back
             wf.psi = cp.fft.ifftn(psi_k)
+        if compute_kinetic:
+            print(total_kinetic_energy)
 
     def _compute_total_density(self, wave_functions):
         """Calculate the total density ρ = Σ|ψᵢ|² from all wave functions."""
@@ -436,4 +462,34 @@ class Evolution_Class:
 
         print(f"{self.max_vals_filename} saved")
 
+    '''def _compute_kinetic_energy(self,wave_functions):
+        """
+         Compute the kinetic energy of the wavefunction using 'k_squared' method in furier space.
+        """
+        k_squared = sum(k ** 2 for k in self.simulation.k_space)
+        dx = np.prod(self.simulation.dx)
+
+        total_kinetic_energy = 0.0
+        for wf in wave_functions:
+            psi_k = cp.fft.fftn(wf.psi)
+            grad_squared = k_squared * cp.abs(psi_k) ** 2
+            partials_squared = cp.fft.ifftn(grad_squared).real
+            total_kinetic_energy += 0.5 * self.simulation.h_bar_tilde ** 2 * cp.sum(partials_squared) * dx
+        print(total_kinetic_energy)
+        return total_kinetic_energy
+        '''
+
+    def _compute_potential_energy(self,wave_functions,total_density):
+        """
+        Compute the potential energy:
+        W = ∫ V(x) · Tr(ψ†ψ) dV = ∫ V(x) · total_density(x) dV
+        """
+        dx = np.prod(self.simulation.dx)
+        #potential = self.simulation.static_potential(self.simulation) DODĚLAT AŽ NEBUDU LÍNEJ
+
+        total_density = total_density
+
+        potential_energy = cp.sum( total_density) * dx #přidat do cp.sum(potential*tot density)
+        print(f"[Step {self.simulation.h * self.num_steps:.2e}] Potential Energy: {potential_energy.item():.6e}")
+        return potential_energy
 

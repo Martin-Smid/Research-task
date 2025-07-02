@@ -46,4 +46,13 @@ The simulations aim to advance our understanding of the properties and cosmologi
 - using sperically symmetric wave function packet a test was run to see if it behaves as expected - it does ✓
 
 **Phase 3**
-- adding physical units to the simulation - work in progress as of 3.4.2025
+- adding physical units to the simulation - ✓
+
+**Phase 3.5**
+- ran a simulation to verify correct implementation of physical units by simulating circular orbit around a massive object ✓
+
+**Phase 4**
+- Creation of Wave_vector_class which allows for implementation of different spins of wave functions using Clebsh Gordan coeffs ✓
+- streamlined the creation of wave function so that it is no longer needed to create a Wave_function instance to create a Wave_vector
+instance but one should create Wave_vector instance with params of Wave_fucntion and spin ✓
+- allowed for mass scaling of the soliton using methodes from https://arxiv.org/pdf/2502.03561 ✓

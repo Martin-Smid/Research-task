@@ -15,12 +15,12 @@ import numpy as np
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-20, 20),(-20,20),(-20,20)], # Spatial boundaries
+    boundaries=[(-35, 35),(-35,35),(-50,50)], # Spatial boundaries
     N=128,                             # Grid resolution
-    total_time=10,              # Total simulation time
+    total_time=30,              # Total simulation time
     h=0.01,                            # Time step
     order_of_evolution=2,
-    use_gravity=True , # Enable gravitational effects
+    use_gravity=True ,
     static_potential=None,
     save_max_vals=True,
     a_s=-1e-80,
@@ -42,7 +42,7 @@ positions = []
 min_separation = 3 # Adjust based on soliton radius
 boundary = [-15,15]  # Same for all dimensions
 
-for i in range(10):
+for i in range(5):
     while True:
         means = generate_random_position(boundary)
         if is_far_enough(means, positions, min_separation):
@@ -68,7 +68,7 @@ for i in range(10):
 
 
 
-sim.evolve(save_every=100)
+sim.evolve(save_every=200)
 
 
 

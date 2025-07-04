@@ -523,22 +523,22 @@ class Evolution_Class:
 
         rho = total_density
 
-
+        # Find center of mass (maximum density)
         ix, iy, iz = cp.asnumpy(cp.argwhere(rho == rho.max())[0])
         rho_max = cp.asnumpy(rho.max())
 
-
+        # Get coordinates
         grid_x = cp.asarray(self.simulation.grids[0])
         grid_y = cp.asarray(self.simulation.grids[1])
         grid_z = cp.asarray(self.simulation.grids[2])
         dx_, dy_, dz_ = dx
 
-        # Physical coordinates of the center
-        center_x = grid_x[ix]
-        center_y = grid_y[iy]
-        center_z = grid_z[iz]
+        # Physical coordinates of the center (from 3D meshgrid)
+        center_x = grid_x[ix, iy, iz]
+        center_y = grid_y[ix, iy, iz]
+        center_z = grid_z[ix, iy, iz]
 
-
+        # Shifted coordinates (centered at peak) - FIXED
         Delta_x = grid_x - center_x
         Delta_y = grid_y - center_y
         Delta_z = grid_z - center_z
@@ -546,15 +546,22 @@ class Evolution_Class:
         r = cp.sqrt(Delta_x ** 2 + Delta_y ** 2 + Delta_z ** 2)
 
         # To CPU for binning
-        r_cpu = cp.asnumpy(r.ravel())
-        rho_cpu = cp.asnumpy(rho.ravel())
+        r_cpu = cp.asnumpy(r)
+        rho_cpu = cp.asnumpy(rho)
 
-        # Histogram without shell volume normalization
-        counts, bins = np.histogram(r_cpu, bins=Nbins, weights=rho_cpu)  # Use Nbins parameter
-        shell_volumes = 1  # No shell volume correction
+        # Create radial bins
+        bins = np.linspace(0, r_cpu.max(), Nbins)
 
-        # Simple average without volume weighting
-        rho_avg = counts
+        # Calculate mean density in each radial bin
+        counts = []
+        for i in range(len(bins) - 1):
+            mask = (r_cpu > bins[i]) & (r_cpu <= bins[i + 1])
+            if np.any(mask):
+                counts.append(rho_cpu[mask].mean())
+            else:
+                counts.append(0.0)  # Handle empty bins
+
+        rho_avg = np.array(counts)
 
         # Normalize
         if rho_avg.max() > 0:

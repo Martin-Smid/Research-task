@@ -4,6 +4,7 @@ import os
 import datetime
 import pandas as pd
 from resources.Functions.system_fucntions import plot_max_values_on_N
+import matplotlib.pyplot as plt
 
 np.random.seed(1)
 
@@ -77,23 +78,28 @@ class Evolution_Class:
         else:
             print(f"mass diff is {mass_diff:.6f} Msun")
 
-
-
+        del total_density
 
 
         # Main evolution loop
         for step in range(self.num_steps):
+
+            total_density = self._compute_total_density(wave_functions)
             self.total_energy = 0
             save_step=False
+            current_time = step * self.h
+            self.compute_kinetic_energy(wave_functions)
+            self._compute_potential_energy(wave_functions, total_density, current_time)
             # Save snapshots at specified intervals
             if step % save_every == 0 and step > 0:
                 save_step = True
+            wave_functions = self._perform_evolution_step(wave_functions,total_density, step, save_step)
 
-            wave_functions = self._perform_evolution_step(wave_functions, step, save_step)
             if step % save_every == 0 and step > 0:
+                self.compute_radial_density_profile(total_density,current_time, Nbins=100)
+
                 self._save_snapshots(wave_functions, step, save_every)
-                self.compute_kinetic_energy(wave_functions)
-                self._compute_potential_energy(wave_functions, total_density)
+
 
             # Memory cleanup
             cp.get_default_memory_pool().free_all_blocks()
@@ -123,7 +129,7 @@ class Evolution_Class:
             np.save(initial_path, cp.asnumpy(wf.psi))
             self.wave_values[wf_idx].append(initial_path)
 
-    def _perform_evolution_step(self, wave_functions, step,save_step):
+    def _perform_evolution_step(self, wave_functions,total_density, step,save_step):
         """Perform a single evolution step based on the order."""
         evolution_methods = {
             2: self._evolve_order_2,
@@ -137,7 +143,7 @@ class Evolution_Class:
         is_first = (step == 0)
         is_last = (step == self.num_steps - 1)
 
-        wave_functions = evolution_methods[self.order](wave_functions, is_first, is_last,save_step)
+        wave_functions = evolution_methods[self.order](wave_functions,total_density, is_first, is_last,save_step)
 
         # Track maximum values if enabled
         if self.save_max_vals:
@@ -147,9 +153,9 @@ class Evolution_Class:
 
         return wave_functions
 
-    def _evolve_order_2(self, wave_functions, is_first, is_last,save_step):
+    def _evolve_order_2(self, wave_functions,total_density ,is_first, is_last,save_step):
         """Second-order split-step evolution."""
-        total_density = self._compute_total_density(wave_functions)
+
 
         # Kick step
         self._kick_all_wave_functions(wave_functions, total_density, is_first, is_last)
@@ -461,7 +467,7 @@ class Evolution_Class:
         print(f"{self.max_vals_filename} saved")
 
 
-    def _compute_potential_energy(self,wave_functions,total_density):
+    def _compute_potential_energy(self,wave_functions,total_density,current_time):
         """
         Compute the potential energy:
         W = ∫ V(x) · Tr(ψ†ψ) dV = ∫ V(x) · total_density(x) dV
@@ -475,7 +481,7 @@ class Evolution_Class:
         E = K + W
         W_over_E = W / cp.abs(E)
 
-        t = self.simulation.h * len(self.accessible_times)
+        t = current_time
 
         self.energy_log.append({
             "time": float(t),
@@ -501,3 +507,79 @@ class Evolution_Class:
             kinetic_energy += part_kin_en
 
         self.last_kinetic_energy = kinetic_energy
+
+    def compute_radial_density_profile(self, total_density, current_time, Nbins=100):
+        """
+        Compute, plot, and save the spherically averaged radial density profile.
+
+        Parameters:
+            total_density (cp.ndarray): The total density |ψ|² of the system
+            current_time (float): The simulation time to use in file naming
+            Nbins (int): Number of radial bins
+        """
+
+        dx = self.simulation.dx
+        BoxSize = [b[1] - b[0] for b in self.simulation.boundaries]
+
+        rho = total_density
+
+
+        ix, iy, iz = cp.asnumpy(cp.argwhere(rho == rho.max())[0])
+        rho_max = cp.asnumpy(rho.max())
+
+
+        grid_x = cp.asarray(self.simulation.grids[0])
+        grid_y = cp.asarray(self.simulation.grids[1])
+        grid_z = cp.asarray(self.simulation.grids[2])
+        dx_, dy_, dz_ = dx
+
+        # Physical coordinates of the center
+        center_x = grid_x[ix]
+        center_y = grid_y[iy]
+        center_z = grid_z[iz]
+
+
+        Delta_x = grid_x - center_x
+        Delta_y = grid_y - center_y
+        Delta_z = grid_z - center_z
+
+        r = cp.sqrt(Delta_x ** 2 + Delta_y ** 2 + Delta_z ** 2)
+
+        # To CPU for binning
+        r_cpu = cp.asnumpy(r.ravel())
+        rho_cpu = cp.asnumpy(rho.ravel())
+
+        # Histogram without shell volume normalization
+        counts, bins = np.histogram(r_cpu, bins=Nbins, weights=rho_cpu)  # Use Nbins parameter
+        shell_volumes = 1  # No shell volume correction
+
+        # Simple average without volume weighting
+        rho_avg = counts
+
+        # Normalize
+        if rho_avg.max() > 0:
+            rho_avg /= rho_avg.max()
+
+        bin_centers = 0.5 * (bins[1:] + bins[:-1])
+
+        save_dir = os.path.join(self.snapshot_directory, "density_profiles")
+        os.makedirs(save_dir, exist_ok=True)
+
+        # Save data
+        filename = f"density_data_at_time_{current_time:.6f}.csv"
+        save_path = os.path.join(save_dir, filename)
+
+        np.savetxt(save_path, np.column_stack((bin_centers, rho_avg)),
+                   delimiter=",", header="radius,density", comments="")
+
+        # Plot
+        plt.figure(figsize=(6, 4))
+        plt.plot(bin_centers, rho_avg, lw=2)
+        plt.xlabel("Radius r [kpc]")
+        plt.ylabel("Spherically Averaged Density ρ(r)")
+        plt.title(f"Radial Density Profile at t = {current_time:.2f}")
+        plt.yscale("log")
+        plt.xscale("log")
+        plt.grid(True)
+        plt.tight_layout()
+        plt.show()

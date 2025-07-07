@@ -538,10 +538,15 @@ class Evolution_Class:
         center_y = grid_y[ix, iy, iz]
         center_z = grid_z[ix, iy, iz]
 
-        # Shifted coordinates (centered at peak) - FIXED
+        # Shifted coordinates with periodic boundary correction
         Delta_x = grid_x - center_x
         Delta_y = grid_y - center_y
         Delta_z = grid_z - center_z
+
+        # Apply minimum image convention for periodic boundaries
+        Delta_x = Delta_x - BoxSize[0] * cp.round(Delta_x / BoxSize[0])
+        Delta_y = Delta_y - BoxSize[1] * cp.round(Delta_y / BoxSize[1])
+        Delta_z = Delta_z - BoxSize[2] * cp.round(Delta_z / BoxSize[2])
 
         r = cp.sqrt(Delta_x ** 2 + Delta_y ** 2 + Delta_z ** 2)
 

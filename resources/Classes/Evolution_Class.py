@@ -508,9 +508,10 @@ class Evolution_Class:
 
         self.last_kinetic_energy = kinetic_energy
 
-    def compute_radial_density_profile(self, total_density, current_time, Nbins=100):
+    def compute_radial_density_profile(self, total_density, current_time, Nbins=200):
         """
-        Compute, plot, and save the spherically averaged radial density profile.
+        Compute, plot, and save the spherically averaged radial density profile,
+        using mass per shell and volume-weighted normalization.
 
         Parameters:
             total_density (cp.ndarray): The total density |ψ|² of the system
@@ -525,59 +526,58 @@ class Evolution_Class:
 
         # Find center of mass (maximum density)
         ix, iy, iz = cp.asnumpy(cp.argwhere(rho == rho.max())[0])
-        rho_max = cp.asnumpy(rho.max())
 
         # Get coordinates
         grid_x = cp.asarray(self.simulation.grids[0])
         grid_y = cp.asarray(self.simulation.grids[1])
         grid_z = cp.asarray(self.simulation.grids[2])
-        dx_, dy_, dz_ = dx
 
-        # Physical coordinates of the center (from 3D meshgrid)
+        # Physical coordinates of the center
         center_x = grid_x[ix, iy, iz]
         center_y = grid_y[ix, iy, iz]
         center_z = grid_z[ix, iy, iz]
 
-        # Shifted coordinates with periodic boundary correction
+        # Shifted coordinates using copysign-based minimum image convention
         Delta_x = grid_x - center_x
         Delta_y = grid_y - center_y
         Delta_z = grid_z - center_z
 
-        # Apply minimum image convention for periodic boundaries
-        Delta_x = Delta_x - BoxSize[0] * cp.round(Delta_x / BoxSize[0])
-        Delta_y = Delta_y - BoxSize[1] * cp.round(Delta_y / BoxSize[1])
-        Delta_z = Delta_z - BoxSize[2] * cp.round(Delta_z / BoxSize[2])
+        Delta_x -= cp.copysign(BoxSize[0], Delta_x) * (cp.abs(Delta_x) > BoxSize[0] / 2)
+        Delta_y -= cp.copysign(BoxSize[1], Delta_y) * (cp.abs(Delta_y) > BoxSize[1] / 2)
+        Delta_z -= cp.copysign(BoxSize[2], Delta_z) * (cp.abs(Delta_z) > BoxSize[2] / 2)
 
+        # Radial distance
         r = cp.sqrt(Delta_x ** 2 + Delta_y ** 2 + Delta_z ** 2)
 
-        # To CPU for binning
-        r_cpu = cp.asnumpy(r)
-        rho_cpu = cp.asnumpy(rho)
+        # Transfer to CPU
+        r_cpu = cp.asnumpy(r).ravel()
+        rho_cpu = cp.asnumpy(rho).ravel()
 
         # Create radial bins
-        bins = np.linspace(0, r_cpu.max(), Nbins)
+        bins = np.linspace(0, r_cpu.max(), Nbins + 1)
+        bin_centers = 0.5 * (bins[1:] + bins[:-1])
 
-        # Calculate mean density in each radial bin
-        counts = []
-        for i in range(len(bins) - 1):
-            mask = (r_cpu > bins[i]) & (r_cpu <= bins[i + 1])
+        # Compute shell volumes
+        shell_volumes = (4 / 3) * np.pi * (bins[1:] ** 3 - bins[:-1] ** 3)
+        shell_volumes[shell_volumes == 0] = 1e-30  # Avoid division by zero
+
+        # Compute mass per shell
+        mass_in_bin = np.zeros(Nbins)
+        for i in range(Nbins):
+            mask = (r_cpu >= bins[i]) & (r_cpu < bins[i + 1])
             if np.any(mask):
-                counts.append(rho_cpu[mask].mean())
-            else:
-                counts.append(0.0)  # Handle empty bins
+                mass_in_bin[i] = rho_cpu[mask].sum()
 
-        rho_avg = np.array(counts)
+        # Compute volume-weighted density
+        rho_avg = mass_in_bin / shell_volumes
 
-        # Normalize
+        # Normalize for plotting
         if rho_avg.max() > 0:
             rho_avg /= rho_avg.max()
 
-        bin_centers = 0.5 * (bins[1:] + bins[:-1])
-
+        # Save
         save_dir = os.path.join(self.snapshot_directory, "density_profiles")
         os.makedirs(save_dir, exist_ok=True)
-
-        # Save data
         filename = f"density_data_at_time_{current_time:.6f}.csv"
         save_path = os.path.join(save_dir, filename)
 
@@ -592,6 +592,6 @@ class Evolution_Class:
         plt.title(f"Radial Density Profile at t = {current_time:.2f}")
         plt.yscale("log")
         plt.xscale("log")
-        plt.grid(True)
         plt.tight_layout()
         plt.show()
+

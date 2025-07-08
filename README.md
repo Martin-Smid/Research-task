@@ -56,3 +56,8 @@ The simulations aim to advance our understanding of the properties and cosmologi
 - streamlined the creation of wave function so that it is no longer needed to create a Wave_function instance to create a Wave_vector
 instance but one should create Wave_vector instance with params of Wave_fucntion and spin ✓
 - allowed for mass scaling of the soliton using methodes from https://arxiv.org/pdf/2502.03561 ✓
+
+**Phase 5**
+- Added tracking of kinetic and potential energy along the simulation ✓
+- added plotting.py which allows to plot from snapshots ✓
+- Implementation of dark matter profile calculation - working on it

@@ -15,9 +15,9 @@ import numpy as np
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-12, 12),(-12,12),(-12,12)], # Spatial boundaries
-    N=256,                             # Grid resolution
-    total_time=10,              # Total simulation time
+    boundaries=[(-25, 25),(-25,25),(-25,25)], # Spatial boundaries
+    N=128,                             # Grid resolution
+    total_time=8,              # Total simulation time
     h=0.01,                            # Time step
     order_of_evolution=2,
     use_gravity=True ,
@@ -39,10 +39,10 @@ def is_far_enough(new_pos, existing_positions, min_dist):
 
 waves = []
 positions = []
-min_separation = 5 # Adjust based on soliton radius
-boundary = [-10,10]  # Same for all dimensions
+min_separation = 7 # Adjust based on soliton radius
+boundary = [-22,22]  # Same for all dimensions
 
-for i in range(7):
+for i in range(10):
     while True:
         means = generate_random_position(boundary)
         if is_far_enough(means, positions, min_separation):
@@ -68,7 +68,7 @@ for i in range(7):
 
 
 
-sim.evolve(save_every=50)
+sim.evolve(save_every=100)
 
 
 

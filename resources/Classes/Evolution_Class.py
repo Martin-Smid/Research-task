@@ -5,8 +5,10 @@ import datetime
 import pandas as pd
 from resources.Functions.system_fucntions import plot_max_values_on_N
 import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
 
 #np.random.seed(1)
+
 
 
 class Evolution_Class:
@@ -68,6 +70,7 @@ class Evolution_Class:
         self._setup_evolution_storage(wave_functions)
 
         total_density = self._compute_total_density(wave_functions)
+        self.compute_radial_density_profile(total_density, 0 )
 
         mass_diff = (
                             (abs(total_density).sum()
@@ -96,7 +99,7 @@ class Evolution_Class:
             wave_functions = self._perform_evolution_step(wave_functions,total_density, step, save_step)
 
             if step % save_every == 0 and step > 0:
-                self.compute_radial_density_profile(total_density,current_time, Nbins=100)
+                self.compute_radial_density_profile(total_density,current_time)
 
                 self._save_snapshots(wave_functions, step, save_every)
 
@@ -104,6 +107,9 @@ class Evolution_Class:
             # Memory cleanup
             cp.get_default_memory_pool().free_all_blocks()
 
+        total_density = self._compute_total_density(wave_functions)
+        self.compute_radial_density_profile(total_density, self.total_time)
+        cp.get_default_memory_pool().free_all_blocks()
         # Save final state if needed
         self._save_final_state(wave_functions, save_every)
 
@@ -508,10 +514,10 @@ class Evolution_Class:
 
         self.last_kinetic_energy = kinetic_energy
 
-    def compute_radial_density_profile(self, total_density, current_time, Nbins=200):
+    def compute_radial_density_profile(self, total_density, current_time, Nbins=40):
         """
-        Compute, plot, and save the spherically averaged radial density profile,
-        using mass per shell and volume-weighted normalization.
+        Compute, plot, and save the spherically averaged radial density profile.
+        Includes mean shell density and optional NFW profile fitting.
 
         Parameters:
             total_density (cp.ndarray): The total density |ψ|² of the system
@@ -521,23 +527,19 @@ class Evolution_Class:
 
         dx = self.simulation.dx
         BoxSize = [b[1] - b[0] for b in self.simulation.boundaries]
-
         rho = total_density
 
-        # Find center of mass (maximum density)
+        # Find center (maximum density)
         ix, iy, iz = cp.asnumpy(cp.argwhere(rho == rho.max())[0])
-
-        # Get coordinates
         grid_x = cp.asarray(self.simulation.grids[0])
         grid_y = cp.asarray(self.simulation.grids[1])
         grid_z = cp.asarray(self.simulation.grids[2])
 
-        # Physical coordinates of the center
         center_x = grid_x[ix, iy, iz]
         center_y = grid_y[ix, iy, iz]
         center_z = grid_z[ix, iy, iz]
 
-        # Shifted coordinates using copysign-based minimum image convention
+        # Compute shifted periodic coordinates
         Delta_x = grid_x - center_x
         Delta_y = grid_y - center_y
         Delta_z = grid_z - center_z
@@ -546,7 +548,6 @@ class Evolution_Class:
         Delta_y -= cp.copysign(BoxSize[1], Delta_y) * (cp.abs(Delta_y) > BoxSize[1] / 2)
         Delta_z -= cp.copysign(BoxSize[2], Delta_z) * (cp.abs(Delta_z) > BoxSize[2] / 2)
 
-        # Radial distance
         r = cp.sqrt(Delta_x ** 2 + Delta_y ** 2 + Delta_z ** 2)
 
         # Transfer to CPU
@@ -555,43 +556,54 @@ class Evolution_Class:
 
         # Create radial bins
         bins = np.linspace(0, r_cpu.max(), Nbins + 1)
-        bin_centers = 0.5 * (bins[1:] + bins[:-1])
 
-        # Compute shell volumes
-        shell_volumes = (4 / 3) * np.pi * (bins[1:] ** 3 - bins[:-1] ** 3)
-        shell_volumes[shell_volumes == 0] = 1e-30  # Avoid division by zero
-
-        # Compute mass per shell
-        mass_in_bin = np.zeros(Nbins)
+        # Compute mean density per bin
+        mass_in_bin = []
         for i in range(Nbins):
-            mask = (r_cpu >= bins[i]) & (r_cpu < bins[i + 1])
+            mask = (r_cpu > bins[i]) & (r_cpu <= bins[i + 1])
             if np.any(mask):
-                mass_in_bin[i] = rho_cpu[mask].sum()
+                r_avg = 0.5 * (bins[i] + bins[i + 1])
+                rho_mean = rho_cpu[mask].mean()
+                mass_in_bin.append((r_avg, rho_mean))
 
-        # Compute volume-weighted density
-        rho_avg = mass_in_bin / shell_volumes
 
-        # Normalize for plotting
-        if rho_avg.max() > 0:
-            rho_avg /= rho_avg.max()
+        mass_in_bin = np.array(mass_in_bin)
+        bin_centers = mass_in_bin[:, 0]
+        rho_avg = mass_in_bin[:, 1]
 
-        # Save
+
+        '''fit_mask = (rho_avg > 0) & (bin_centers > 0)
+        try:
+            popt, _ = curve_fit(nfw_profile, bin_centers[fit_mask], rho_avg[fit_mask],
+                                p0=[1.0, 1.0], maxfev=10000)
+            fitted_r = np.logspace(np.log10(bin_centers[fit_mask].min()),
+                                   np.log10(bin_centers[fit_mask].max()), 200)
+            fitted_density = nfw_profile(fitted_r, *popt)
+            fit_label = f"NFW fit (ρ₀={popt[0]:.2f}, rₛ={popt[1]:.2f})"
+        except RuntimeError:
+            fitted_r, fitted_density = None, None
+            fit_label = "NFW fit failed" '''
+
+
         save_dir = os.path.join(self.snapshot_directory, "density_profiles")
         os.makedirs(save_dir, exist_ok=True)
-        filename = f"density_data_at_time_{current_time:.6f}.csv"
-        save_path = os.path.join(save_dir, filename)
-
+        save_path = os.path.join(save_dir, f"density_data_at_time_{current_time:.6f}.csv")
         np.savetxt(save_path, np.column_stack((bin_centers, rho_avg)),
                    delimiter=",", header="radius,density", comments="")
 
-        # Plot
-        plt.figure(figsize=(6, 4))
-        plt.plot(bin_centers, rho_avg, lw=2)
-        plt.xlabel("Radius r [kpc]")
-        plt.ylabel("Spherically Averaged Density ρ(r)")
-        plt.title(f"Radial Density Profile at t = {current_time:.2f}")
-        plt.yscale("log")
+        '''plt.figure(figsize=(6, 4))
+        plt.scatter(bin_centers, rho_avg, s=10, color='black', label="Binned ρ(r)")
+
+        if fitted_r is not None:
+            plt.plot(fitted_r, fitted_density, 'r--', lw=1.5, label=fit_label)
+
         plt.xscale("log")
+        plt.yscale("log")
+        plt.xlabel("Radius r [kpc]")
+        plt.ylabel("Normalized Density ρ(r)")
+        plt.title(f"Radial Density Profile at t = {current_time:.2f}")
+        plt.legend()
         plt.tight_layout()
-        plt.show()
+        plt.show()'''
+
 

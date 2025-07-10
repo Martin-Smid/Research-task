@@ -16,8 +16,8 @@ import numpy as np
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-12, 12),(-12,12),(-12,12)], # Spatial boundaries
-    N=64,                             # Grid resolution
-    total_time=100,              # Total simulation time
+    N=256,                             # Grid resolution
+    total_time=10,              # Total simulation time
     h=0.01,                            # Time step
     order_of_evolution=2,
     use_gravity=True ,
@@ -63,12 +63,12 @@ for i in range(7):
         desired_soliton_mass=5.3090068e7,
     )
     sim.add_wave_vector(wave_vector=vlna)
+    vlna.cleanup_wave_vector()
     del vlna
-    cp._default_memory_pool.free_all_blocks()
 
 
 
-sim.evolve(save_every=500)
+sim.evolve(save_every=50)
 
 
 

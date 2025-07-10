@@ -12,7 +12,7 @@ import datetime
 from itertools import chain
 import numpy as np
 from astropy import units, constants
-np.random.seed(1)
+#np.random.seed(1)
 
 def parameter_check(*types):
     def decorator(func):
@@ -256,18 +256,21 @@ class Simulation_Class:
         else:
             try:
                 spin = wave_vector.spin
+                wave_funcs = wave_vector.wave_vector[:]
+
                 if spin not in self.wave_vectors:
-                    self.wave_vectors[spin] = wave_vector.wave_vector
+                    self.wave_vectors[spin] = wave_funcs
                     print("existuju někdy tady?")
                     print(self.wave_vectors)
                 else:
                     print("nebo dokonce sem")
-                    for i, w_vect_component in enumerate(wave_vector.wave_vector):
+                    for i, w_vect_component in enumerate(wave_funcs):
+                        self.wave_vectors[spin][i].psi += w_vect_component.psi
+
                         print(f" i je {i}")
                         print(f"component {w_vect_component}")
-
-                        self.wave_vectors[spin][i].psi += w_vect_component.psi
                         print(self.wave_vectors)
+
                 print(f"tohle končím s len {len(wave_vector.wave_vector)} {wave_vector}")
                 print(f"a nejspíš bych měl pracovat s len {len(self.wave_vectors)} {self.wave_vectors}")
                 #self.wave_functions.append(wave_vector.wave_vector)

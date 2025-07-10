@@ -1,5 +1,5 @@
 import numpy as np
-
+import gc
 from sympy.physics.quantum.cg import CG
 from sympy import S
 
@@ -10,7 +10,7 @@ from resources.Errors.Errors import IncorrectWaveBlueprintError
 from itertools import combinations_with_replacement
 
 
-np.random.seed(12345)
+#np.random.seed(12345)
 
 import numpy as np
 from itertools import combinations_with_replacement
@@ -93,16 +93,26 @@ class Wave_vector_class:
 
         for idx in self.index_combinations:
             value = full_tensor[idx]
-            new_wf = copy.deepcopy(self.wave_blueprint)
+            raw_psi = self.wave_blueprint.psi * value * self.wave_blueprint.packet_creator.momentum_propagator
+            multiplicity = self.index_multiplicities[idx]
+            psi = raw_psi / np.sqrt(multiplicity)
 
-            new_wf.psi = self.wave_blueprint.psi * value * self.wave_blueprint.packet_creator.momentum_propagator
-            new_wf.multiplicity = self.index_multiplicities[idx]
-            new_wf.psi *= 1 / np.sqrt(new_wf.multiplicity)
+            new_wf = self.wave_blueprint.softcopy_psi(psi, multiplicity=multiplicity)
+
 
             result.append(new_wf)
 
         return result
 
+    def cleanup_wave_vector(self):
+        """absolute purge of wave vector"""
+        self.wave_vector.clear()
+        self.wave_blueprint = None
+        self.polarization_bases = None
+        self.polarization_coefficients = None
+        self.polarization_phases = None
+        gc.collect()
+        cp.get_default_memory_pool().free_all_blocks()
 
 from itertools import permutations
 

@@ -1,6 +1,6 @@
 import cupy as cp
 import numpy as np
-np.random.seed(1)
+#np.random.seed(1)
 from astropy import units, constants
 
 
@@ -142,11 +142,11 @@ class Propagator_Class:
         Returns:
             cp.ndarray: Gravitational potential
         """
-        # Remove mean density (required for periodic boundaries)
-        density -= cp.mean(density)
+
+
 
         # FFT of density
-        density_k = cp.fft.fftn(density.astype(cp.complex64))
+        density_k = cp.fft.fftn((density- cp.mean(density)).astype(cp.complex64))
 
         # Calculate k_squared_sum for Laplacian
         k_squared_sum = sum(k ** 2 for k in self.k_space)

@@ -6,7 +6,7 @@ import pandas as pd
 from resources.Functions.system_fucntions import plot_max_values_on_N
 import matplotlib.pyplot as plt
 
-np.random.seed(1)
+#np.random.seed(1)
 
 
 class Evolution_Class:

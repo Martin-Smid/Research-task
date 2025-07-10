@@ -126,4 +126,19 @@ class Wave_function():  # Streamlined and unified evolution logic
 
 
 
+    def softcopy_psi(self, new_psi, multiplicity=1):
+        clone = Wave_function.__new__(Wave_function)  # hopefully this wont initialize new wf
+
+        # Copy shared attributes without reinitializing
+        for attr in ['simulation', 'dim', 'boundaries', 'multiplicity', 'N', 'means',
+                     'total_time', 'h', 'num_steps', 'dx', 'grids', 'momenta',
+                     'mass', 'h_bar_tilde', 'omega', 'packet_type', 'packet_creator',
+                     'desired_soliton_mass', 'soliton_mass', 'scaling_lambda']:
+            setattr(clone, attr, getattr(self, attr))
+
+        # Now set ψ and multiplicity
+        clone.psi = new_psi
+        clone.multiplicity = multiplicity
+
+        return clone
 

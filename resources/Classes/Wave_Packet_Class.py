@@ -34,12 +34,11 @@ class Packet():
         self.grids = grids  # Receive grids from parent class
         self.potential = potential  # Potential function
         self.dx = dx  # Receive dx from parent class
-        self.mass_s = mass
+
         self.h_bar_tilde = h_bar_tilde
 
         self.omega = omega
         self.momentum_propagator = self.compute_momentum_propagator()
-
 
 
         if self.grids is None or len(self.grids) != self.dim:
@@ -54,7 +53,6 @@ class Packet():
         summed_momenta = np.zeros_like(momenta[0])
         for momentum in momenta:
             summed_momenta += momentum
-
 
         return np.exp(summed_momenta)
 
@@ -195,7 +193,7 @@ class Packet():
                     # U is at index 2, but we don't need it
                     data.append([r, phi])
 
-            return np.array(data)
+            return np.array(data, dtype=np.float32)
 
         except FileNotFoundError:
             raise FileNotFoundError(f"File '{file_path}' not found.")

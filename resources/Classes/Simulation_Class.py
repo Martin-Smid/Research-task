@@ -380,7 +380,7 @@ class Simulation_Class:
             print(f"Maximum allowed time step: {max_allowed_dt}")
             print(f"  - From dispersion relation: {float(first_constraint)}")
             print(f"  - From potential term: {float(second_constraint)}")
-
+            '''
             # Ask user what to do
             user_choice = input("Do you want to continue with the current time step anyway? (y/n): ")
 
@@ -390,7 +390,7 @@ class Simulation_Class:
                 return False
             else:
                 print("Continuing with user-specified time step despite stability concerns.")
-
+            '''
         else:
             print(f"Time step h = {self.h} satisfies stability criterion (max allowed: {max_allowed_dt}).")
 

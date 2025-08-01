@@ -479,14 +479,19 @@ class Evolution_Class:
         W = ∫ V(x) · Tr(ψ†ψ) dV = ∫ V(x) · total_density(x) dV
         """
         dx = np.prod(self.simulation.dx)
-        #potential = self.simulation.static_potential(self.simulation) DODĚLAT AŽ NEBUDU LÍNEJ
-        total_density = total_density
-        self.last_potential_energy = cp.sum(total_density) * dx  # TODO: use real potential later
-        K = self.last_kinetic_energy
-        W = self.last_potential_energy
+        if self.propagator.gravity_potential is not None:
+            phi = self.propagator.gravity_potential
+        else:
+            self.propagator.compute_gravity_propagator(wave_functions[0].psi, total_density)
+            phi = self.propagator.gravity_potential
+
+        rho = total_density
+
+        # Compute gravitational potential energy: W = 0.5 ∫ ρ(x) Φ(x) dV
+        W = cp.real(0.5 * cp.sum(rho * phi) * dx)
+        K = cp.real(self.last_kinetic_energy)
         E = K + W
         W_over_E = W / cp.abs(E)
-
         t = current_time
 
         self.energy_log.append({

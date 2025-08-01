@@ -31,6 +31,7 @@ class Propagator_Class:
         self.kinetic_propagator = None
         self.static_potential_propagator = None
         self.gravity_propagator = None
+        self.gravity_potential=None
         if not self.simulation.use_units:
             self.h_bar_tilde = 1
             self.h_bar = 1

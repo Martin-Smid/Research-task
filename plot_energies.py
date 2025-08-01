@@ -5,7 +5,9 @@ import matplotlib.pyplot as plt
 # 🔧 MANUALLY SET YOUR DIRECTORIES HERE
 simulation_dirs = [
 
-    'resources/data/simulation_20250801_154538',
+    'resources/data/simulation_20250801_220914',
+
+
 
 
 ]
@@ -53,16 +55,27 @@ def plot_total_energy(paths):
             print(f"[!] Failed to read {energy_file}: {e}")
             continue
 
+        if len(energy) == 0:
+            print(f"[!] Skipping: 'energy.txt' in {path} is empty")
+            continue
+
+        E0 = energy.iloc[0]
+        if E0 == 0:
+            print(f"[!] Skipping: E0 = 0 in {path}, cannot normalize")
+            continue
+
+        delta_E_over_E0 = (energy - E0) / E0
         label = os.path.basename(os.path.normpath(path))
-        plt.plot(time, energy, label=label)
+        plt.plot(time, delta_E_over_E0, label=label)
 
     plt.xlabel("Time")
-    plt.ylabel("Total Energy E")
-    plt.title("Total Energy Over Time")
+    plt.ylabel(r"$\Delta E / E_0$")
+    plt.title("Relative Energy Change Over Time")
     plt.grid(True)
     plt.legend()
     plt.tight_layout()
     plt.show()
+
 
 if __name__ == "__main__":
     plot_energy_ratio(simulation_dirs)

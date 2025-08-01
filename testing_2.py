@@ -18,7 +18,7 @@ sim = Simulation_Class(
     boundaries=[(-25, 25),(-25,25),(-25,25)], # Spatial boundaries
     N=128,                             # Grid resolution
     total_time=10,              # Total simulation time
-    h=0.01,                            # Time step
+    h=0.001,                            # Time step
     order_of_evolution=2,
     use_gravity=True ,
     static_potential=None,
@@ -68,7 +68,7 @@ for i in range(10):
 
 
 
-sim.evolve(save_every=250)
+sim.evolve(save_every=1000)
 
 
 

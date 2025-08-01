@@ -142,7 +142,8 @@ class Evolution_Class:
             4: self._evolve_order_4,
             6: self._evolve_order_6
         }
-
+        for wf in wave_functions:
+            wf.psi = cp.asarray(wf.psi)
         if self.order not in evolution_methods:
             raise ValueError(f"Order {self.order} is not supported. Use 2, 4, or 6.")
 
@@ -162,6 +163,19 @@ class Evolution_Class:
     def _evolve_order_2(self, wave_functions,total_density ,is_first, is_last,save_step):
         """Second-order split-step evolution."""
 
+
+        mass_diff = (
+                    (abs(total_density).sum()
+                            * (
+                                    int(self.simulation.boundaries[0][1] - self.simulation.boundaries[0][0])
+                                    / (self.simulation.N )
+                            )** 3
+                    ) / wave_functions[0].soliton_mass) - self.simulation.num_of_w_vects_in_sim
+
+
+
+        if ( mass_diff > 1e-2):
+            print("mass diff is greater than 1e-2, might want to increase the resolution")
 
         # Kick step
         self._kick_all_wave_functions(wave_functions, total_density, is_first, is_last)
@@ -417,7 +431,7 @@ class Evolution_Class:
         """Cleanup and finalize evolution process."""
         if self.save_max_vals:
             self._save_max_values()
-            plot_y_or_n = input("Should I plot these values? (y/n/del): ")
+            plot_y_or_n = "y"
             if plot_y_or_n == "y":
                 plot_max_values_on_N(self)
             elif plot_y_or_n == "del":

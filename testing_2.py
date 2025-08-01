@@ -17,14 +17,14 @@ sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-25, 25),(-25,25),(-25,25)], # Spatial boundaries
     N=128,                             # Grid resolution
-    total_time=8,              # Total simulation time
+    total_time=10,              # Total simulation time
     h=0.01,                            # Time step
     order_of_evolution=2,
     use_gravity=True ,
     static_potential=None,
     save_max_vals=True,
     a_s=-1e-80,
-    self_int=True
+    self_int=False
 
 )
 def generate_random_position(boundary):
@@ -52,7 +52,7 @@ for i in range(10):
     print(f"Wave {i+1} position: {means}")
 
     vlna = Wave_vector_class(
-        packet_type="resources/solitons/Modo-1e-80.dat",
+        packet_type="resources/solitons/GroundState(1).dat",
         means=means,
         st_deviations=[0.5, 0.5, 0.5],
         simulation=sim,
@@ -68,7 +68,7 @@ for i in range(10):
 
 
 
-sim.evolve(save_every=100)
+sim.evolve(save_every=250)
 
 
 

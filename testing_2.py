@@ -17,9 +17,9 @@ sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-50, 50),(-50,50),(-50,50)], # Spatial boundaries
     N=512,                             # Grid resolution
-    total_time=10,              # Total simulation time
-    h=0.01,                            # Time step
-    order_of_evolution=2,
+    total_time=4,              # Total simulation time
+    h=0.0004,                            # Time step
+    order_of_evolution=4,
     use_gravity=True ,
     static_potential=None,
     save_max_vals=True,
@@ -59,7 +59,7 @@ for i in range(25):
         mass=1,
         omega=1,
         momenta=[0.0, 0.0, 0.0],
-        spin=1,
+        spin=0,
         desired_soliton_mass=5.3090068e7,
     )
     sim.add_wave_vector(wave_vector=vlna)
@@ -68,7 +68,7 @@ for i in range(25):
 
 
 
-sim.evolve(save_every=250)
+sim.evolve(save_every=2000)
 
 
 

@@ -196,7 +196,7 @@ class Evolution_Class:
 
         return wave_functions
 
-    def _evolve_order_4(self, wave_functions, is_first, is_last,save_step):
+    def _evolve_order_4(self, wave_functions, total_density,is_first, is_last,save_step):
         """Fourth-order split-step evolution."""
         # Step sequence for 4th order
         steps = [

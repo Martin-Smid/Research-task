@@ -182,7 +182,7 @@ class Evolution_Class:
 
         return wave_functions
 
-    def _evolve_order_4(self, wave_functions, is_first, is_last,save_step):
+    def _evolve_order_4(self, wave_functions,total_density, is_first, is_last,save_step):
         """Fourth-order split-step evolution."""
         # Step sequence for 4th order
         steps = [
@@ -206,7 +206,7 @@ class Evolution_Class:
 
         return wave_functions
 
-    def _evolve_order_6(self, wave_functions, is_first, is_last,save_step):
+    def _evolve_order_6(self, wave_functions,total_density, is_first, is_last,save_step):
         """Sixth-order split-step evolution."""
         # Step sequence for 6th order (symmetric)
         steps = [
@@ -227,7 +227,6 @@ class Evolution_Class:
 
             else:  # drift
                 is_last_drift = save_step and (i == len(steps) - 1)
-
 
                 self._drift_all_wave_functions(wave_functions, time_factor_key=coeff_key)
 
@@ -530,7 +529,7 @@ class Evolution_Class:
 
         self.last_kinetic_energy = kinetic_energy
 
-    def compute_radial_density_profile(self, total_density, current_time, Nbins=40):
+    def compute_radial_density_profile(self, total_density, current_time, Nbins=100):
         """
         Compute, plot, and save the spherically averaged radial density profile.
         Includes mean shell density and optional NFW profile fitting.

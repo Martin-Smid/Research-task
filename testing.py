@@ -9,7 +9,7 @@ from resources.Classes.Wave_vector_class import Wave_vector_class
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-20, 20),(-20, 20),(-20, 20)], # Spatial boundaries
-    N=64,                             # Grid resolution
+    N=128,                             # Grid resolution
     total_time=33,                   # Total simulation time
     h=0.01,                            # Time step
     order_of_evolution=2,
@@ -28,7 +28,7 @@ wave_vector = Wave_vector_class(
     simulation=sim,
     mass=1,
     omega=1,
-    momenta=[0, 0.947, 0],
+    momenta=[0, 0.9485, 0],
     spin=0,
     desired_soliton_mass=53090068
 
@@ -40,7 +40,7 @@ sim.add_wave_vector(wave_vector)
 #sim.add_wave_function(vlna3)
 
 
-sim.evolve(save_every=100 )
+sim.evolve(save_every=200 )
 
 '''1D
 plt.figure()
@@ -67,7 +67,7 @@ for time in sim.accessible_times:
 
     # Take the middle z-slice
     wave_slice = wave_values[:, :, z_index]
-    levels = np.logspace(np.log10(wave_values[wave_values > 0].min()),np.log10(wave_values.max()), 128)
+    levels = np.logspace(np.log10(wave_values[wave_values > 0].min()),np.log10(wave_values.max()), 128_1)
     plt.contourf(x_mesh,y_mesh,cp.asnumpy(wave_slice),
                origin="lower", levels=levels,cmap="inferno", norm=LogNorm())
     plt.colorbar(label="|ψ|²",format = "%.2e")
@@ -96,7 +96,6 @@ for time in sim.accessible_times:
     plt.contourf(x_mesh_2d, y_mesh_2d, cp.asnumpy(wave_slice).T,
                  origin="lower", levels=levels, cmap="viridis", norm=LogNorm())
     plt.colorbar(label="|ψ|²", format="%.2e")
-    plt.title(f"Wavefunction Probability Density at Time {time}")
     plt.xlabel("x")
     plt.ylabel("y")
     plt.grid()
@@ -108,7 +107,7 @@ for time in sim.accessible_times:
 
 def plot_wave_slice(sim, time, axis="z", index=None):
     wave_values = cp.asnumpy(abs(sim.get_wave_function_at_time(time)) ** 2)
-    levels = np.logspace(np.log10(wave_values[wave_values > 0].min()), np.log10(wave_values.max()), 128)
+    levels = np.logspace(np.log10(wave_values[wave_values > 0].min()), np.log10(wave_values.max()), 128_1)
 
     if axis == "z":
         index = index or sim.grids[2].shape[0] // 2

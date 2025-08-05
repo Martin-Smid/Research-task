@@ -15,10 +15,10 @@ import numpy as np
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-25, 25),(-25,25),(-25,25)], # Spatial boundaries
-    N=128,                             # Grid resolution
-    total_time=10,              # Total simulation time
-    h=0.001,                            # Time step
+    boundaries=[(-20, 20),(-20,20),(-20,20)], # Spatial boundaries
+    N=96,                             # Grid resolution
+    total_time=15,              # Total simulation time
+    h=0.01,                            # Time step
     order_of_evolution=2,
     use_gravity=True ,
     static_potential=None,
@@ -39,10 +39,10 @@ def is_far_enough(new_pos, existing_positions, min_dist):
 
 waves = []
 positions = []
-min_separation = 7 # Adjust based on soliton radius
-boundary = [-22,22]  # Same for all dimensions
+min_separation =4 # Adjust based on soliton radius
+boundary = [-17,17]  # Same for all dimensions
 
-for i in range(10):
+for i in range(12):
     while True:
         means = generate_random_position(boundary)
         if is_far_enough(means, positions, min_separation):
@@ -59,7 +59,7 @@ for i in range(10):
         mass=1,
         omega=1,
         momenta=[0.0, 0.0, 0.0],
-        spin=1,
+        spin=0,
         desired_soliton_mass=5.3090068e7,
     )
     sim.add_wave_vector(wave_vector=vlna)
@@ -68,7 +68,7 @@ for i in range(10):
 
 
 
-sim.evolve(save_every=1000)
+sim.evolve(save_every=250)
 
 
 
@@ -96,7 +96,6 @@ for time in sim.accessible_times:
     plt.contourf(x_mesh_2d, y_mesh_2d, cp.asnumpy(wave_slice).T,
                  origin="lower", levels=levels, cmap="inferno",norm=LogNorm())
     plt.colorbar(label="|ψ|²", format="%.2e")
-    plt.title(f"Wavefunction Probability Density at Time {time}")
     plt.xlabel("x")
     plt.ylabel("y")
     plt.grid()

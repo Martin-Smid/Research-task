@@ -5,7 +5,15 @@ import matplotlib.pyplot as plt
 # 🔧 MANUALLY SET YOUR DIRECTORIES HERE
 simulation_dirs = [
 
-    'resources/data/simulation_20250801_220914',
+
+    'resources/data/enrgies/spin1/128',
+    'resources/data/enrgies/spin1/512',
+    'resources/data/128',
+
+
+
+
+
 
 
 
@@ -66,12 +74,10 @@ def plot_total_energy(paths):
 
         delta_E_over_E0 = (energy - E0) / E0
         label = os.path.basename(os.path.normpath(path))
-        plt.plot(time, delta_E_over_E0, label=label)
+        plt.plot(time, delta_E_over_E0, label=f'N = {label}')
 
-    plt.xlabel("Time")
+    plt.xlabel("Time [Gyr]")
     plt.ylabel(r"$\Delta E / E_0$")
-    plt.title("Relative Energy Change Over Time")
-    plt.grid(True)
     plt.legend()
     plt.tight_layout()
     plt.show()

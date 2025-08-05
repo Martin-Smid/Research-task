@@ -8,11 +8,12 @@ from scipy.optimize import curve_fit
 
 
 simulation_dirs = [
-    'resources/data/simulation_20250710_173709',
+
+    'resources/data/simulation_20250805_214819',
 
 ]
 
-specific_times = [0, 4, 8]
+specific_times = [0, 10, 15]
 
 
 
@@ -115,22 +116,19 @@ def plot_density_profiles(simulation_dirs, times=None):
 
             if np.sum(fit_mask) > 2:  # Need at least 3 points for fitting
                 try:
-                    popt, _ = curve_fit(nfw_profile, bin_centers[fit_mask], rho_avg[fit_mask],
-                                        p0=[1.0, 1.0], maxfev=10000)
-                    fitted_r = np.logspace(np.log10(bin_centers[fit_mask].min()),
-                                           np.log10(bin_centers[fit_mask].max()), 200)
-                    fitted_density = nfw_profile(fitted_r, *popt)
+                    fitted_r, fitted_density, popt = fit_soliton_nfw_profile(bin_centers[fit_mask], rho_avg[fit_mask])
+                    reps_fit, rc_fit, rs_fit, logrhoc_fit = popt
 
-                    # Plot NFW fit with same color but dashed line
                     plt.plot(fitted_r, fitted_density, '--', color=color, lw=2, alpha=0.8,
-                             label=f"{sim_name} - NFW (ρ₀={popt[0]:.2f}, rₛ={popt[1]:.2f})")
-                except RuntimeError:
-                    print(f"[!] NFW fit failed for {sim_name} at t={current_time:.2f}")
+                             label=f"{sim_name} - Sol+NFW (rₑ={reps_fit:.2f}, r_c={rc_fit:.2f}, rₛ={rs_fit:.2f})")
+
+                except RuntimeError as e:
+                    print(f"[!] Soliton+NFW fit failed for {sim_name} at t={current_time:.2f}: {e}")
 
         plt.xscale("log")
         plt.yscale("log")
         plt.xlabel("Radius r [kpc]")
-        plt.ylabel("Normalized Density ρ(r)")
+        plt.ylabel("Density ρ(r) [M☉/kpc³]")
 
         # Set title based on number of simulations
         if len(sim_data_list) == 1:
@@ -141,6 +139,66 @@ def plot_density_profiles(simulation_dirs, times=None):
         plt.legend()
         plt.tight_layout()
         plt.show()
+
+from scipy.optimize import curve_fit
+from scipy.interpolate import interp1d
+
+def fit_soliton_nfw_profile(r, rho):
+    """
+    Fits the log-log soliton + NFW hybrid profile to radial density data.
+    Returns the fitted radius grid and fitted log-density.
+    """
+    def log_sol_nfw(log_r, reps, rc, rs, logrhoc):
+        r = 10 ** log_r
+        beta = 3
+        rhos = 10 ** logrhoc * (reps / rs) * (1 + reps / rs) ** (beta - 1)
+        rhos /= (1 + 0.091 * (reps / rc) ** 2) ** 8
+
+        rho_out = np.where(
+            r <= reps,
+            10 ** logrhoc / (1 + 0.091 * (r / rc) ** 2) ** 8,
+            rhos / (((r + 1e-99) / rs) * (1 + (r / rs)) ** (beta - 1))
+        )
+        return np.log10(rho_out)
+
+    # Initial guess
+    p0 = [2.85, 1.5, 15, 9]  # [reps, rc, rs, log10(rhoc)]
+    bounds = (
+        [0.0, 0.0, 1, 5],
+        [3.0, 3.0, 200, 25]
+    )
+
+    # Filter valid values
+    mask = (r > 0) & (rho > 0)
+    r_valid = r[mask]
+    rho_valid = rho[mask]
+
+    if len(r_valid) < 4:
+        raise RuntimeError("Not enough valid points for soliton+NFW fit.")
+
+    # Interpolate to uniform log-log spacing
+    log_r = np.log10(r_valid)
+    log_rho = np.log10(rho_valid)
+    interp_func = interp1d(log_r, log_rho, kind='linear', fill_value="extrapolate")
+    log_r_uniform = np.linspace(log_r.min(), log_r.max(), 100)
+    log_rho_uniform = interp_func(log_r_uniform)
+
+    # Fit
+    popt, pcov = curve_fit(
+        log_sol_nfw,
+        log_r_uniform,
+        log_rho_uniform,
+        p0=p0,
+        bounds=bounds,
+        maxfev=200000
+    )
+
+    reps_fit, rc_fit, rs_fit, logrhoc_fit = popt
+    fitted_r = 10 ** log_r_uniform
+    fitted_log_rho = log_sol_nfw(log_r_uniform, *popt)
+
+    return fitted_r, 10 ** fitted_log_rho, popt
+
 
 
 plot_density_profiles(simulation_dirs, times=specific_times)

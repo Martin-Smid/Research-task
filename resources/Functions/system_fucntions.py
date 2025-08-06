@@ -126,7 +126,7 @@ def plot_max_values(file_name):
     plt.tight_layout()
     plt.show()
 
-plot_max_values('/home/martin/ploty/max_values_4.csv')
+#plot_max_values('/home/martin/ploty/max_values_4.csv')
 
 
 

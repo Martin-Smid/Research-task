@@ -9,7 +9,8 @@ from scipy.optimize import curve_fit
 
 simulation_dirs = [
 
-    'resources/data/simulation_20250805_214819',
+    'resources/data/simulation_20250806_210406',
+    "resources/data/simulation_20250806_211223",
 
 ]
 
@@ -140,6 +141,9 @@ def plot_density_profiles(simulation_dirs, times=None):
         plt.tight_layout()
         plt.show()
 
+    plot_normalized_profiles(time_data)
+
+
 from scipy.optimize import curve_fit
 from scipy.interpolate import interp1d
 
@@ -199,6 +203,58 @@ def fit_soliton_nfw_profile(r, rho):
 
     return fitted_r, 10 ** fitted_log_rho, popt
 
+
+def plot_normalized_profiles(time_data):
+    """
+    Plots normalized density profiles ρ/ρ_c vs r/r_c for each time snapshot.
+    Adds a reference soliton profile with r_c = ρ_c = 1.
+
+    Parameters:
+        time_data (dict): Dictionary mapping time values to lists of simulation data.
+    """
+    for current_time, sim_data_list in time_data.items():
+        plt.figure(figsize=(8, 6))
+
+        # Define consistent colors
+        colors = plt.cm.tab10(np.linspace(0, 1, len(sim_data_list)))
+
+        for i, sim_data in enumerate(sim_data_list):
+            sim_name = sim_data['sim_name']
+            bin_centers = sim_data['bin_centers']
+            rho_avg = sim_data['rho_avg']
+            color = colors[i]
+
+            # Fit to get rc and rhoc
+            fit_mask = (rho_avg > 0) & (bin_centers > 0)
+            if np.sum(fit_mask) > 2:
+                try:
+                    _, _, popt = fit_soliton_nfw_profile(bin_centers[fit_mask], rho_avg[fit_mask])
+                    reps_fit, rc_fit, rs_fit, logrhoc_fit = popt
+                    rhoc_fit = 10 ** logrhoc_fit
+
+                    r_normalized = bin_centers / rc_fit
+                    rho_normalized = rho_avg / rhoc_fit
+
+                    plt.plot(r_normalized, rho_normalized, '.', color=color,
+                             label=f"{sim_name}", alpha=0.8)
+
+                except RuntimeError as e:
+                    print(f"[!] Normalized fit failed for {sim_name} at t={current_time:.2f}: {e}")
+
+        # Add reference soliton profile: ρ(r) = 1 / (1 + 0.091 * r^2)^8
+        r_ref = np.logspace(-1, 2, 500)
+        rho_ref = 1 / (1 + 0.091 * r_ref ** 2) ** 8
+        plt.plot(r_ref, rho_ref, 'k--', lw=2, label='Ref Soliton (r_c=ρ_c=1)')
+        plt.axvline(x=3.5, color='g', linestyle='-.', linewidth=1.5)
+        plt.xscale("log")
+        plt.yscale("log")
+        plt.ylim(1e-6,2)
+        plt.xlabel("Normalized Radius r / r_c")
+        plt.ylabel("Normalized Density ρ / ρ_c")
+        plt.title(f"Normalized Density Profiles at t = {current_time:.2f}")
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
 
 
 plot_density_profiles(simulation_dirs, times=specific_times)

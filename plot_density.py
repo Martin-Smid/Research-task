@@ -9,12 +9,12 @@ from scipy.optimize import curve_fit
 
 simulation_dirs = [
 
-    'resources/data/simulation_20250806_210406',
-    "resources/data/simulation_20250806_211223",
+    'resources/data/spin3',
+    'resources/data/simulation_20250807_173034'
 
 ]
 
-specific_times = [0, 10, 15]
+specific_times = [ 20, 25]
 
 
 
@@ -254,6 +254,7 @@ def plot_normalized_profiles(time_data):
         plt.title(f"Normalized Density Profiles at t = {current_time:.2f}")
         plt.legend()
         plt.tight_layout()
+
         plt.show()
 
 

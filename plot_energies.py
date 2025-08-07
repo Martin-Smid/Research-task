@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 simulation_dirs = [
 
 
-    'resources/data/enrgies/spin1/128',
-    'resources/data/enrgies/spin1/512',
+
+    'resources/data/256',
     'resources/data/128',
 
 

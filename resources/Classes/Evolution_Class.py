@@ -91,8 +91,9 @@ class Evolution_Class:
             self.total_energy = 0
             save_step=False
             current_time = step * self.h
-            self.compute_kinetic_energy(wave_functions)
-            self._compute_potential_energy(wave_functions, total_density, current_time)
+            if step > 0:
+                self.compute_kinetic_energy(wave_functions)
+                self._compute_potential_energy(wave_functions, total_density, current_time)
             # Save snapshots at specified intervals
             if step % save_every == 0 and step > 0:
                 save_step = True
@@ -147,6 +148,8 @@ class Evolution_Class:
             raise ValueError(f"Order {self.order} is not supported. Use 2, 4, or 6.")
 
         is_first = (step == 0)
+        if is_first:
+            print("is first")
         is_last = (step == self.num_steps - 1)
 
         wave_functions = evolution_methods[self.order](wave_functions,total_density, is_first, is_last,save_step)
@@ -196,6 +199,8 @@ class Evolution_Class:
                 total_density = self._compute_total_density(wave_functions)
 
                 first_op = is_first and i == 0
+                if first_op:
+                    print(first_op)
                 last_op = is_last and i == len(steps) - 1
                 self._kick_all_wave_functions(wave_functions, total_density, first_op, last_op, coeff_key)
 

@@ -91,40 +91,76 @@ def plot_max_values_on_N(simulation_class_instance):
     plt.tight_layout()
     plt.show()
 
-def plot_max_values(file_name):
-    import pandas as pd
-    import matplotlib.pyplot as plt
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.optimize import curve_fit
+import itertools
 
-    filename = file_name
+def saturation_func(t, a, b, c):
+    return a + b * t / (1 + c * t)
 
-    # Načti s MultiIndex ve sloupcích (dva řádky záhlaví), ignoruj komentáře
-    data = pd.read_csv(filename, comment='#', header=[0, 1], index_col=0)
+def compute_tau99(a, b, c):
+    lambda_inf = a + b / c
+    tau99 = (0.99 * lambda_inf - a) / (b - 0.99 * c * lambda_inf)
+    return lambda_inf, tau99
 
-    # Vytvoř seznam legendárních popisků (N a spin)
+def plot_lambda_rho_evolution(file_name):
+    # Read file exactly like in your original function
+    data = pd.read_csv(file_name, comment='#', header=[0, 1], index_col=0)
+
+    # Generate labels
     labels = [f"N = {n.replace('N', '')}, spin = {s.replace('s=', '')}"
               for (n, s) in data.columns]
 
-    # Normalizuj každou složku
-    for col in data.columns:
-        first_val = data[col].iloc[0]
-        data[col] = (data[col] / first_val) ** 0.25
-
-    # Plotting
+    # Setup plotting
     plt.figure(figsize=(10, 6))
+    color_cycle = plt.rcParams['axes.prop_cycle'].by_key()['color']
+    markers = itertools.cycle(['o', 'x', '^', 's', 'D', 'v', 'P', '*', 'h', '+'])
 
-    for col, label in zip(data.columns, labels):
-        plt.plot(data.index, data[col], label=label)
+    for col, label, color in zip(data.columns, labels, itertools.cycle(color_cycle)):
+        y = data[col].astype(float)
+        x = data.index.astype(float)
 
-    # Osa a legenda
+        # Normalize: λρ = (ρ_f / ρ_i)^0.25
+        rho_i = y.iloc[0]
+        lambda_rho = (y / rho_i) ** 0.25
+
+        # Remove NaNs
+        valid = lambda_rho.notnull()
+        x_valid = x[valid]
+        y_valid = lambda_rho[valid]
+
+        # Fit
+        try:
+            popt, _ = curve_fit(saturation_func, x_valid, y_valid, maxfev=10000)
+            a, b, c = popt
+            lambda_inf, tau99 = compute_tau99(a, b, c)
+
+            # Plot data
+            plt.plot(x_valid, y_valid, marker=next(markers),markersize=2, linestyle='None',
+                     color=color, label=f"{label}\nλ∞={lambda_inf:.2f}, τ₉₉={tau99:.2f}")
+
+            # Plot fit
+            plt.plot(x_valid, saturation_func(x_valid, *popt), linestyle='-', color='black')
+
+            # Plot saturation line
+            plt.axhline(lambda_inf, color=color, linestyle='--', linewidth=1)
+        except RuntimeError:
+            print(f"Fit failed for {label}")
+            continue
+
+    # Axes and labels
     plt.xlabel("Time Step", fontsize=18)
-    plt.ylabel("Normalized Max Values", fontsize=18)
-    plt.legend(fontsize=12)
+    plt.ylabel(r"$\lambda_\rho(t)$", fontsize=18)
+    plt.legend(fontsize=10)
     plt.xticks(fontsize=14)
     plt.yticks(fontsize=14)
-
-
     plt.tight_layout()
     plt.show()
+
+
+plot_lambda_rho_evolution(r'C:\projekty\Research-task\resources\data\max_values.csv')
 
 #plot_max_values('/home/martin/ploty/max_values_4.csv')
 

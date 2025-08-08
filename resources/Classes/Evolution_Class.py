@@ -43,6 +43,8 @@ class Evolution_Class:
         self.num_wave_functions = 0
 
         self.energy_log = []
+        self.max_location_log = []
+        self.max_locations_path = None
 
 
         # Pre-compute propagators and coefficients
@@ -68,9 +70,14 @@ class Evolution_Class:
 
             # Setup save directory and initialize storage
         self._setup_evolution_storage(wave_functions)
+        self.init_max_location_logger()
 
         total_density = self._compute_total_density(wave_functions)
-        self.compute_radial_density_profile(total_density, 0 )
+        current_time = 0
+        ix, iy, iz = cp.asnumpy(cp.argwhere(total_density == total_density.max())[0])
+        print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        self.record_max_location(int(ix), int(iy), int(iz), float(current_time))
+        self.compute_radial_density_profile(total_density,current_time,ix,iy,iz)
 
         mass_diff = (
                             (abs(total_density).sum()
@@ -95,12 +102,16 @@ class Evolution_Class:
                 self.compute_kinetic_energy(wave_functions)
                 self._compute_potential_energy(wave_functions, total_density, current_time)
             # Save snapshots at specified intervals
+
+            ix, iy, iz = cp.asnumpy(cp.argwhere(total_density == total_density.max())[0])
+            self.record_max_location(int(ix), int(iy), int(iz), float(current_time))
+
             if step % save_every == 0 and step > 0:
                 save_step = True
             wave_functions = self._perform_evolution_step(wave_functions,total_density, step, save_step)
 
             if step % save_every == 0 and step > 0:
-                self.compute_radial_density_profile(total_density,current_time)
+                self.compute_radial_density_profile(total_density,current_time,ix,iy,iz)
 
                 self._save_snapshots(wave_functions, step, save_every)
 
@@ -109,7 +120,9 @@ class Evolution_Class:
             cp.get_default_memory_pool().free_all_blocks()
 
         total_density = self._compute_total_density(wave_functions)
-        self.compute_radial_density_profile(total_density, self.total_time)
+        ix, iy, iz = cp.asnumpy(cp.argwhere(total_density == total_density.max())[0])
+        self.record_max_location(int(ix), int(iy), int(iz), float(current_time))
+        self.compute_radial_density_profile(total_density, current_time, ix, iy, iz)
         cp.get_default_memory_pool().free_all_blocks()
         # Save final state if needed
         self._save_final_state(wave_functions, save_every)
@@ -534,7 +547,7 @@ class Evolution_Class:
 
         self.last_kinetic_energy = kinetic_energy
 
-    def compute_radial_density_profile(self, total_density, current_time, Nbins=100):
+    def compute_radial_density_profile(self, total_density, current_time,ix,iy,iz,Nbins=250):
         """
         Compute, plot, and save the spherically averaged radial density profile.
         Includes mean shell density and optional NFW profile fitting.
@@ -550,7 +563,7 @@ class Evolution_Class:
         rho = total_density
 
         # Find center (maximum density)
-        ix, iy, iz = cp.asnumpy(cp.argwhere(rho == rho.max())[0])
+        ix, iy, iz = ix,iy,iz
         grid_x = cp.asarray(self.simulation.grids[0])
         grid_y = cp.asarray(self.simulation.grids[1])
         grid_z = cp.asarray(self.simulation.grids[2])
@@ -575,7 +588,9 @@ class Evolution_Class:
         rho_cpu = cp.asnumpy(rho).ravel()
 
         # Create radial bins
-        bins = np.linspace(0, r_cpu.max(), Nbins + 1)
+        max_radius = 0.95 * 0.5 * min(BoxSize)
+        r_min = 1.0 * max(dx)  # pick a sensible minimum > 0
+        bins = np.concatenate(([0.0], np.geomspace(r_min, max_radius, Nbins)))
 
         # Compute mean density per bin
         mass_in_bin = []
@@ -592,38 +607,47 @@ class Evolution_Class:
         rho_avg = mass_in_bin[:, 1]
 
 
-        '''fit_mask = (rho_avg > 0) & (bin_centers > 0)
-        try:
-            popt, _ = curve_fit(nfw_profile, bin_centers[fit_mask], rho_avg[fit_mask],
-                                p0=[1.0, 1.0], maxfev=10000)
-            fitted_r = np.logspace(np.log10(bin_centers[fit_mask].min()),
-                                   np.log10(bin_centers[fit_mask].max()), 200)
-            fitted_density = nfw_profile(fitted_r, *popt)
-            fit_label = f"NFW fit (ρ₀={popt[0]:.2f}, rₛ={popt[1]:.2f})"
-        except RuntimeError:
-            fitted_r, fitted_density = None, None
-            fit_label = "NFW fit failed" '''
-
-
         save_dir = os.path.join(self.snapshot_directory, "density_profiles")
         os.makedirs(save_dir, exist_ok=True)
         save_path = os.path.join(save_dir, f"density_data_at_time_{current_time:.6f}.csv")
         np.savetxt(save_path, np.column_stack((bin_centers, rho_avg)),
                    delimiter=",", header="radius,density", comments="")
 
-        '''plt.figure(figsize=(6, 4))
-        plt.scatter(bin_centers, rho_avg, s=10, color='black', label="Binned ρ(r)")
+    def init_max_location_logger(self):
+        """
+        Prepare the logger for saving max-density locations.
+        Call this AFTER _setup_evolution_storage so snapshot_directory exists.
+        """
+        if self.snapshot_directory is None:
+            raise RuntimeError("snapshot_directory not set yet; call after _setup_evolution_storage.")
+        self.max_locations_path = os.path.join(self.snapshot_directory, "max_locations.txt")
+        # Write header if file doesn't exist
+        if not os.path.exists(self.max_locations_path):
+            with open(self.max_locations_path, "w") as f:
+                f.write("# time, ix, iy, iz, x, y, z\n")
 
-        if fitted_r is not None:
-            plt.plot(fitted_r, fitted_density, 'r--', lw=1.5, label=fit_label)
+    def record_max_location(self, ix, iy, iz, time_value):
+        """
+        Save the grid-index location of the current max density and its coordinates.
+        Parameters
+        ----------
+        ix, iy, iz : int
+            Indices of the max-density cell (computed in the main loop).
+        time_value : float
+            Physical time corresponding to this step.
+        """
+        if self.max_locations_path is None:
+            # Lazy init if user forgot to call init_max_location_logger explicitly
+            self.init_max_location_logger()
 
-        plt.xscale("log")
-        plt.yscale("log")
-        plt.xlabel("Radius r [kpc]")
-        plt.ylabel("Normalized Density ρ(r)")
-        plt.title(f"Radial Density Profile at t = {current_time:.2f}")
-        plt.legend()
-        plt.tight_layout()
-        plt.show()'''
+        # Get physical coordinates at that index
+        gx, gy, gz = self.simulation.grids
+        x = float(gx[ix, iy, iz])
+        y = float(gy[ix, iy, iz])
+        z = float(gz[ix, iy, iz])
 
+        # Cache in memory (optional) and append to file immediately
+        self.max_location_log.append((float(time_value), int(ix), int(iy), int(iz), x, y, z))
+        with open(self.max_locations_path, "a") as f:
+            f.write(f"{time_value:.9e}, {ix:d}, {iy:d}, {iz:d}, {x:.9e}, {y:.9e}, {z:.9e}\n")
 

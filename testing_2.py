@@ -15,11 +15,11 @@ import numpy as np
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-40, 40),(-40,40),(-40,40)], # Spatial boundaries
+    boundaries=[(-30, 30),(-30,30),(-30,30)], # Spatial boundaries
     N=128,                             # Grid resolution
-    total_time=25,              # Total simulation time
+    total_time=20,              # Total simulation time
     h=0.01,                            # Time step
-    order_of_evolution=4,
+    order_of_evolution=2,
     use_gravity=True ,
     static_potential=None,
     save_max_vals=True,

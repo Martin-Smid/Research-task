@@ -7,8 +7,9 @@ simulation_dirs = [
 
 
 
-    'resources/data/256',
-    'resources/data/128',
+    'resources/data/spin=1_N=512',
+    'resources/data/spin=2_N=512',
+    'resources/data/spin=3_N=512',
 
 
 

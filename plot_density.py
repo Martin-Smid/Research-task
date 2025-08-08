@@ -9,12 +9,10 @@ from scipy.optimize import curve_fit
 
 simulation_dirs = [
 
-    'resources/data/spin3',
-    'resources/data/simulation_20250807_173034'
-
+    'resources/data/simulation_20250808_220538',
 ]
 
-specific_times = [ 20, 25]
+specific_times = [15,20]
 
 
 
@@ -235,7 +233,7 @@ def plot_normalized_profiles(time_data):
                     r_normalized = bin_centers / rc_fit
                     rho_normalized = rho_avg / rhoc_fit
 
-                    plt.plot(r_normalized, rho_normalized, '.', color=color,
+                    plt.plot(r_normalized, rho_normalized, '-', color=color,
                              label=f"{sim_name}", alpha=0.8)
 
                 except RuntimeError as e:

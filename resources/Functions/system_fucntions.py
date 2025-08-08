@@ -95,6 +95,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.optimize import curve_fit
+from scipy.optimize import root_scalar
 import itertools
 
 def saturation_func(t, a, b, c):
@@ -102,8 +103,12 @@ def saturation_func(t, a, b, c):
 
 def compute_tau99(a, b, c):
     lambda_inf = a + b / c
-    tau99 = (0.99 * lambda_inf - a) / (b - 0.99 * c * lambda_inf)
-    return lambda_inf, tau99
+    lambda_99 = 0.99 * lambda_inf
+    A = lambda_99 - a
+    denom = b - c * A
+    tau_99 = A / denom if denom != 0 else np.nan
+    return lambda_inf, tau_99
+
 
 def plot_lambda_rho_evolution(file_name):
     # Read file exactly like in your original function
@@ -160,7 +165,7 @@ def plot_lambda_rho_evolution(file_name):
     plt.show()
 
 
-plot_lambda_rho_evolution(r'C:\projekty\Research-task\resources\data\max_values.csv')
+#plot_lambda_rho_evolution(r'C:\projekty\Research-task\resources\data\max_values.csv')
 
 #plot_max_values('/home/martin/ploty/max_values_4.csv')
 
@@ -426,3 +431,169 @@ def plot_multiple_wave_functions(snapshot_dir, wf_numbers, z_index=None,
             plt.close()
 
 
+import os, re, glob
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm, Normalize
+
+def plot_wave_function_panel(
+    snapshot_dir,
+    wf_number,
+    times=None,                 # e.g. [0.100000, 0.200000, 0.500000, 1.000000]
+    z_index=None,               # for 3D -> choose slice; None = middle
+    ncols=2,
+    log_scale=True,             # use LogNorm across all panels
+    cmap="inferno",
+    x_range=None, y_range=None, grid_spacing=None,
+    figsize=(10, 8),
+    fontsize=14,
+    save_path=None,             # e.g. ".../wf0_panel.pdf" (great for LaTeX)
+    dpi=300,
+    show=False
+):
+    """
+    Make a multi-panel figure of |ψ|^2 snapshots with a single shared colorbar.
+    If `times` is None, uses the earliest N that fit the grid.
+    """
+
+    pattern = f"wf_{wf_number}_snapshot_at_time_*.npy"
+    files = glob.glob(os.path.join(snapshot_dir, pattern))
+    if not files:
+        raise FileNotFoundError(f"No snapshot files for wf_{wf_number} in {snapshot_dir}")
+
+    # (time, path) pairs
+    time_file_pairs = []
+    for fp in files:
+        m = re.search(r"time_([\d.]+)\.npy", os.path.basename(fp))
+        if m:
+            time_file_pairs.append((float(m.group(1)), fp))
+    time_file_pairs.sort(key=lambda x: x[0])
+    if not time_file_pairs:
+        raise ValueError("No valid time tags in filenames.")
+
+    # Filter to requested times (matching on exact float string is brittle; we allow tolerance)
+    if times is not None:
+        sel = []
+        want = list(times)
+        for t in want:
+            # find closest available
+            closest = min(time_file_pairs, key=lambda p: abs(p[0] - t))
+            if abs(closest[0] - t) < 1e-9:  # exact (as your filenames are formatted)
+                sel.append(closest)
+            else:
+                # If not exact, still take the closest within a small tolerance
+                if abs(closest[0] - t) < 1e-6:
+                    sel.append(closest)
+                else:
+                    raise ValueError(f"No snapshot matching time {t} (closest is {closest[0]}).")
+        time_file_pairs = sel
+
+    # Decide grid size
+    n = len(time_file_pairs)
+    if n == 0:
+        raise ValueError("No snapshots selected.")
+    if ncols < 1:
+        ncols = 1
+    nrows = int(np.ceil(n / ncols))
+
+    # Preload data and compute global vmin/vmax from positive values for shared colorbar
+    slices = []
+    nonzero_min = np.inf
+    global_max = 0.0
+
+    for t, fp in time_file_pairs:
+        psi = np.load(fp)
+        vals = np.abs(psi) ** 2
+
+        if vals.ndim == 3:
+            zi = z_index if z_index is not None else vals.shape[2] // 2
+            sl = vals[:, :, zi]
+        elif vals.ndim == 2:
+            sl = vals
+        else:
+            raise ValueError(f"Unsupported dimensionality: {vals.ndim}D")
+
+        slices.append((t, sl))
+
+        nz = sl[sl > 0]
+        if nz.size:
+            nonzero_min = min(nonzero_min, nz.min())
+        global_max = max(global_max, sl.max())
+
+    if not np.isfinite(nonzero_min) or global_max <= 0:
+        # fallback if all zeros (unlikely but safe)
+        nonzero_min, global_max = 1e-30, 1.0
+
+    # Coordinate grids
+    ny, nx = slices[0][1].shape
+    if x_range is not None and y_range is not None:
+        x = np.linspace(x_range[0], x_range[1], nx)
+        y = np.linspace(y_range[0], y_range[1], ny)
+    elif grid_spacing is not None:
+        x = np.arange(nx) * grid_spacing
+        y = np.arange(ny) * grid_spacing
+    else:
+        x = np.arange(nx)
+        y = np.arange(ny)
+
+    extent = [x.min(), x.max(), y.min(), y.max()]
+
+    # Shared normalization
+    if log_scale:
+        norm = LogNorm(vmin=nonzero_min, vmax=global_max)
+        cbar_fmt = "%.1e"
+    else:
+        norm = Normalize(vmin=0.0, vmax=global_max)
+        cbar_fmt = None
+
+    # Figure & axes
+    fig, axes = plt.subplots(nrows, ncols, figsize=figsize, squeeze=False)
+    fig.subplots_adjust(
+        right=0.85,  # space for the colorbar
+        hspace=0.35,  # vertical gap between rows (default is ~0.2)
+        wspace=0.25  # optional: horizontal gap between columns
+    )
+
+
+    im = None
+    for i, (t, sl) in enumerate(slices):
+        r = i // ncols
+        c = i % ncols
+        ax = axes[r, c]
+
+        im = ax.imshow(
+            sl.T, origin="lower", extent=extent, cmap=cmap, norm=norm, aspect="auto"
+        )
+        ax.set_title(f"t = {t:.1f}", fontsize=fontsize)
+        ax.set_xlabel("x", fontsize=fontsize)
+        ax.set_ylabel("y", fontsize=fontsize)
+        ax.tick_params(labelsize=fontsize-2)
+
+    # Hide any unused axes
+    for j in range(n, nrows * ncols):
+        r = j // ncols
+        c = j % ncols
+        axes[r, c].axis("off")
+
+    # One shared colorbar
+    #cax = fig.add_axes([0.92, 0.15, 0.2, 0.7])  # manual to keep right margin tight in LaTeX
+    fig.subplots_adjust(right=0.85)
+    cbar = fig.colorbar(
+        im,
+        ax=axes,
+        location="right",
+        fraction=0.046,  # thickness of colorbar
+        pad=0.04  # gap between plots and colorbar
+    )
+    cbar.ax.tick_params(labelsize=fontsize - 2)
+    cbar.set_label(r"$|\psi|^2$", fontsize=fontsize)
+
+
+    if save_path is not None:
+        fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
+        print(f"Saved multi-panel figure to: {save_path}")
+
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)

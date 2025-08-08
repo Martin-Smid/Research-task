@@ -14,10 +14,25 @@ z_index=None,  # Will use middle slice for 3D data
 save_plots=True,
 show_plots=False
     )
-    '''
+    
 
 plot_multiple_wave_functions(
      snapshot_dir=snapshot_directory,
      wf_numbers=[0, 1, 2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25],  # List of wave functions to compare
      save_plots=True,
      show_plots=False)
+'''
+
+plot_wave_function_panel(
+    snapshot_dir="resources/data/simulation_20250808_170854",
+    wf_number=0,
+    times=[8, 16, 24,33.2],  # pick any 4+
+    ncols=2,                 # 2x2 grid
+    z_index=None,            # middle slice for 3D
+    log_scale=True,          # shared LogNorm
+    figsize=(10, 9),
+    fontsize=16,             # bigger labels/ticks
+    save_path="wf0_panel.png",  # perfect for LaTeX
+    dpi=300,
+    show=False
+)

@@ -589,8 +589,8 @@ class Evolution_Class:
 
         # Create radial bins
         max_radius = 0.95 * 0.5 * min(BoxSize)
-        r_min = 1.0 * max(dx)  # pick a sensible minimum > 0
-        bins = np.concatenate(([0.0], np.geomspace(r_min, max_radius, Nbins)))
+        r_min = 0.1 * max(dx)  # pick a sensible minimum > 0
+        bins = np.concatenate(([0.0], np.geomspace(0.003, max_radius, Nbins)))
 
         # Compute mean density per bin
         mass_in_bin = []

@@ -8,16 +8,16 @@ from datetime import datetime
 import os
 import numpy as np
 
-
+np.random.seed(1234)
 
 #TODO recrete plot 1 and 6, using 12 and 13 and 21, do not bother with tau dyn for now
 
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-30, 30),(-30,30),(-30,30)], # Spatial boundaries
+    boundaries=[(-35, 35),(-35,35),(-35,35)], # Spatial boundaries
     N=128,                             # Grid resolution
-    total_time=20,              # Total simulation time
+    total_time=50,              # Total simulation time
     h=0.01,                            # Time step
     order_of_evolution=2,
     use_gravity=True ,
@@ -39,10 +39,10 @@ def is_far_enough(new_pos, existing_positions, min_dist):
 
 waves = []
 positions = []
-min_separation =8 # Adjust based on soliton radius
-boundary = [-39,39]  # Same for all dimensions
+min_separation =4 # Adjust based on soliton radius
+boundary = [-30,30]  # Same for all dimensions
 
-for i in range(25):
+for i in range(15):
     while True:
         means = generate_random_position(boundary)
         if is_far_enough(means, positions, min_separation):
@@ -59,7 +59,7 @@ for i in range(25):
         mass=1,
         omega=1,
         momenta=[0.0, 0.0, 0.0],
-        spin=0,
+        spin=1,
         desired_soliton_mass=5.3090068e7,
     )
     sim.add_wave_vector(wave_vector=vlna)
@@ -68,7 +68,7 @@ for i in range(25):
 
 
 
-sim.evolve(save_every=500)
+sim.evolve(save_every=1000)
 
 
 

@@ -8,7 +8,7 @@ from datetime import datetime
 import os
 import numpy as np
 
-np.random.seed(1234)
+
 
 #TODO recrete plot 1 and 6, using 12 and 13 and 21, do not bother with tau dyn for now
 

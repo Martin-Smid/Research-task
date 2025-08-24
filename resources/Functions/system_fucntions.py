@@ -144,7 +144,7 @@ def plot_lambda_rho_evolution(file_name):
 
             # Plot data
             plt.plot(x_valid, y_valid, marker=next(markers),markersize=2, linestyle='None',
-                     color=color, label=f"{label}\nλ∞={lambda_inf:.2f}, τ₉₉={tau99:.2f}")
+                     color=color, label=f"{label}\nλ∞={lambda_inf:.2f}")#tau_99={tau99:.2f}
 
             # Plot fit
             plt.plot(x_valid, saturation_func(x_valid, *popt), linestyle='-', color='black')
@@ -165,7 +165,7 @@ def plot_lambda_rho_evolution(file_name):
     plt.show()
 
 
-plot_lambda_rho_evolution(r'C:\projekty\Research-task\resources\data\max_values.csv')
+plot_lambda_rho_evolution(r'C:\projekty\Research-task\resources\data\good_max_vval_data.csv')
 
 #plot_max_values('/home/martin/ploty/max_values_4.csv')
 

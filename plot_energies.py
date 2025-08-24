@@ -5,11 +5,11 @@ import matplotlib.pyplot as plt
 # 🔧 MANUALLY SET YOUR DIRECTORIES HERE
 simulation_dirs = [
 
+'resources/data/spin=0_N=256',
 
-
-    'resources/data/spin=1_N=512',
-    'resources/data/spin=2_N=512',
-    'resources/data/spin=3_N=512',
+    'resources/data/spin=1_N=256',
+    'resources/data/spin=2_N=256',
+    'resources/data/spin=3_N=256',
 
 
 

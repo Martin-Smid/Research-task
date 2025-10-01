@@ -9,18 +9,14 @@ from scipy.optimize import curve_fit
 
 simulation_dirs = [
 
-'resources/data/spin=0_N=256',
-
-    'resources/data/spin=1_N=256',
-    'resources/data/spin=2_N=256',
-    'resources/data/spin=3_N=256',
+'resources/data/simulation_20251001_085152'
 
 
 
 
 ]
 
-specific_times = [30,39.99]
+specific_times = [1.5,1.99]
 
 
 

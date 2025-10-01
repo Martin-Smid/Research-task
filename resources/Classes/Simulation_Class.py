@@ -327,9 +327,9 @@ class Simulation_Class:
 
         # Update simulation state
         self.combined_psi = final_wave_functions
-        self.wave_values = self.evolution.wave_values
-        self.accessible_times = self.evolution.accessible_times
-        self.snapshot_directory = self.evolution.snapshot_directory
+        self.wave_values = self.evolution.scribe.wave_values
+        self.accessible_times = self.evolution.scribe.accessible_times
+        self.snapshot_directory = self.evolution.scribe.snapshot_directory
 
     def get_wave_function_at_time(self, time):
         """

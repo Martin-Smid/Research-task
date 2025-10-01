@@ -56,11 +56,11 @@ def calculate_errors_between_num_and_analytical_evolution(wave_function, time_st
     }
 
 
-def plot_max_values_on_N(simulation_class_instance):
+def plot_max_values_on_N(evolution_class_instance):
     import pandas as pd
     import matplotlib.pyplot as plt
 
-    filename = simulation_class_instance.max_vals_filename
+    filename = evolution_class_instance.scribe.max_vals_filename
 
     # Načti s MultiIndex ve sloupcích (dva řádky záhlaví), ignoruj komentáře
     data = pd.read_csv(filename, comment='#', header=[0, 1], index_col=0)

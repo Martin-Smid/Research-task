@@ -24,15 +24,15 @@ plot_multiple_wave_functions(
 '''
 
 plot_wave_function_panel(
-    snapshot_dir="resources/data/simulation_20250808_170854",
+    snapshot_dir="resources/data/simulation_20250912_090418",
     wf_number=0,
-    times=[8, 16, 24,33.2],  # pick any 4+
-    ncols=2,                 # 2x2 grid
+    times=[2.5,5, 7.5,10, 12.5,15],  # pick any 4+
+    ncols=3,                 # 2x2 grid
     z_index=None,            # middle slice for 3D
     log_scale=True,          # shared LogNorm
     figsize=(10, 9),
     fontsize=16,             # bigger labels/ticks
-    save_path="wf0_panel.png",  # perfect for LaTeX
-    dpi=300,
+    save_path="wf0_panel.jpg",  # perfect for LaTeX
+    dpi=900,
     show=False
 )

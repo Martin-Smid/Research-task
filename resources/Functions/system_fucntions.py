@@ -565,8 +565,8 @@ def plot_wave_function_panel(
             sl.T, origin="lower", extent=extent, cmap=cmap, norm=norm, aspect="auto"
         )
         ax.set_title(f"t = {t:.1f}", fontsize=fontsize)
-        ax.set_xlabel("x", fontsize=fontsize)
-        ax.set_ylabel("y", fontsize=fontsize)
+        #ax.set_xlabel("x", fontsize=fontsize)
+        #ax.set_ylabel("y", fontsize=fontsize)
         ax.tick_params(labelsize=fontsize-2)
 
     # Hide any unused axes

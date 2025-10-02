@@ -66,6 +66,7 @@ instance but one should create Wave_vector instance with params of Wave_fucntion
 
 **End of Research Assignemnt start of Diploma Thesis**
 This project continues to be my Diploma Thesis. The produced "report" for my Research Assignment, which is ment as kind of documentation with extra info can be found in dir Research task report
+
 **Phase 5.5**
 - Creation of the Scribe_Class ✓
 - Moved data logging from Evolution_Class to the Scribe ✓

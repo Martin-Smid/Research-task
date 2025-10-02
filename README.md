@@ -60,4 +60,11 @@ instance but one should create Wave_vector instance with params of Wave_fucntion
 **Phase 5**
 - Added tracking of kinetic and potential energy along the simulation ✓
 - added plotting.py which allows to plot from snapshots ✓
-- Implementation of dark matter profile calculation - working on it
+- Implementation of dark matter profile calculation & fitting - done in plot_density.py ✓
+- Added plot_energies.py which plots the conservation of energy throughout the simulation ✓
+- Started tracking position of maximal value of the density on the grid at different timesteps - it is now possible to plot the travelled trajectory by the soliton ✓
+
+**End of Research Assignemnt start of Diploma Thesis**
+**Phase 5.5**
+- Creation of the Scribe_Class ✓
+- Moved data logging from Evolution_Class to the Scribe ✓

@@ -165,7 +165,7 @@ def plot_lambda_rho_evolution(file_name):
     plt.show()
 
 
-plot_lambda_rho_evolution(r'C:\projekty\Research-task\resources\data\good_max_vval_data.csv')
+#plot_lambda_rho_evolution(r'C:\projekty\Research-task\resources\data\good_max_vval_data.csv')
 
 #plot_max_values('/home/martin/ploty/max_values_4.csv')
 

@@ -82,8 +82,8 @@ class Simulation_Class:
     separate classes.
     """
 
-    @parameter_check(int, list, int, (int, float), (int, float),int, float, bool, object, bool, dict,bool,bool,float)
-    def __init__(self, dim, boundaries, N, total_time, h,order_of_evolution = 2, m_s=2.5e-22, use_gravity=False,
+    @parameter_check(int, list, int, (int, float), (int, float),int, float, float,bool, bool, object, bool, dict,bool,bool,float)
+    def __init__(self, dim, boundaries, N, total_time, h,order_of_evolution = 2, m_s=2.5e-22, sponge_V0 =0.6 ,use_sponge=True, use_gravity=False,
                  static_potential=None, save_max_vals=False,
                  sim_units={"dUnits": "kpc", "tUnits": "Gyr", "mUnits": "Msun", "eUnits": "eV"},use_units=True,self_int=True,a_s=-10e-80,):
         """
@@ -123,6 +123,11 @@ class Simulation_Class:
         self.dx = []
         self.grids = []
         self.dx, self.grids = self.unpack_boundaries()
+
+        # initialize sponge potential
+        self.use_sponge = use_sponge
+        self.sponge_V0 = float(sponge_V0)
+        self.sponge_potential = self._build_sponge_potential()
 
         # Initialize k-space for Fourier methods
         self.k_space = self.create_k_space()
@@ -403,6 +408,52 @@ class Simulation_Class:
 
         scaling_lambda = 1
 
+    def _build_sponge_potential(self):
+        """ Builds spherical "sponge" potential as done in:PHYSICAL REVIEW D 94, 043513 (2016)
+        V_s(r) = -i/2 * V0 * [ 2 + tanh((r - rs)/δ) - tanh(rs/δ) ] * Θ(r - rp).
+        used to avoid spurious reheating from reflected waves emitted by soliton mergers
+        carrying mass and energy toward box boundaries """
+        if not self.use_sponge:
+            return None
+
+        import numpy as np, cupy as cp
+
+        # Grids: list of cp.ndarrays on GPU -> move just coordinate axes to CPU once
+        grids_cpu = [cp.asnumpy(g) for g in self.grids]
+
+        centers = []
+        half_lengths = []
+        for (a, b) in self.boundaries:
+            c = 0.5 * (a + b)
+            L = (b - a)
+            centers.append(c)
+            half_lengths.append(0.5 * L)
+
+
+        r2 = np.zeros_like(grids_cpu[0], dtype=np.float32)
+        for g, c in zip(grids_cpu, centers):
+            r2 += (g - np.float32(c)) ** 2
+        r = np.sqrt(r2, dtype=np.float32)
+
+        # --- sponge parameters (paper values) ---
+        rN = float(max(half_lengths))
+        rp = (7.0 / 8.0) * rN
+        rs = 0.5 * (rN + rp)
+        delta = (rN - rp)
+        V0 = np.float32(self.sponge_V0)
+
+        # calar profile
+        theta = (r > rp)
+        S = 2.0 + np.tanh((r - rs) / delta) - np.tanh(rs / delta)
+        Vs_cpu = (-0.5j * V0 * S * theta).astype(np.complex64)
+
+        # freeing space
+        del r2, r, S, theta
+
+        # going to  GPU
+        Vs_gpu = cp.asarray(Vs_cpu)
+
+        return Vs_gpu
 
 
 

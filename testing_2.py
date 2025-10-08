@@ -10,21 +10,19 @@ import numpy as np
 
 
 
-#TODO recrete plot 1 and 6, using 12 and 13 and 21, do not bother with tau dyn for now
-
-
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-15, 15),(-15,15),(-15,15)], # Spatial boundaries
-    N=32,                             # Grid resolution
-    total_time=2,              # Total simulation time
+    N=64,                             # Grid resolution
+    total_time=10,              # Total simulation time
     h=0.01,                            # Time step
     order_of_evolution=2,
     use_gravity=True ,
     static_potential=None,
     save_max_vals=True,
     a_s=-1e-80,
-    self_int=False
+    self_int=False,
+    use_sponge=True
 
 )
 def generate_random_position(boundary):
@@ -39,10 +37,10 @@ def is_far_enough(new_pos, existing_positions, min_dist):
 
 waves = []
 positions = []
-min_separation =3 # Adjust based on soliton radius
+min_separation =5 # Adjust based on soliton radius
 boundary = [-12,12]  # Same for all dimensions
 
-for i in range(5):
+for i in range(6):
     while True:
         means = generate_random_position(boundary)
         if is_far_enough(means, positions, min_separation):

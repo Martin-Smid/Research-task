@@ -54,6 +54,7 @@ class Propagator_Class:
         self.kinetic_propagator = cp.exp(((-1j * ((self.h*time_factor) / 2) * k_squared_sum )*(self.h_bar_tilde)), dtype=cp.complex64)
         return self.kinetic_propagator
 
+
     def compute_static_potential_propagator(self, potential_function,time_factor=1):
         """
         Compute the static potential propagator.
@@ -73,7 +74,7 @@ class Propagator_Class:
             self.static_potential_propagator = cp.ones(self.simulation.grids[0].shape, dtype=cp.complex64)
 
         return self.static_potential_propagator
-
+    '''
     def compute_gravity_propagator(self, psi, density,first_step=False, last_step=False,time_factor=1):
         """
         Compute the gravitational potential propagator based on current wave function density.
@@ -114,7 +115,7 @@ class Propagator_Class:
 
         return self.gravity_propagator
 
-
+    '''
 
     def get_self_int_potential(self, density, psi,a_s):
         lambda_param =  (32*cp.pi*a_s*self.simulation.c)/self.simulation.h_bar
@@ -131,6 +132,74 @@ class Propagator_Class:
         return potential
 
 
+    def compute_gravity_potential(self, density):
+        """Compute gravitational potential only (no propagator)."""
+        if not self.simulation.use_gravity:
+            return cp.zeros_like(density, dtype=cp.float32)
+
+
+        return self.solve_poisson(density)
+
+    def compute_self_interaction_potential(self, density, psi):
+        """Compute self-interaction potential only."""
+        if not self.simulation.use_self_int:
+            return cp.zeros_like(psi, dtype=cp.float32)
+
+        a_s = (self.simulation.a_s * units.cm).to(f"{self.simulation.dUnits}").value
+        return self.get_self_int_potential(density, psi, a_s)
+
+    def compute_sponge_potential(self):
+        """Get sponge potential - computed in simulation class ."""
+        if self.simulation.sponge_potential is not None:
+            return self.simulation.sponge_potential
+        return cp.zeros_like(self.grids[0], dtype=cp.complex64)
+
+    def compute_total_potential(self, psi, density, include_static=False):
+        """
+        Combine all dynamic potentials into one.
+
+        Parameters:
+            psi: Wave function
+            density: Total density
+            include_static: Whether to include static potential (usually handled separately)
+
+        Returns:
+            Total potential (real for gravity/self-int, complex if sponge included)
+        """
+        # Start with gravity
+        V_total = self.compute_gravity_potential(density)
+
+        # Add self-interaction
+        V_total += self.compute_self_interaction_potential(density, psi)
+
+        # Add sponge (complex, so convert V_total first)
+        V_sponge = self.compute_sponge_potential()
+        V_total = V_total.astype(cp.complex64) + V_sponge
+
+        # Optionally add static potential
+        if self.simulation.static_potential is not None:
+            V_static = self.simulation.static_potential(self.simulation)
+            V_total += V_static
+
+        self.total_potential = V_total
+        return V_total
+
+    def compute_total_propagator(self, psi, density, first_step=False, last_step=False, time_factor=1):
+        """
+        Compute propagator from total potential.
+
+        Returns:
+            Propagator exp(-i * dt * V_total / hbar)
+        """
+        V_total = self.compute_total_potential(psi, density, include_static=False)
+
+        if first_step or last_step:
+            dt = (self.h * time_factor) / 2
+        else:
+            dt = self.h * time_factor
+
+        propagator = cp.exp((-1j * dt * V_total) / self.simulation.h_bar_tilde, dtype=cp.complex64)
+        return propagator
 
 
     def solve_poisson(self, density):

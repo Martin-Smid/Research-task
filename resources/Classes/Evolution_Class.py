@@ -281,7 +281,7 @@ class Evolution_Class:
         # Log energy via scribe
         self.scribe.log_energy(current_time, K, W)
 
-    def _compute_kinetic_energy(self, wave_functions):
+    '''def _compute_kinetic_energy(self, wave_functions):
         """Compute the kinetic energy of the wavefunction."""
         dx = np.prod(self.simulation.dx)
         k_space = self.simulation.k_space
@@ -295,7 +295,52 @@ class Evolution_Class:
             part_kin_en = 0.5 * self.simulation.h_bar_tilde ** 2 * cp.sum(partials_squared) * dx
             kinetic_energy += part_kin_en
 
-        self.last_kinetic_energy = kinetic_energy
+        self.last_kinetic_energy = kinetic_energy'''
+
+    def _compute_kinetic_energy(self, wave_functions):
+        """Compute kinetic energy split into flow and quantum pressure components."""
+        dx = np.prod(self.simulation.dx)
+        k_space = self.simulation.k_space
+
+        K_flow_total = 0
+        U_quantum_total = 0
+
+        for wf in wave_functions:
+            rho = wf.calculate_density()  # |ψ|²
+            sqrt_rho = cp.sqrt(rho)
+
+            # Compute ∇ψ in each direction
+            grad_psi_squared = 0
+            grad_sqrt_rho_squared = 0
+            grad_S_squared_times_rho = 0
+
+            for i, k_i in enumerate(k_space):
+                # Gradient of ψ
+                grad_psi_i = cp.fft.ifftn(-1j * k_i * cp.fft.fftn(wf.psi))
+                grad_psi_squared += cp.abs(grad_psi_i) ** 2
+
+                # Gradient of √ρ for quantum pressure
+                grad_sqrt_rho_i = cp.fft.ifftn(-1j * k_i * cp.fft.fftn(sqrt_rho))
+                grad_sqrt_rho_squared += cp.abs(grad_sqrt_rho_i) ** 2
+
+            # U_quantum = (ℏ²/2m) ∫ |∇√ρ|² dx
+            U_quantum = 0.5 * self.simulation.h_bar_tilde ** 2 * cp.sum(grad_sqrt_rho_squared) * dx
+
+            # K_flow = (ℏ²/2m) ∫ |∇ψ|² dx - U_quantum
+            K_total_this_wf = 0.5 * self.simulation.h_bar_tilde ** 2 * cp.sum(grad_psi_squared) * dx
+            K_flow = K_total_this_wf - U_quantum
+
+            # Velocity field v = (ℏ/m) ∇S = (ℏ/m) Im(∇ψ/ψ)
+            v_i = (self.simulation.h_bar_tilde / self.simulation.mass_s) * cp.imag(grad_psi_i / (wf.psi + 1e-30))
+
+            K_flow_total += K_flow
+            U_quantum_total += U_quantum
+
+        self.last_kinetic_energy = K_flow_total + U_quantum_total
+        self.K_flow = K_flow_total
+        self.U_quantum = U_quantum_total
+
+        return K_flow_total, U_quantum_total
 
     def _compute_and_save_radial_profile(self, total_density, current_time, ix, iy, iz, Nbins=250):
         """Compute and save the spherically averaged radial density profile."""

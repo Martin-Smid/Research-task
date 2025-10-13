@@ -144,7 +144,7 @@ class Scribe:
         with open(self.max_locations_path, "a") as f:
             f.write(f"{time_value:.9e}, {ix:d}, {iy:d}, {iz:d}, {x:.9e}, {y:.9e}, {z:.9e}\n")
 
-    def log_energy(self, time, K, W):
+    def log_energy_detailed(self, time, K_total, W, K_flow, U_quantum):
         """
         Log energy values at a given time.
 
@@ -153,14 +153,15 @@ class Scribe:
             K: Kinetic energy
             W: Potential energy
         """
-        E = K + W
-        W_over_E = W / cp.abs(E)
-
+        E = K_total + W
+        W_over_E = W / abs(E)
         self.energy_log.append({
             "time": float(time),
-            "K": float(K),
+            "K_total": float(K_total),
             "W": float(W),
-            "E": float(E),
+            "E_total": float(E),
+            "K_flow": float(K_flow),
+            "U_quantum": float(U_quantum),
             "W/|E|": float(W_over_E)
         })
 

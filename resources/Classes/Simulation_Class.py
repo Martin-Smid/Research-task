@@ -12,7 +12,7 @@ import datetime
 from itertools import chain
 import numpy as np
 from astropy import units, constants
-#np.random.seed(1)
+np.random.seed(1)
 
 def parameter_check(*types):
     def decorator(func):

@@ -16,7 +16,7 @@ sim = Simulation_Class(
     N=64,                             # Grid resolution
     total_time=10,              # Total simulation time
     h=0.01,                            # Time step
-    order_of_evolution=2,
+    order_of_evolution=6,
     use_gravity=True ,
     static_potential=None,
     save_max_vals=True,
@@ -66,7 +66,7 @@ for i in range(6):
 
 
 
-sim.evolve(save_every=50)
+sim.evolve(save_every=100)
 
 
 

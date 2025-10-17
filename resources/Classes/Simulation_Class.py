@@ -416,9 +416,8 @@ class Simulation_Class:
         if not self.use_sponge:
             return None
 
-        import numpy as np, cupy as cp
 
-        # Grids: list of cp.ndarrays on GPU -> move just coordinate axes to CPU once
+
         grids_cpu = [cp.asnumpy(g) for g in self.grids]
 
         centers = []
@@ -435,7 +434,7 @@ class Simulation_Class:
             r2 += (g - np.float32(c)) ** 2
         r = np.sqrt(r2, dtype=np.float32)
 
-        # --- sponge parameters (paper values) ---
+        #sponge params (paper values)
         rN = float(max(half_lengths))
         rp = (7.0 / 8.0) * rN
         rs = 0.5 * (rN + rp)

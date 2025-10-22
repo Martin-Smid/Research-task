@@ -83,9 +83,9 @@ class Simulation_Class:
     separate classes.
     """
 
-    @parameter_check(int, list, int, (int, float), (int, float),int, float, float,bool, bool, object, bool, dict,bool,bool,float)
+    @parameter_check(int, list, int, (int, float), (int, float),int, float, float,bool, bool, object, (str, type(None)), bool, dict,bool,bool,float)
     def __init__(self, dim, boundaries, N, total_time, h,order_of_evolution = 2, m_s=2.5e-22, sponge_V0 =0.6 ,use_sponge=True, use_gravity=False,
-                 static_potential=None, save_max_vals=False,
+                 static_potential=None, baryonic_model = None, save_max_vals=False,
                  sim_units={"dUnits": "kpc", "tUnits": "Gyr", "mUnits": "Msun", "eUnits": "eV"},use_units=True,self_int=True,a_s=-10e-80,):
         """
         Initialize the simulation parameters and setup.
@@ -158,7 +158,10 @@ class Simulation_Class:
         self.use_self_int =self_int
         self.a_s = a_s
 
-        self.baryonic_matter = BaryonicMatter_Class(self)
+        self.baryonic_matter = BaryonicMatter_Class(self, model=baryonic_model)
+
+        print(f"baryonic model is {baryonic_model}")
+        print(f"rhob = {self.baryonic_matter.rho_b}")
 
 
     def setup_units(self, sim_units, m_s):

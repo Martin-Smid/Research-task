@@ -58,16 +58,19 @@ class Evolution_Class:
         for wf in wave_functions:
             wf.psi = cp.asarray(wf.psi)
 
-        baryons = cp.asarray(self.simulation.baryonic_matter.rho_b)
+
 
         # Setup directories and save initial state
         self.scribe.setup_directories(self.num_wave_functions)
         self.scribe.save_initial_states(wave_functions)
 
+
+
         # Initial diagnostics
         total_density = self._compute_total_density(wave_functions)
         current_time = 0
-        ix, iy, iz = cp.asnumpy(cp.argwhere(total_density == total_density.max())[0])
+        ix, iy, iz = self._safe_get_max_location(total_density)
+
 
         self.scribe.record_max_location(int(ix), int(iy), int(iz), float(current_time))
         self._compute_and_save_radial_profile(total_density, current_time, ix, iy, iz)
@@ -92,6 +95,7 @@ class Evolution_Class:
 
         # Main evolution loop
         for step in range(self.num_steps):
+            print(step)
             total_density = self._compute_total_density(wave_functions)
             save_step = False
             current_time = step * self.h
@@ -102,11 +106,12 @@ class Evolution_Class:
             self.compute_total_energy(wave_functions, total_density, current_time)
 
             # Track max location
-            ix, iy, iz = cp.asnumpy(cp.argwhere(total_density == total_density.max())[0])
+            ix, iy, iz = self._safe_get_max_location(total_density)
             self.scribe.record_max_location(int(ix), int(iy), int(iz), float(current_time))
 
             if step % save_every == 0 and step > 0:
                 save_step = True
+                self.check_baryon_acceleration(total_density)
 
             # Perform evolution step
             wave_functions = self._perform_evolution_step(wave_functions, total_density, step, save_step)
@@ -122,7 +127,7 @@ class Evolution_Class:
 
         # Final state
         total_density = self._compute_total_density(wave_functions)
-        ix, iy, iz = cp.asnumpy(cp.argwhere(total_density == total_density.max())[0])
+        ix, iy, iz = self._safe_get_max_location(total_density)
         self.scribe.record_max_location(int(ix), int(iy), int(iz), float(current_time))
         self._compute_and_save_radial_profile(total_density, current_time, ix, iy, iz)
         cp.get_default_memory_pool().free_all_blocks()
@@ -162,9 +167,11 @@ class Evolution_Class:
         """Second-order split-step evolution."""
         # Kick step
         self._kick_all_wave_functions(wave_functions, total_density, is_first, is_last)
-
+        self._kick_baryons(total_density, is_first, is_last)
         # Drift step
         self._drift_all_wave_functions(wave_functions)
+        self._drift_baryons()
+
 
         # Final kick for last step
         if is_last:
@@ -218,20 +225,35 @@ class Evolution_Class:
                                  time_factor_key='full'):
         """Apply kick step to all wave functions with shared density."""
         time_factor = self.coefficients[time_factor_key]
-        #static_propagator = self.static_propagators[time_factor_key]
 
         for wf in wave_functions:
             # Compute total dynamic propagator (gravity + self-int + sponge)
             dynamic_propagator = self.propagator.compute_total_propagator(
-                wf.psi, total_density,
+                total_density, psi=wf.psi,
                 first_step=is_first_step,
                 last_step=is_last_step,
                 time_factor=time_factor
             )
 
-            # Combine with static propagator
             full_propagator =  dynamic_propagator
             wf.psi *= full_propagator
+
+    def _kick_baryons(self, total_density, is_first_step, is_last_step, time_factor_key='full'):
+        """Update baryonic velocity from gravitational acceleration."""
+        time_factor = self.coefficients[time_factor_key]
+
+
+        gravity_potential = self.propagator.compute_gravity_potential(total_density)
+
+        # Update baryonic matter velocity
+        dt = (self.h * time_factor) / 2 if (is_first_step or is_last_step) else self.h * time_factor
+        self.simulation.baryonic_matter.update_velocity(gravity_potential, dt)
+
+    def _drift_baryons(self, time_factor_key='full'):
+        """Advect baryonic matter density along velocity field."""
+        time_factor = self.coefficients[time_factor_key]
+        dt = self.h * time_factor
+        self.simulation.baryonic_matter.drift_baryonic_matter(dt)
 
     def _drift_all_wave_functions(self, wave_functions, time_factor_key='full'):
         """Apply drift step to all wave functions."""
@@ -248,6 +270,9 @@ class Evolution_Class:
         for wf in wave_functions:
             density_i = wf.calculate_density()
             total_density += density_i
+
+        total_density +=  self.simulation.baryonic_matter.rho_b
+
         return total_density
 
     def compute_total_energy(self, wave_functions, total_density, current_time):
@@ -480,3 +505,59 @@ class Evolution_Class:
             num_wave_functions=self.num_wave_functions
         )
 
+
+    def check_baryon_acceleration(self, total_density):
+        """Check if baryons are experiencing acceleration"""
+        phi = self.propagator.compute_gravity_potential(total_density)
+
+        # Compute acceleration in each direction
+        accels = []
+        for dim in range(self.simulation.dim):
+            k_component = self.simulation.k_space[dim]
+            phi_k = cp.fft.fftn(phi)
+            accel = cp.real(cp.fft.ifftn(-1j * k_component * phi_k))
+            accels.append(float(cp.max(cp.abs(accel))))
+
+        print(f"Max accelerations: {accels}")
+        print(f"Max baryon velocity: {[float(cp.max(cp.abs(v))) for v in self.simulation.baryonic_matter.v_b]}")
+        return accels
+
+
+    def _safe_get_max_location(self, total_density):
+        """
+        Safely extract the location of maximum density with fallback handling.
+
+        Returns:
+            tuple: (ix, iy, iz) coordinates of maximum density
+        """
+        # Remove NaN and infinite values
+        valid_mask = cp.isfinite(total_density)
+
+        if not cp.any(valid_mask):
+            # If all values are invalid, use center of grid
+            print("Warning: All density values are NaN or infinite. Using grid center.")
+            center = self.simulation.N // 2
+            return center, center, center
+
+        # Create a copy and set invalid values to -inf so they won't be max
+        safe_density = cp.where(valid_mask, total_density, -cp.inf)
+
+        max_val = cp.max(safe_density)
+
+        # Handle case where max is still infinite or all values are negative
+        if not cp.isfinite(max_val) or max_val < 0:
+            print(f"Warning: Maximum density is {max_val}. Using grid center.")
+            center = self.simulation.N // 2
+            return center, center, center
+
+        # Find location(s) of maximum
+        locations = cp.argwhere(safe_density == max_val)
+
+        if len(locations) == 0:
+            print("Warning: No valid maximum location found. Using grid center.")
+            center = self.simulation.N // 2
+            return center, center, center
+
+        # Use the first maximum location found
+        ix, iy, iz = cp.asnumpy(locations[0])
+        return int(ix), int(iy), int(iz)

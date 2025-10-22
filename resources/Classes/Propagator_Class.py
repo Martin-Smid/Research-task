@@ -74,48 +74,7 @@ class Propagator_Class:
             self.static_potential_propagator = cp.ones(self.simulation.grids[0].shape, dtype=cp.complex64)
 
         return self.static_potential_propagator
-    '''
-    def compute_gravity_propagator(self, psi, density,first_step=False, last_step=False,time_factor=1):
-        """
-        Compute the gravitational potential propagator based on current wave function density.
 
-        Parameters:
-            psi (cp.ndarray): Current wave function
-            first_step (bool): True if this is the first step in evolution
-            last_step (bool): True if this is the last step in evolution
-
-        Returns:
-            cp.ndarray: The gravity propagator in real space
-        """
-
-        if not self.simulation.use_gravity:
-            return cp.ones_like(psi, dtype=cp.complex64)
-
-        #density = self.compute_density(psi)
-
-        a_s = (self.simulation.a_s * units.cm).to(f"{self.simulation.dUnits}").value
-
-
-        if not self.simulation.use_self_int:
-            self_int_potential = cp.ones_like(psi, dtype=cp.complex64)
-        elif self.simulation.use_self_int:
-            self_int_potential = self.get_self_int_potential(density, psi, a_s)
-
-
-
-        # Solve Poisson equation for gravitational potential
-        gravity_potential = self.solve_poisson(density)
-        self.gravity_potential = gravity_potential + self_int_potential
-
-        if first_step or last_step:
-            self.gravity_propagator = cp.exp((-1j * ((self.h*time_factor) / 2) * self.gravity_potential )/(self.simulation.h_bar_tilde), dtype=cp.complex64)
-        else:
-            self.gravity_propagator = cp.exp((-1j  * (self.h*time_factor) * self.gravity_potential)/(self.simulation.h_bar_tilde), dtype=cp.complex64)
-
-
-        return self.gravity_propagator
-
-    '''
 
     def get_self_int_potential(self, density, psi,a_s):
         lambda_param =  (32*cp.pi*a_s*self.simulation.c)/self.simulation.h_bar
@@ -135,8 +94,8 @@ class Propagator_Class:
     def compute_gravity_potential(self, density):
         """Compute gravitational potential only (no propagator)."""
         if not self.simulation.use_gravity:
+            print("jsem tu")
             return cp.zeros_like(density, dtype=cp.float32)
-
 
         return self.solve_poisson(density)
 
@@ -169,8 +128,11 @@ class Propagator_Class:
         # Start with gravity
         V_grav = self.compute_gravity_potential(density)
 
-        # Add self-interaction
-        V_self_int = self.compute_self_interaction_potential(density, psi)
+
+        if psi is not None:
+            V_self_int = self.compute_self_interaction_potential(density, psi)
+        else:
+            V_self_int = cp.zeros_like(V_grav, dtype=cp.float32)
 
         # Add sponge (complex, so convert V_total first)
         V_sponge = self.compute_sponge_potential()
@@ -183,7 +145,7 @@ class Propagator_Class:
         self.total_potential = V_total
         return V_total
 
-    def compute_total_propagator(self, psi, density, first_step=False, last_step=False, time_factor=1):
+    def compute_total_propagator(self, density, psi = None, first_step=False, last_step=False, time_factor=1):
         """
         Compute propagator from total potential.
 
@@ -194,6 +156,7 @@ class Propagator_Class:
             include_static = True
         else:
             include_static = False
+
 
         V_total = self.compute_total_potential(psi, density, include_static=include_static)
 

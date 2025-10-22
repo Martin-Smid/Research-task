@@ -190,6 +190,7 @@ class Evolution_Class:
 
         for i, (operation, coeff_key) in enumerate(steps):
             if operation == 'kick':
+                total_density = self._compute_total_density(wave_functions)
                 first_op = is_first and i == 0
                 if first_op:
                     print(first_op)
@@ -213,6 +214,7 @@ class Evolution_Class:
 
         for i, (operation, coeff_key) in enumerate(steps):
             if operation == 'kick':
+                total_density = self._compute_total_density(wave_functions)
                 first_kick = is_first and i == kick_indices[0]
                 last_kick = is_last and i == kick_indices[-1]
                 self._kick_all_wave_functions(wave_functions, total_density, first_kick, last_kick, coeff_key)

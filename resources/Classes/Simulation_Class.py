@@ -158,7 +158,8 @@ class Simulation_Class:
         self.use_self_int =self_int
         self.a_s = a_s
 
-        self.baryonic_matter = BaryonicMatter_Class(self, model=baryonic_model)
+        self.baryonic_model = baryonic_model
+        self.baryonic_matter = BaryonicMatter_Class(self, model=self.baryonic_model)
 
         print(f"baryonic model is {baryonic_model}")
         print(f"rhob = {self.baryonic_matter.rho_b}")

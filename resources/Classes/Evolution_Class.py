@@ -69,6 +69,7 @@ class Evolution_Class:
 
         self.scribe.record_max_location(int(ix), int(iy), int(iz), float(current_time))
         self._compute_and_save_radial_profile(total_density, current_time, ix, iy, iz)
+        self.compute_total_energy(wave_functions, total_density, current_time)
 
         # Check mass conservation
         mass_diff = (
@@ -90,10 +91,10 @@ class Evolution_Class:
             save_step = False
             current_time = step * self.h
 
-            # Compute energies (after first step)
-            if step > 0:
-                self._compute_kinetic_energy(wave_functions)
-                self._compute_potential_energy(wave_functions, total_density, current_time)
+
+            #self._compute_kinetic_energy(wave_functions)
+            #self._compute_potential_energy(wave_functions, total_density, current_time)
+            self.compute_total_energy(wave_functions, total_density, current_time)
 
             # Track max location
             ix, iy, iz = cp.asnumpy(cp.argwhere(total_density == total_density.max())[0])
@@ -267,7 +268,39 @@ class Evolution_Class:
             total_density += density_i
         return total_density
 
-    def _compute_potential_energy(self, wave_functions, total_density, current_time):
+    def compute_total_energy(self, wave_functions, total_density, current_time):
+        """Compute total energy components and log them."""
+        # --- Kinetic components ---
+        K_flow, U_quantum = self._compute_kinetic_energy(wave_functions)
+        K_total = K_flow + U_quantum
+
+        # --- Potential component ---
+        W = self._compute_potential_energy(wave_functions, total_density, current_time, return_value=True)
+
+        # --- Log all energy parts ---
+        self.scribe.log_energy_detailed(
+            current_time,
+            K_total=float(K_total),
+            W=float(W),
+            K_flow=float(K_flow),
+            U_quantum=float(U_quantum)
+        )
+
+        return K_total, W, K_flow, U_quantum
+
+    def _compute_potential_energy(self, wave_functions, total_density, current_time, return_value=False):
+        """Compute the potential energy and optionally return it."""
+        dx = np.prod(self.simulation.dx)
+        phi = self.propagator.compute_gravity_potential(total_density)
+        rho = total_density
+        W = cp.real(0.5 * cp.sum(rho * phi) * dx)
+
+        if not return_value:
+            K = cp.real(self.last_kinetic_energy)
+            self.scribe.log_energy(current_time, K, W)
+        return W
+
+    '''def _compute_potential_energy(self, wave_functions, total_density, current_time):
         """Compute the potential energy and log it."""
         dx = np.prod(self.simulation.dx)
 
@@ -281,7 +314,7 @@ class Evolution_Class:
         # Log energy via scribe
         self.scribe.log_energy(current_time, K, W)
 
-    '''def _compute_kinetic_energy(self, wave_functions):
+    def _compute_kinetic_energy(self, wave_functions):
         """Compute the kinetic energy of the wavefunction."""
         dx = np.prod(self.simulation.dx)
         k_space = self.simulation.k_space

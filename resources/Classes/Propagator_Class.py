@@ -167,16 +167,15 @@ class Propagator_Class:
             Total potential (real for gravity/self-int, complex if sponge included)
         """
         # Start with gravity
-        V_total = self.compute_gravity_potential(density)
+        V_grav = self.compute_gravity_potential(density)
 
         # Add self-interaction
-        V_total += self.compute_self_interaction_potential(density, psi)
+        V_self_int = self.compute_self_interaction_potential(density, psi)
 
         # Add sponge (complex, so convert V_total first)
         V_sponge = self.compute_sponge_potential()
-        V_total = V_total.astype(cp.complex64) + V_sponge
+        V_total = V_grav + V_self_int + V_sponge
 
-        # Optionally add static potential
         if self.simulation.static_potential is not None:
             V_static = self.simulation.static_potential(self.simulation)
             V_total += V_static
@@ -191,7 +190,12 @@ class Propagator_Class:
         Returns:
             Propagator exp(-i * dt * V_total / hbar)
         """
-        V_total = self.compute_total_potential(psi, density, include_static=False)
+        if self.simulation.static_potential is not None:
+            include_static = True
+        else:
+            include_static = False
+
+        V_total = self.compute_total_potential(psi, density, include_static=include_static)
 
         if first_step or last_step:
             dt = (self.h * time_factor) / 2

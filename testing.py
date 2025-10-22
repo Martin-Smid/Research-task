@@ -10,13 +10,14 @@ sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-20, 20),(-20, 20),(-20, 20)], # Spatial boundaries
     N=128,                             # Grid resolution
-    total_time=33.2,                   # Total simulation time
+    total_time=9,                   # Total simulation time
     h=0.01,                            # Time step
     order_of_evolution=4,
     use_gravity=True , # Enable gravitational effects
     static_potential=gravity_potential,
     save_max_vals=False,
     self_int=False,
+    use_sponge=False
 )
 
 

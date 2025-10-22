@@ -235,7 +235,7 @@ class Evolution_Class:
                                  time_factor_key='full'):
         """Apply kick step to all wave functions with shared density."""
         time_factor = self.coefficients[time_factor_key]
-        static_propagator = self.static_propagators[time_factor_key]
+        #static_propagator = self.static_propagators[time_factor_key]
 
         for wf in wave_functions:
             # Compute total dynamic propagator (gravity + self-int + sponge)
@@ -247,7 +247,7 @@ class Evolution_Class:
             )
 
             # Combine with static propagator
-            full_propagator = static_propagator * dynamic_propagator
+            full_propagator =  dynamic_propagator
             wf.psi *= full_propagator
 
     def _drift_all_wave_functions(self, wave_functions, time_factor_key='full'):

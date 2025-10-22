@@ -3,6 +3,7 @@ import cupy as cp
 from resources.Functions.Schrodinger_eq_functions import *
 from resources.Classes.Propagator_Class import Propagator_Class
 from resources.Classes.Evolution_Class import Evolution_Class
+from resources.Classes.Baryonic_Matter_Class import BaryonicMatter_Class
 import pandas as pd
 import functools
 import sys
@@ -157,6 +158,7 @@ class Simulation_Class:
         self.use_self_int =self_int
         self.a_s = a_s
 
+        self.baryonic_matter = BaryonicMatter_Class(self)
 
 
     def setup_units(self, sim_units, m_s):

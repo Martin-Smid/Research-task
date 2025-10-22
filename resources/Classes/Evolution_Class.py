@@ -58,6 +58,8 @@ class Evolution_Class:
         for wf in wave_functions:
             wf.psi = cp.asarray(wf.psi)
 
+        baryons = cp.asarray(self.simulation.baryonic_matter.rho_b)
+
         # Setup directories and save initial state
         self.scribe.setup_directories(self.num_wave_functions)
         self.scribe.save_initial_states(wave_functions)
@@ -72,11 +74,14 @@ class Evolution_Class:
         self.compute_total_energy(wave_functions, total_density, current_time)
 
         # Check mass conservation
-        mass_diff = (
+        if wave_functions:
+            mass_diff = (
                             (abs(total_density).sum() * (self.simulation.dV ** 3))
                             / wave_functions[0].soliton_mass
                     ) - self.simulation.num_of_w_vects_in_sim
-
+        else:
+            mass_diff = 0
+            print("no wave functions detected")
 
         if mass_diff > 1e-2:
             print(f"mass diff {mass_diff} is greater than 1e-2, might want to increase the resolution")
@@ -178,7 +183,6 @@ class Evolution_Class:
 
         for i, (operation, coeff_key) in enumerate(steps):
             if operation == 'kick':
-                total_density = self._compute_total_density(wave_functions)
                 first_op = is_first and i == 0
                 if first_op:
                     print(first_op)
@@ -202,7 +206,6 @@ class Evolution_Class:
 
         for i, (operation, coeff_key) in enumerate(steps):
             if operation == 'kick':
-                total_density = self._compute_total_density(wave_functions)
                 first_kick = is_first and i == kick_indices[0]
                 last_kick = is_last and i == kick_indices[-1]
                 self._kick_all_wave_functions(wave_functions, total_density, first_kick, last_kick, coeff_key)
@@ -210,27 +213,6 @@ class Evolution_Class:
                 self._drift_all_wave_functions(wave_functions, time_factor_key=coeff_key)
 
         return wave_functions
-    '''
-    def _kick_all_wave_functions(self, wave_functions, total_density, is_first_step, is_last_step,
-                                 time_factor_key='full'):
-        """Apply kick step to all wave functions with shared density."""
-        time_factor = self.coefficients[time_factor_key]
-        static_propagator = self.static_propagators[time_factor_key]
-
-        for wf in wave_functions:
-            if is_first_step or is_last_step:
-                gravity_propagator = self.propagator.compute_gravity_propagator(
-                    wf.psi, total_density, first_step=is_first_step,
-                    last_step=is_last_step, time_factor=time_factor
-                )
-            else:
-                gravity_propagator = self.propagator.compute_gravity_propagator(
-                    wf.psi, total_density, time_factor=time_factor
-                )
-
-            full_potential_propagator = static_propagator * gravity_propagator
-            wf.psi *= full_potential_propagator '''
-
 
     def _kick_all_wave_functions(self, wave_functions, total_density, is_first_step, is_last_step,
                                  time_factor_key='full'):
@@ -256,13 +238,13 @@ class Evolution_Class:
         kinetic_propagator = self.kinetic_propagators[time_factor_key]
 
         for wf in wave_functions:
-            psi_k = cp.fft.fftn(wf.psi)
-            psi_k *= kinetic_propagator
-            wf.psi = cp.fft.ifftn(psi_k)
+            wf.drift(kinetic_propagator)
 
     def _compute_total_density(self, wave_functions):
         """Calculate the total density ρ = Σ|ψⁱ|² from all wave functions."""
-        total_density = cp.zeros_like(wave_functions[0].psi, dtype=cp.float64)
+        shape = (self.simulation.N,) * self.simulation.dim
+        total_density = cp.zeros(shape, dtype=cp.float64)
+
         for wf in wave_functions:
             density_i = wf.calculate_density()
             total_density += density_i
@@ -300,35 +282,6 @@ class Evolution_Class:
             self.scribe.log_energy(current_time, K, W)
         return W
 
-    '''def _compute_potential_energy(self, wave_functions, total_density, current_time):
-        """Compute the potential energy and log it."""
-        dx = np.prod(self.simulation.dx)
-
-        # Compute gravity potential (it will be stored in propagator)
-        phi = self.propagator.compute_gravity_potential(total_density)
-
-        rho = total_density
-        W = cp.real(0.5 * cp.sum(rho * phi) * dx)
-        K = cp.real(self.last_kinetic_energy)
-
-        # Log energy via scribe
-        self.scribe.log_energy(current_time, K, W)
-
-    def _compute_kinetic_energy(self, wave_functions):
-        """Compute the kinetic energy of the wavefunction."""
-        dx = np.prod(self.simulation.dx)
-        k_space = self.simulation.k_space
-        kinetic_energy = 0
-
-        for wf in wave_functions:
-            partials_squared = 0
-            for i, k_i in enumerate(k_space):
-                grad_i = cp.fft.ifftn(-1j * k_i * cp.fft.fftn(wf.psi))
-                partials_squared += cp.abs(grad_i) ** 2
-            part_kin_en = 0.5 * self.simulation.h_bar_tilde ** 2 * cp.sum(partials_squared) * dx
-            kinetic_energy += part_kin_en
-
-        self.last_kinetic_energy = kinetic_energy'''
 
     def _compute_kinetic_energy(self, wave_functions):
         """Compute kinetic energy split into flow and quantum pressure components."""

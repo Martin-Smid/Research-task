@@ -154,7 +154,12 @@ class Scribe:
             W: Potential energy
         """
         E = K_total + W
-        W_over_E = W / abs(E)
+
+        if E != 0:
+            W_over_E = W / abs(E)
+        else:
+            W_over_E = np.nan
+
         self.energy_log.append({
             "time": float(time),
             "K_total": float(K_total),

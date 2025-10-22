@@ -142,3 +142,14 @@ class Wave_function():  # Streamlined and unified evolution logic
 
         return clone
 
+    def drift(self, kinetic_propagator):
+        """
+        Apply the drift (kinetic) step of split-step Fourier method to this wavefunction.
+        ψ_k ← FFT(ψ)
+        ψ_k *= kinetic propagator
+        ψ ← IFFT(ψ_k)
+        """
+        psi_k = cp.fft.fftn(self.psi)
+        psi_k *= kinetic_propagator
+        self.psi = cp.fft.ifftn(psi_k)
+

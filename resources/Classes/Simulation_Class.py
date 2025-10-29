@@ -3,7 +3,8 @@ import cupy as cp
 from resources.Functions.Schrodinger_eq_functions import *
 from resources.Classes.Propagator_Class import Propagator_Class
 from resources.Classes.Evolution_Class import Evolution_Class
-from resources.Classes.Baryonic_Matter_Class import BaryonicMatter_Class
+#from resources.Classes.Baryonic_liquid_Class import BaryonicMatter_Class
+from resources.Classes.Baryonic_N_body import NBodyBaryons
 import pandas as pd
 import functools
 import sys
@@ -159,10 +160,10 @@ class Simulation_Class:
         self.a_s = a_s
 
         self.baryonic_model = baryonic_model
-        self.baryonic_matter = BaryonicMatter_Class(self, model=self.baryonic_model)
+        if self.baryonic_model is not None:
+            self.baryonic_matter = NBodyBaryons(self,N_particles=1000, total_mass=1e6,init_profile=self.baryonic_model)
 
-        print(f"baryonic model is {baryonic_model}")
-        print(f"rhob = {self.baryonic_matter.rho_b}")
+
 
 
     def setup_units(self, sim_units, m_s):
@@ -216,6 +217,8 @@ class Simulation_Class:
         grids = []
 
         self.dV = int(self.boundaries[0][1] - self.boundaries[0][0]) / self.N
+        self.dx = [(b - a) / self.N for (a, b) in self.boundaries]
+        self.cell_volume = np.prod(self.dx)
 
         for i, (a, b) in enumerate(self.boundaries):
             if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):

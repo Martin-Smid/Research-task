@@ -1,21 +1,122 @@
-from resources.Classes.Baryonic_Matter_Class import BaryonicMatter_Class
+from resources.Classes.Baryonic_liquid_Class import BaryonicMatter_Class
 from resources.Classes.Simulation_Class import Simulation_Class
 import matplotlib.pyplot as plt
 import numpy as np
 import cupy as cp
+from resources.Classes.Baryonic_N_body import NBodyBaryons
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-10, 10),(-10, 10),(-10, 10)], # Spatial boundaries
     N=64,                             # Grid resolution
-    total_time=0.2,                   # Total simulation time
-    h=0.001,                            # Time step
+    total_time=50,                   # Total simulation time
+    h=0.01,                            # Time step
     order_of_evolution=2,
-    baryonic_model="two_clumps",
+    baryonic_model="uniform",
     use_gravity=True,
 )
 
 
+
+
+
+
+# Extract grids and baryon density (move to CPU)
+rho = cp.asnumpy(sim.baryonic_matter.deposit_to_grid())
+x = sim.grids[0][:, 0, 0]
+y = sim.grids[1][0, :, 0]
+z = sim.grids[2][0, 0, :]
+
+# ---- Quick diagnostics ----
+total_mass = np.sum(rho) * np.prod(sim.dx)
+print(f"Integrated baryonic mass: {total_mass:.3e}")
+print(f"Deviation: {(total_mass / 1e8 - 1) * 100:.3f}%")
+
+# ---- 3D scatter plot (coarse sample) ----
+skip = 4  # increase for lighter plot
+X, Y, Z = np.meshgrid(x[::skip], y[::skip], z[::skip], indexing='ij')
+RHO = rho[::skip, ::skip, ::skip]
+
+# Mask near-zero densities for better color scaling
+mask = RHO > 0
+Cf = np.log10(RHO[mask])
+
+fig = plt.figure(figsize=(8, 7))
+ax = fig.add_subplot(111, projection='3d')
+p = ax.scatter(X[mask], Y[mask], Z[mask], c=Cf, cmap='plasma', s=3, alpha=0.8)
+fig.colorbar(p, ax=ax, label=r'$\log_{10}(\rho)$')
+ax.set_xlabel('x')
+ax.set_ylabel('y')
+ax.set_zlabel('z')
+ax.set_title('3D Hernquist baryon density')
+plt.tight_layout()
+plt.show()
+
+# ---- 2D central slice ----
+mid = len(z) // 2
+X2D, Y2D = np.meshgrid(x, y, indexing='ij')
+rho_slice = rho[:, :, mid]
+log_rho = np.log10(rho_slice + 1e-30)
+
+fig, ax = plt.subplots(figsize=(7, 6))
+im = ax.imshow(log_rho.T, origin='lower', extent=[x.min(), x.max(), y.min(), y.max()],
+               cmap='plasma', aspect='equal')
+fig.colorbar(im, ax=ax, label=r'$\log_{10}(\rho)$')
+ax.set_xlabel('x')
+ax.set_ylabel('y')
+ax.set_title('Hernquist baryon density slice (z=0)')
+plt.tight_layout()
+plt.show()
+
+sim.evolve(save_every=1000)
+
+rho = cp.asnumpy(sim.baryonic_matter.deposit_to_grid())
+x = sim.grids[0][:, 0, 0]
+y = sim.grids[1][0, :, 0]
+z = sim.grids[2][0, 0, :]
+
+# ---- Quick diagnostics ----
+total_mass = np.sum(rho) * np.prod(sim.dx)
+print(f"Integrated baryonic mass: {total_mass:.3e}")
+print(f"Deviation: {(total_mass / 1e8 - 1) * 100:.3f}%")
+
+# ---- 3D scatter plot (coarse sample) ----
+skip = 4  # increase for lighter plot
+X, Y, Z = np.meshgrid(x[::skip], y[::skip], z[::skip], indexing='ij')
+RHO = rho[::skip, ::skip, ::skip]
+
+# Mask near-zero densities for better color scaling
+mask = RHO > 0
+Cf = np.log10(RHO[mask])
+
+fig = plt.figure(figsize=(8, 7))
+ax = fig.add_subplot(111, projection='3d')
+p = ax.scatter(X[mask], Y[mask], Z[mask], c=Cf, cmap='plasma', s=3, alpha=0.8)
+fig.colorbar(p, ax=ax, label=r'$\log_{10}(\rho)$')
+ax.set_xlabel('x')
+ax.set_ylabel('y')
+ax.set_zlabel('z')
+ax.set_title('3D Hernquist baryon density')
+plt.tight_layout()
+plt.show()
+
+# ---- 2D central slice ----
+mid = len(z) // 2
+X2D, Y2D = np.meshgrid(x, y, indexing='ij')
+rho_slice = rho[:, :, mid]
+log_rho = np.log10(rho_slice + 1e-30)
+
+fig, ax = plt.subplots(figsize=(7, 6))
+im = ax.imshow(log_rho.T, origin='lower', extent=[x.min(), x.max(), y.min(), y.max()],
+               cmap='plasma', aspect='equal')
+fig.colorbar(im, ax=ax, label=r'$\log_{10}(\rho)$')
+ax.set_xlabel('x')
+ax.set_ylabel('y')
+ax.set_title('Hernquist baryon density slice (z=0)')
+plt.tight_layout()
+plt.show()
+
+''' works with baryonic liquid
 rho = cp.asnumpy(sim.baryonic_matter.rho_b)
 x = sim.grids[0][:,0,0]
 y = sim.grids[1][0,:,0]
@@ -61,7 +162,7 @@ plt.tight_layout()
 plt.show()
 
 before = cp.sum(sim.baryonic_matter.rho_b)
-sim.evolve(save_every=10)
+#sim.evolve(save_every=10)
 after = cp.sum(sim.baryonic_matter.rho_b)
 print(before - after)
 
@@ -109,3 +210,5 @@ ax.set_zlabel('log10(ρ)')
 ax.set_title('Hernquist density slice (z=0)')
 plt.tight_layout()
 plt.show()
+
+'''

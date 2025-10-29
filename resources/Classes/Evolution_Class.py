@@ -68,6 +68,12 @@ class Evolution_Class:
 
         # Initial diagnostics
         total_density = self._compute_total_density(wave_functions)
+
+        mass_total = cp.sum(total_density) * self.simulation.cell_volume
+        print("Mass:", mass_total)
+        print("Deviation [%]:", 100 * (mass_total / 1e8 - 1))
+
+
         current_time = 0
         ix, iy, iz = cp.asnumpy(cp.argwhere(total_density == total_density.max())[0])
 
@@ -90,17 +96,19 @@ class Evolution_Class:
         else:
             print(f"mass diff is {mass_diff:.6f} Msun")
 
-        del total_density
+
 
         # Main evolution loop
         for step in range(self.num_steps):
-            total_density = self._compute_total_density(wave_functions)
+            if step == 0:
+                print("starting evolution")
+            else:
+                total_density = self._compute_total_density(wave_functions)
             save_step = False
             current_time = step * self.h
 
 
-            #self._compute_kinetic_energy(wave_functions)
-            #self._compute_potential_energy(wave_functions, total_density, current_time)
+
             self.compute_total_energy(wave_functions, total_density, current_time)
 
             # Track max location
@@ -164,12 +172,15 @@ class Evolution_Class:
         """Second-order split-step evolution."""
         # Kick step
         self._kick_all_wave_functions(wave_functions, total_density, is_first, is_last)
+
         if self.simulation.baryonic_model is not None:
-            self._kick_baryons(total_density, is_first, is_last)
-            print("tu?")
-            self._drift_baryons()
+            potential_grid = self.propagator.compute_gravity_potential(total_density)
+            self._drift_baryons(potential_grid)
+
         # Drift step
         self._drift_all_wave_functions(wave_functions)
+
+
 
 
 
@@ -182,6 +193,7 @@ class Evolution_Class:
 
     def _evolve_order_4(self, wave_functions, total_density, is_first, is_last, save_step):
         """Fourth-order split-step evolution."""
+        # TODO: add evolution for bayons only when needed
         steps = [
             ('kick', 'v2'), ('drift', 't2'), ('kick', 'v1'), ('drift', 't1'),
             ('kick', 'v0'), ('drift', 't1'), ('kick', 'v1'), ('drift', 't2'),
@@ -203,6 +215,7 @@ class Evolution_Class:
 
     def _evolve_order_6(self, wave_functions, total_density, is_first, is_last, save_step):
         """Sixth-order split-step evolution."""
+        # TODO: add evolution for bayons only when needed
         steps = [
             ('drift', 'v1'), ('kick', 't1'), ('drift', 'v2'), ('kick', 't2'),
             ('drift', 'v3'), ('kick', 't3'), ('drift', 'v4'), ('kick', 't4'),
@@ -240,22 +253,7 @@ class Evolution_Class:
             full_propagator =  dynamic_propagator
             wf.psi *= full_propagator
 
-    def _kick_baryons(self, total_density, is_first_step, is_last_step, time_factor_key='full'):
-        """Update baryonic velocity from gravitational acceleration."""
-        time_factor = self.coefficients[time_factor_key]
 
-
-        gravity_potential = self.propagator.compute_gravity_potential(total_density)
-
-        # Update baryonic matter velocity
-        dt = (self.h * time_factor) / 2 if (is_first_step or is_last_step) else self.h * time_factor
-        self.simulation.baryonic_matter.update_velocity(gravity_potential, dt)
-
-    def _drift_baryons(self, time_factor_key='full'):
-        """Advect baryonic matter density along velocity field."""
-        time_factor = self.coefficients[time_factor_key]
-        dt = self.h * time_factor
-        self.simulation.baryonic_matter.drift_baryonic_matter(dt)
 
     def _drift_all_wave_functions(self, wave_functions, time_factor_key='full'):
         """Apply drift step to all wave functions."""
@@ -273,7 +271,9 @@ class Evolution_Class:
             density_i = wf.calculate_density()
             total_density += density_i
 
-        total_density +=  self.simulation.baryonic_matter.rho_b
+        if self.simulation.baryonic_model is not None:
+            rho_baryons = self.simulation.baryonic_matter.deposit_to_grid()
+            total_density += rho_baryons
 
         return total_density
 
@@ -507,5 +507,18 @@ class Evolution_Class:
             num_wave_functions=self.num_wave_functions
         )
 
+    def _drift_baryons(self, potential_grid):
+        """
+        Update baryonic particle positions and velocities using leapfrog integration.
+        The baryonic system reacts to the total gravitational potential.
+        """
+        if self.simulation.baryonic_model is None:
+            return  # no baryons to evolve
+
+        baryons = self.simulation.baryonic_matter
+        dt = self.h
+
+        # Use the N-body integrator already defined in the baryon class
+        baryons.integrate_leapfrog(potential_grid, dt)
 
 

@@ -39,6 +39,11 @@ wave_vector = Wave_vector_class(
 
 
 sim.add_wave_vector(wave_vector)
+
+#TODO: make it so that baryons are added tp simulations similarly to wave vectors
+#TODO: plot both the wfs and baryons
+#TODO: add conservation of mass during the sim
+
 #sim.add_wave_function(vlna2)
 #sim.add_wave_function(vlna3)
 

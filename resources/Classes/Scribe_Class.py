@@ -84,6 +84,13 @@ class Scribe:
             np.save(snapshot_path, cp.asnumpy(wf.psi))
             self.wave_values[wf_idx].append(snapshot_path)
 
+        if hasattr(self.simulation, "baryonic_matter") and self.simulation.baryonic_matter is not None:
+            try:
+                rho_baryons = self.simulation.baryonic_matter.deposit_to_grid()
+                baryon_path = f"{self.snapshot_directory}/baryons_snapshot_at_time_{current_time:.6f}.npy"
+                np.save(baryon_path, cp.asnumpy(rho_baryons))
+            except Exception as e:
+                print(f"[Scribe] Warning: could not save baryon snapshot at time {current_time:.6f}: {e}")
         self.accessible_times.append(current_time)
 
     def save_final_state(self, wave_functions, num_steps, save_every, h, total_time):
@@ -103,6 +110,15 @@ class Scribe:
                 final_path = f"{self.snapshot_directory}/wf_{wf_idx}_snapshot_at_time_{final_time:.6f}.npy"
                 np.save(final_path, cp.asnumpy(wf.psi))
                 self.wave_values[wf_idx].append(final_path)
+
+            if hasattr(self.simulation, "baryonic_matter") and self.simulation.baryonic_matter is not None:
+                try:
+                    rho_baryons = self.simulation.baryonic_matter.deposit_to_grid()
+                    baryon_path = f"{self.snapshot_directory}/baryons_snapshot_at_time_{final_time:.6f}.npy"
+                    np.save(baryon_path, cp.asnumpy(rho_baryons))
+                except Exception as e:
+                    print(f"[Scribe] Warning: could not save baryon snapshot at time {final_time:.6f}: {e}")
+
             self.accessible_times.append(final_time)
 
     def save_metadata(self, num_steps, h, total_time, order, num_wave_functions):

@@ -22,7 +22,7 @@ sim = Simulation_Class(
 
 )
 
-
+#TODO: all the additional .py files such as plot_from_snapshots, plot_density etc need grooming
 
 wave_vector = Wave_vector_class(
     packet_type="resources/solitons/GroundState(1).dat",

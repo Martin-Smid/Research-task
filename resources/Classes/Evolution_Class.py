@@ -122,7 +122,7 @@ class Evolution_Class:
             wave_functions = self._perform_evolution_step(wave_functions, total_density, step, save_step)
 
             # Save snapshots and profiles
-            if step % save_every == 0 and step > 0:
+            if step % save_every == 0 :
                 self._compute_and_save_radial_profile(total_density, current_time, ix, iy, iz)
                 self.scribe.save_snapshots(wave_functions, step, self.h)
                 print(f"Still working... Step {step} out of {self.num_steps}")

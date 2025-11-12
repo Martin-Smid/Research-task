@@ -16,7 +16,7 @@ sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-20, 20),(-20, 20),(-20, 20)], # Spatial boundaries
     N=128,                             # Grid resolution
-    total_time=8.7,                   # Total simulation time
+    total_time=25,                   # Total simulation time
     h=0.01,                            # Time step
     order_of_evolution=2,
     baryonic_model="cold_clump",
@@ -26,7 +26,12 @@ sim = Simulation_Class(
 )
 
 
-
+sim.baryonic_matter.initialize_solid_clump(
+    center=(0.0, 5.0, 0.0),
+    radius=0.00001,                 # small physical size of the clump
+    velocity=(0.0, 0.9485, 0.0), # y-direction speed for circular motion
+    vel_sigma=0.0
+)
 
 
 
@@ -77,7 +82,7 @@ ax.set_title('Hernquist baryon density slice (z=0)')
 plt.tight_layout()
 plt.show()
 
-sim.evolve(save_every=50)
+sim.evolve(save_every=100)
 
 rho = cp.asnumpy(sim.baryonic_matter.deposit_to_grid())
 x = sim.grids[0][:, 0, 0]

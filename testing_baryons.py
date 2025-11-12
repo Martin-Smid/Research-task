@@ -1,19 +1,28 @@
-from resources.Classes.Baryonic_liquid_Class import BaryonicMatter_Class
+import matplotlib.pyplot as plt
+
+from resources.Classes.Wave_function_class import *
+from resources.Functions.system_fucntions import *
+from matplotlib.colors import LogNorm
 from resources.Classes.Simulation_Class import Simulation_Class
+from resources.Classes.Wave_vector_class import Wave_vector_class
 import matplotlib.pyplot as plt
 import numpy as np
 import cupy as cp
+
+
 from resources.Classes.Baryonic_N_body import NBodyBaryons
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-10, 10),(-10, 10),(-10, 10)], # Spatial boundaries
-    N=64,                             # Grid resolution
-    total_time=50,                   # Total simulation time
+    boundaries=[(-20, 20),(-20, 20),(-20, 20)], # Spatial boundaries
+    N=128,                             # Grid resolution
+    total_time=8.7,                   # Total simulation time
     h=0.01,                            # Time step
     order_of_evolution=2,
-    baryonic_model="uniform",
-    use_gravity=True,
+    baryonic_model="cold_clump",
+    use_gravity=True,  # Enable gravitational effects
+    static_potential=gravity_potential,
+    save_max_vals=False,
 )
 
 
@@ -68,7 +77,7 @@ ax.set_title('Hernquist baryon density slice (z=0)')
 plt.tight_layout()
 plt.show()
 
-sim.evolve(save_every=1000)
+sim.evolve(save_every=50)
 
 rho = cp.asnumpy(sim.baryonic_matter.deposit_to_grid())
 x = sim.grids[0][:, 0, 0]

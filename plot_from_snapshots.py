@@ -1,8 +1,9 @@
 from resources.Functions.system_fucntions import *
 
 
-snapshot_directory = 'resources/data/simulation_20250618_151117' # Replace with your path
+snapshot_directory = 'resources/data/simulation_20251112_113630' # Replace with your path
 
+#-------------------------JUST WFS -----------------------------------------------------------
 '''
 wave_function_number = 6# Which wave function to plot
 
@@ -36,9 +37,12 @@ plot_wave_function_panel(
     dpi=900,
     show=False
 )
-'''
 
-snapshot_dir = "resources/data/simulation_20251030_210944"   # your snapshot folder
+
+#------------------------------------------BOTH WFS AND BARYONS-----------------------------------------------------------------------
+
+
+snapshot_dir = "resources/data/simulation_20251112_115531"   # your snapshot folder
                                      # choose time (matches filename)
 wf_idx = 0                                            # which ψ to plot
 import numpy as np
@@ -50,7 +54,7 @@ import os
 boundaries = [(-20, 20), (-20, 20), (-20, 20)]           # same as used in Simulation_Class
 wf_index = 0                                             # which ψ field to plot
 slice_axis = 2                                           # 0=x,1=y,2=z
-time_target = 16.0                                        # pick saved time
+time_target = 16                                      # pick saved time
 # ===================
 
 # --- load metadata ---
@@ -120,3 +124,71 @@ plt.grid(alpha=0.3)
 plt.tight_layout()
 plt.show()
 
+'''
+#------------------------------------------JUST BARYONS-------------------------------------------------
+
+snapshot_dir = "resources/data/simulation_20251112_141916"  # your snapshot folder
+boundaries = [(-20, 20), (-20, 20), (-20, 20)]              # same as in Simulation_Class
+slice_axis = 2                                              # 0=x,1=y,2=z
+time_target = 0.5                                           # pick saved time
+
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
+import glob, os
+
+# --- find baryon density snapshots ---
+baryon_files = sorted(glob.glob(os.path.join(snapshot_dir, "baryons_snapshot_at_time_*.npy")))
+if not baryon_files:
+    raise FileNotFoundError("No baryon snapshots found in folder")
+
+def extract_time(fname):
+    try:
+        return float(fname.split("at_time_")[1].replace(".npy", ""))
+    except Exception:
+        return np.inf
+
+times = np.array([extract_time(f) for f in baryon_files])
+chosen_i = np.argmin(abs(times - time_target))
+baryon_file = baryon_files[chosen_i]
+actual_time = times[chosen_i]
+
+# --- load baryon density grid ---
+rho_b = np.load(baryon_file)   # shape (N, N, N) on a regular grid
+
+# --- build coordinate grid (periodic, endpoint=False to match your sim) ---
+N = rho_b.shape[0]
+x = np.linspace(boundaries[0][0], boundaries[0][1], N, endpoint=False)
+y = np.linspace(boundaries[1][0], boundaries[1][1], N, endpoint=False)
+z = np.linspace(boundaries[2][0], boundaries[2][1], N, endpoint=False)
+x_mesh_2d, y_mesh_2d = np.meshgrid(x, y)
+
+# --- pick slice ---
+if slice_axis == 0:
+    idx = N // 2
+    baryon_slice = rho_b[idx, :, :]
+elif slice_axis == 1:
+    idx = N // 2
+    baryon_slice = rho_b[:, idx, :]
+else:
+    idx = N // 2
+    baryon_slice = rho_b[:, :, idx]
+
+# --- prepare contour levels (log) ---
+pos_b = baryon_slice[baryon_slice > 0]
+if pos_b.size == 0:
+    raise ValueError("Selected slice has no positive baryon density values to plot.")
+levels = np.logspace(np.log10(pos_b.min()), np.log10(pos_b.max()), 128)
+
+# --- plotting (match your style/orientation) ---
+plt.figure(figsize=(8, 6))
+plt.contourf(x_mesh_2d, y_mesh_2d, baryon_slice.T, origin="lower",
+             levels=levels, cmap="viridis", norm=LogNorm())
+
+plt.colorbar(label=r"$\rho_{\mathrm{baryons}}$")
+plt.xlabel("x")
+plt.ylabel("y")
+plt.title(f"t = {actual_time:.3f}  (baryons only)")
+plt.grid(alpha=0.3)
+plt.tight_layout()
+plt.show()

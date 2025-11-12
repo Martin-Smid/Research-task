@@ -29,7 +29,7 @@ class Propagator_Class:
         self.h_bar_tilde = self.simulation.h_bar_tilde
         # Placeholders for propagators
         self.kinetic_propagator = None
-        self.static_potential_propagator = None
+        self.static_potential_propagator = self.simulation.static_potential if self.simulation.static_potential is not None else None
         self.gravity_propagator = None
         self.gravity_potential=None
         if not self.simulation.use_units:
@@ -65,6 +65,8 @@ class Propagator_Class:
         Returns:
             cp.ndarray: The potential propagator in real space
         """
+
+
         if potential_function is not None:
             potential_values = potential_function(self.simulation)
             self.static_potential_propagator = cp.exp((-1j * self.h*time_factor * potential_values)/(self.h_bar_tilde) , dtype=cp.complex64)
@@ -116,18 +118,18 @@ class Propagator_Class:
     def compute_total_potential(self, psi, density, include_static=False):
         """
         Combine all dynamic potentials into one.
+        Static potential is handled separately via pre-computed propagators.
 
         Parameters:
             psi: Wave function
             density: Total density
-            include_static: Whether to include static potential (usually handled separately)
+            include_static: Deprecated - static potential handled separately
 
         Returns:
             Total potential (real for gravity/self-int, complex if sponge included)
         """
         # Start with gravity
         V_grav = self.compute_gravity_potential(density)
-
 
         if psi is not None:
             V_self_int = self.compute_self_interaction_potential(density, psi)
@@ -138,27 +140,22 @@ class Propagator_Class:
         V_sponge = self.compute_sponge_potential()
         V_total = V_grav + V_self_int + V_sponge
 
-        if self.simulation.static_potential is not None:
-            V_static = self.simulation.static_potential(self.simulation)
-            V_total += V_static
+        # DO NOT add static potential here - it's pre-computed in static_propagators
 
         self.total_potential = V_total
         return V_total
 
-    def compute_total_propagator(self, density, psi = None, first_step=False, last_step=False, time_factor=1):
+    def compute_total_propagator(self, density, psi=None, first_step=False, last_step=False, time_factor=1):
         """
-        Compute propagator from total potential.
+        Compute propagator from total DYNAMIC potential only.
+        Static potential is applied separately via pre-computed propagators.
 
         Returns:
-            Propagator exp(-i * dt * V_total / hbar)
+            Propagator exp(-i * dt * V_dynamic / hbar)
         """
-        if self.simulation.static_potential is not None:
-            include_static = True
-        else:
-            include_static = False
-
-
-        V_total = self.compute_total_potential(psi, density, include_static=include_static)
+        # Only compute dynamic potentials (gravity, self-int, sponge)
+        # Static potential is handled separately
+        V_total = self.compute_total_potential(psi, density, include_static=False)
 
         if first_step or last_step:
             dt = (self.h * time_factor) / 2

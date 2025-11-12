@@ -14,11 +14,11 @@ sim = Simulation_Class(
     h=0.01,                            # Time step
     order_of_evolution=2,
     use_gravity=True , # Enable gravitational effects
-    static_potential=None,
+    static_potential=gravity_potential,
     save_max_vals=False,
     self_int=False,
     use_sponge=False,
-    baryonic_model="hernquist"
+    baryonic_model=None
 
 )
 
@@ -48,7 +48,7 @@ sim.add_wave_vector(wave_vector)
 #sim.add_wave_function(vlna3)
 
 
-sim.evolve(save_every=200 )
+sim.evolve(save_every=50 )
 
 '''1D
 plt.figure()

@@ -119,6 +119,7 @@ class Simulation_Class:
         # Gravity and potential settings
         self.use_gravity = use_gravity
         self.static_potential = static_potential
+
         self.save_max_vals = save_max_vals
 
         # Initialize spatial grids
@@ -161,7 +162,7 @@ class Simulation_Class:
 
         self.baryonic_model = baryonic_model
         if self.baryonic_model is not None:
-            self.baryonic_matter = NBodyBaryons(self,N_particles=1000, total_mass=1e6,init_profile=self.baryonic_model)
+            self.baryonic_matter = NBodyBaryons(self,N_particles=1, total_mass=1e6,init_profile=self.baryonic_model)
 
 
 

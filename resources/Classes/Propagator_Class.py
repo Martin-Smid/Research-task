@@ -96,7 +96,6 @@ class Propagator_Class:
     def compute_gravity_potential(self, density):
         """Compute gravitational potential only (no propagator)."""
         if not self.simulation.use_gravity:
-            print("jsem tu")
             return cp.zeros_like(density, dtype=cp.float32)
 
         return self.solve_poisson(density)

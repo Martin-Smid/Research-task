@@ -5,7 +5,11 @@ import matplotlib.pyplot as plt
 # 🔧 MANUALLY SET YOUR DIRECTORIES HERE
 simulation_dirs = [
 
-'resources/data/simulation_20251112_092937'
+'resources/data/simulation_20251116_173357',
+    'resources/data/simulation_20251116_175318',
+    'resources/data/simulation_20251116_175549',
+    'resources/data/simulation_20251116_180156',
+    'resources/data/simulation_20251116_181109'
 
 ]
 
@@ -151,8 +155,12 @@ def plot_virial_check(paths):
         U_quantum = df["U_quantum"]
         W = df["W"]
 
+        K_b = df["K_baryons"]
+        W_self = df["W_self"]
+        virial_residual = 2 * K_b + W_self
+
         # Virial theorem residual
-        virial_residual = 2*K_flow + 2*U_quantum + W
+        #virial_residual = 2*K_flow + 2*U_quantum + W
 
         label = os.path.basename(os.path.normpath(path))
 

@@ -160,14 +160,29 @@ class Scribe:
         with open(self.max_locations_path, "a") as f:
             f.write(f"{time_value:.9e}, {ix:d}, {iy:d}, {iz:d}, {x:.9e}, {y:.9e}, {z:.9e}\n")
 
-    def log_energy_detailed(self, time, K_total, W, K_flow, U_quantum):
+    def log_energy_detailed(self, time, K_total, W, K_flow, U_quantum,
+                            K_baryons, W_self, W_static):
         """
         Log energy values at a given time.
 
-        Parameters:
-            time: Current time
-            K: Kinetic energy
-            W: Potential energy
+        Parameters
+        ----------
+        time : float
+            Current simulation time.
+        K_total : float
+            Total kinetic energy (waves + baryons).
+        W : float
+            Total potential energy (self-gravity + static).
+        K_flow : float
+            Wave kinetic "flow" part.
+        U_quantum : float
+            Wave "quantum pressure" term.
+        K_baryons : float
+            Kinetic energy of N-body baryons.
+        W_self : float
+            Self-gravitational energy from Poisson.
+        W_static : float
+            Energy in external static potential.
         """
         E = K_total + W
 
@@ -183,9 +198,11 @@ class Scribe:
             "E_total": float(E),
             "K_flow": float(K_flow),
             "U_quantum": float(U_quantum),
-            "W/|E|": float(W_over_E)
+            "K_baryons": float(K_baryons),
+            "W_self": float(W_self) if W_self is not None else float("nan"),
+            "W_static": float(W_static) if W_static is not None else float("nan"),
+            "W/|E|": float(W_over_E),
         })
-
     def save_energy_log(self):
         """Save energy log to CSV file."""
         energy_path = os.path.join(self.snapshot_directory, "energy.txt")

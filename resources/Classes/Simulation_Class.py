@@ -162,7 +162,7 @@ class Simulation_Class:
 
         self.baryonic_model = baryonic_model
         if self.baryonic_model is not None:
-            self.baryonic_matter = NBodyBaryons(self,N_particles=5000, total_mass=53090068,init_profile=self.baryonic_model)
+            self.baryonic_matter = NBodyBaryons(self,N_particles=5000, total_mass=53090,init_profile=self.baryonic_model)
 
 
 

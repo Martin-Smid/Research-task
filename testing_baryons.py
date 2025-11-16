@@ -15,23 +15,23 @@ from resources.Classes.Baryonic_N_body import NBodyBaryons
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-20, 20),(-20, 20),(-20, 20)], # Spatial boundaries
-    N=128,                             # Grid resolution
-    total_time=25,                   # Total simulation time
-    h=0.01,                            # Time step
+    N=256,                             # Grid resolution
+    total_time=1,                   # Total simulation time
+    h=0.001,                            # Time step
     order_of_evolution=2,
-    baryonic_model="cold_clump",
+    baryonic_model="spherical_clump",
     use_gravity=True,  # Enable gravitational effects
-    static_potential=gravity_potential,
-    save_max_vals=False,
+    static_potential=None,
+    save_max_vals=True,
 )
 
-
+'''
 sim.baryonic_matter.initialize_solid_clump(
     center=(0.0, 5.0, 0.0),
     radius=0.00001,                 # small physical size of the clump
     velocity=(0.0, 0.9485, 0.0), # y-direction speed for circular motion
     vel_sigma=0.0
-)
+)'''
 
 
 

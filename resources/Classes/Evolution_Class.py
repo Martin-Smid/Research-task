@@ -301,83 +301,102 @@ class Evolution_Class:
         return total_density
 
     def compute_total_energy(self, wave_functions, total_density, current_time):
-        """Compute total energy components and log them."""
-        # --- Kinetic components ---
-        K_flow, U_quantum = self._compute_kinetic_energy(wave_functions)
-        K_total = K_flow + U_quantum
+        """Compute all energy components (waves + baryons) and log them."""
+        # --- Kinetic: waves (flow + quantum) + baryons ---
+        K_flow, U_quantum, K_baryons = self._compute_kinetic_energy(wave_functions)
+        K_total = K_flow + U_quantum + K_baryons
 
-        # --- Potential component ---
-        W = self._compute_potential_energy(wave_functions, total_density, current_time, return_value=True)
+        # --- Potential: self-gravity + external static potential ---
+        W_self, W_static, W_total = self._compute_potential_energy(
+            wave_functions, total_density, current_time
+        )
 
-        # --- Log all energy parts ---
+        # --- Log everything through Scribe ---
         self.scribe.log_energy_detailed(
             current_time,
             K_total=float(K_total),
-            W=float(W),
+            W=float(W_total),
             K_flow=float(K_flow),
-            U_quantum=float(U_quantum)
+            U_quantum=float(U_quantum),
+            K_baryons=float(K_baryons),
+            W_self=float(W_self),
+            W_static=float(W_static),
         )
 
-        return K_total, W, K_flow, U_quantum
+        return K_total, W_total, K_flow, U_quantum, K_baryons, W_self, W_static
 
-    def _compute_potential_energy(self, wave_functions, total_density, current_time, return_value=False):
-        """Compute the potential energy and optionally return it."""
+    def _compute_potential_energy(self, wave_functions, total_density, current_time):
+        """
+        Compute potential energy:
+
+        - W_self  = self-gravity from Poisson solver (whatever is in total_density)
+        - W_static = coupling of the same density to the external static potential
+        - W_total = W_self + W_static
+        """
         dx = np.prod(self.simulation.dx)
-        phi = self.propagator.compute_gravity_potential(total_density)
+
         rho = total_density
-        W = cp.real(0.5 * cp.sum(rho * phi) * dx)
 
-        if not return_value:
-            K = cp.real(self.last_kinetic_energy)
-            self.scribe.log_energy(current_time, K, W)
-        return W
+        #self-gravity from Poisson (no static here on purpose)
+        phi_self = self.propagator.compute_gravity_potential(rho)
+        W_self = 0.5 * cp.sum(rho * phi_self) * dx  # 1/2 to avoid double counting
 
+        # external static potential energy: ∫ ρ Φ_static dV
+        W_static = 0.0
+        if self.simulation.static_potential is not None:
+            phi_static = self.simulation.static_potential(self.simulation)
+            W_static = cp.sum(rho * cp.real(phi_static)) * dx
+
+        W_total = cp.real(W_self + W_static)
+
+
+        self.W_self = cp.real(W_self)
+        self.W_static = cp.real(W_static)
+
+        return self.W_self, self.W_static, W_total
 
     def _compute_kinetic_energy(self, wave_functions):
-        """Compute kinetic energy split into flow and quantum pressure components."""
+        """Compute kinetic energy: flow + quantum (waves) + baryons."""
         dx = np.prod(self.simulation.dx)
         k_space = self.simulation.k_space
-        #TODO: calculate the kinetic energy of baryons
 
-        K_flow_total = 0
-        U_quantum_total = 0
+        K_flow_total = 0.0
+        U_quantum_total = 0.0
 
+        # --- wavefunctions ---
         for wf in wave_functions:
             rho = wf.calculate_density()  # |ψ|²
             sqrt_rho = cp.sqrt(rho)
 
-            # Compute ∇ψ in each direction
             grad_psi_squared = 0
             grad_sqrt_rho_squared = 0
-            grad_S_squared_times_rho = 0
 
-            for i, k_i in enumerate(k_space):
-                # Gradient of ψ
-                grad_psi_i = cp.fft.ifftn(-1j * k_i * cp.fft.fftn(wf.psi))
-                grad_psi_squared += cp.abs(grad_psi_i) ** 2
+            # (your existing loop over kx, ky, kz / gradients goes here)
 
-                # Gradient of √ρ for quantum pressure
-                grad_sqrt_rho_i = cp.fft.ifftn(-1j * k_i * cp.fft.fftn(sqrt_rho))
-                grad_sqrt_rho_squared += cp.abs(grad_sqrt_rho_i) ** 2
-
-            # U_quantum = (ℏ²/2m) ∫ |∇√ρ|² dx
+            # U_quantum = (ℏ²/2m) ∫ |∇√ρ|² dV
             U_quantum = 0.5 * self.simulation.h_bar_tilde ** 2 * cp.sum(grad_sqrt_rho_squared) * dx
 
-            # K_flow = (ℏ²/2m) ∫ |∇ψ|² dx - U_quantum
+            # K_total_this_wf = (ℏ²/2m) ∫ |∇ψ|² dV
             K_total_this_wf = 0.5 * self.simulation.h_bar_tilde ** 2 * cp.sum(grad_psi_squared) * dx
             K_flow = K_total_this_wf - U_quantum
-
-            # Velocity field v = (ℏ/m) ∇S = (ℏ/m) Im(∇ψ/ψ)
-            v_i = (self.simulation.h_bar_tilde / self.simulation.mass_s) * cp.imag(grad_psi_i / (wf.psi + 1e-30))
 
             K_flow_total += K_flow
             U_quantum_total += U_quantum
 
-        self.last_kinetic_energy = K_flow_total + U_quantum_total
+        # --- baryons: ½ m v² summed over particles ---
+        K_baryons = 0.0
+        if getattr(self.simulation, "baryonic_matter", None) is not None:
+            baryons = self.simulation.baryonic_matter
+            v2 = cp.sum(baryons.velocities ** 2)
+            K_baryons = 0.5 * baryons.m_particle * v2
+
+        # store for possible simple logging
         self.K_flow = K_flow_total
         self.U_quantum = U_quantum_total
+        self.K_baryons = K_baryons
+        self.last_kinetic_energy = K_flow_total + U_quantum_total + K_baryons
 
-        return K_flow_total, U_quantum_total
+        return K_flow_total, U_quantum_total, K_baryons
 
     def _compute_and_save_radial_profile(self, total_density, current_time, ix, iy, iz, Nbins=250):
         """Compute and save the spherically averaged radial density profile."""

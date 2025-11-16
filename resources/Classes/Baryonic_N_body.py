@@ -33,7 +33,12 @@ class NBodyBaryons:
             # defaults: center box middle, small radius, xy plane, auto v_circ
             self.initialize_circular_ring(center=(5, 0, 0), radius=0.05, plane="xy",
                                           velocity=None, vel_sigma=0.0)
-
+        elif init_profile == "spherical_clump":
+            # planar, circularly symmetric clump at r≈5 with fixed tangential v
+            self.initialize_spherical_clump(center=(0.0, 0.0, 0.0),
+                                            radius=0.1,
+                                            velocity=(0.0, 0.0, 0.0),
+                                            vel_sigma=0.0)
 
 
     def initialize_hernquist(self):
@@ -218,7 +223,7 @@ class NBodyBaryons:
         """
         # Half kick
         forces = self.interpolate_force_from_grid(potential_grid)
-        self.velocities += (forces /self.m_particle) * (dt / 2)
+        self.velocities += forces * (dt / 2)
 
         # Full drift
         self.positions += self.velocities * dt
@@ -231,9 +236,9 @@ class NBodyBaryons:
 
         # Half kick
         forces = self.interpolate_force_from_grid(potential_grid)
-        self.velocities += (forces /self.m_particle) * (dt / 2)
+        self.velocities += forces * (dt / 2)
 
-        self.velocities[:, 2] = 0.0
+
 
     def initialize_cold_clump(
             self,
@@ -449,3 +454,56 @@ class NBodyBaryons:
             self.velocities += vel_sigma * noise
 
         self.velocities[:, 2] = 0.0
+
+    def initialize_spherical_clump(
+            self,
+            center=(0.0, 0.0, 0.0),
+            radius=0.1,
+            velocity=(0.0, 0.0, 0.0),
+            vel_sigma=0.0,
+    ):
+        """
+        3D spherically symmetric clump around `center`.
+
+        - Positions are distributed uniformly inside a sphere of radius `radius`.
+        - All particles start with the same velocity `velocity`
+          (typically tangential in the x–y plane, v_z = 0).
+        - Optional small Gaussian scatter in velocities with width `vel_sigma`.
+        """
+
+        sim = self.simulation
+        N = self.N
+
+        cen = cp.asarray(center, dtype=cp.float32)
+
+        # === positions: uniform in a sphere ===
+        # draw random directions
+        dirs = cp.random.normal(size=(N, 3)).astype(cp.float32)
+        norms = cp.linalg.norm(dirs, axis=1, keepdims=True)
+        dirs /= cp.maximum(norms, 1e-6)
+
+        # draw radii with p(r) ∝ r^2 -> r = R * u^(1/3)
+        u = cp.random.uniform(0.0, 1.0, size=(N, 1)).astype(cp.float32)
+        radii = radius * u ** (1.0 / 3.0)
+
+        offsets = dirs * radii
+        self.positions = cen[None, :] + offsets
+
+        # periodic wrap into box
+        for d in range(3):
+            low, high = sim.boundaries[d]
+            L = (high - low)
+            self.positions[:, d] = ((self.positions[:, d] - low) % L) + low
+
+        # === velocities: all the same (plus optional small noise) ===
+        base_v = cp.asarray(velocity, dtype=cp.float32)
+        v = cp.tile(base_v[None, :], (N, 1))
+
+        if vel_sigma > 0.0:
+            noise = vel_sigma * cp.random.standard_normal((N, 3), dtype=cp.float32)
+            # if you want to keep the COM strictly in the x–y plane, kill z-noise:
+            noise[:, 2] = 0.0
+            v += noise
+
+        self.velocities = v
+

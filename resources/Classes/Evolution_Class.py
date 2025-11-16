@@ -375,12 +375,24 @@ class Evolution_Class:
         # --- wavefunctions ---
         for wf in wave_functions:
             rho = wf.calculate_density()  # |ψ|²
-            sqrt_rho = cp.sqrt(rho)
+            sqrt_rho = cp.sqrt(rho + 1e-30)  # Add small value to avoid division by zero
 
-            grad_psi_squared = 0
-            grad_sqrt_rho_squared = 0
+            # Compute gradients in Fourier space
+            psi_k = cp.fft.fftn(wf.psi)
+            sqrt_rho_k = cp.fft.fftn(sqrt_rho)
 
-            # (your existing loop over kx, ky, kz / gradients goes here)
+            grad_psi_squared = cp.zeros_like(rho, dtype=cp.float64)
+            grad_sqrt_rho_squared = cp.zeros_like(rho, dtype=cp.float64)
+
+            # Loop over spatial dimensions to compute gradients
+            for dim in range(self.simulation.dim):
+                # Gradient of psi: ∇ψ = iFFT(ik * FFT(ψ))
+                grad_psi_dim = cp.fft.ifftn(1j * k_space[dim] * psi_k)
+                grad_psi_squared += cp.abs(grad_psi_dim) ** 2
+
+                # Gradient of sqrt(rho): ∇√ρ = iFFT(ik * FFT(√ρ))
+                grad_sqrt_rho_dim = cp.fft.ifftn(1j * k_space[dim] * sqrt_rho_k)
+                grad_sqrt_rho_squared += cp.abs(grad_sqrt_rho_dim) ** 2
 
             # U_quantum = (ℏ²/2m) ∫ |∇√ρ|² dV
             U_quantum = 0.5 * self.simulation.h_bar_tilde ** 2 * cp.sum(grad_sqrt_rho_squared) * dx

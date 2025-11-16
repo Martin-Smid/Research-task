@@ -33,10 +33,22 @@ baryons = NBodyBaryons(
     radius=10
 
 )
+wave_vector = Wave_vector_class(
+    packet_type="resources/solitons/GroundState(1).dat",
+    means=[0, 0, 0],
+    st_deviations=[0.5, 0.5, 0.5],
+    simulation=sim,
+    mass=1,
+    omega=1,
+    momenta=[0, 0.0, 0],
+    spin=0,
+    desired_soliton_mass=53090068
+
+)
 
 
 sim.add_baryons(baryons)
-
+sim.add_wave_vector(wave_vector)
 
 
 rho = cp.asnumpy(sim.baryonic_matter.deposit_to_grid())

@@ -37,12 +37,12 @@ plot_wave_function_panel(
     dpi=900,
     show=False
 )
-
+'''
 
 #------------------------------------------BOTH WFS AND BARYONS-----------------------------------------------------------------------
 
 
-snapshot_dir = "resources/data/simulation_20251112_115531"   # your snapshot folder
+snapshot_dir = "resources/data/simulation_20251116_225233"   # your snapshot folder
                                      # choose time (matches filename)
 wf_idx = 0                                            # which ψ to plot
 import numpy as np
@@ -51,10 +51,10 @@ from matplotlib.colors import LogNorm
 import glob
 import os
 
-boundaries = [(-20, 20), (-20, 20), (-20, 20)]           # same as used in Simulation_Class
+boundaries = [(-50, 50), (-50, 50), (-50, 50)]           # same as used in Simulation_Class
 wf_index = 0                                             # which ψ field to plot
 slice_axis = 2                                           # 0=x,1=y,2=z
-time_target = 16                                      # pick saved time
+time_target = 2                                      # pick saved time
 # ===================
 
 # --- load metadata ---
@@ -207,3 +207,4 @@ plt.title(f"t = {actual_time:.3f}  (baryons only)")
 plt.grid(alpha=0.3)
 plt.tight_layout(); plt.show()
 
+'''

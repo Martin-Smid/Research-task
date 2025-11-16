@@ -160,9 +160,19 @@ class Simulation_Class:
         self.use_self_int =self_int
         self.a_s = a_s
 
+        self.baryonic_matter = None
+
+        #I think this should make sim class backwards compatible (I aint testing that)
         self.baryonic_model = baryonic_model
         if self.baryonic_model is not None:
-            self.baryonic_matter = NBodyBaryons(self,N_particles=5000, total_mass=53090,init_profile=self.baryonic_model)
+            self.add_baryons(
+                NBodyBaryons(
+                    self,
+                    N_particles=5000,
+                    total_mass=53090,
+                    init_profile=self.baryonic_model,
+                )
+            )
 
 
 
@@ -463,6 +473,31 @@ class Simulation_Class:
         Vs_gpu = cp.asarray(Vs_cpu)
 
         return Vs_gpu
+
+    def add_baryons(self, baryonic_system):
+        """
+        Attach an N-body baryonic component to this simulation.
+
+        Parameters
+        ----------
+        baryonic_system : NBodyBaryons
+            Instance of resources.Classes.Baryonic_N_body.NBodyBaryons
+            constructed with this Simulation_Class as the `simulation` argument.
+        """
+        from resources.Classes.Baryonic_N_body import NBodyBaryons
+
+        if not isinstance(baryonic_system, NBodyBaryons):
+            raise TypeError(
+                f"add_baryons expected NBodyBaryons instance, got {type(baryonic_system)}"
+            )
+
+        if baryonic_system.simulation is not self:
+            raise ValueError(
+                "Baryonic system was constructed with a different Simulation_Class "
+                "instance. Construct NBodyBaryons with this simulation first."
+            )
+
+        self.baryonic_matter = baryonic_system
 
 
 

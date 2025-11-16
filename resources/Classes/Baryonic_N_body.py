@@ -5,62 +5,159 @@ from scipy.interpolate import RegularGridInterpolator
 
 class NBodyBaryons:
     def __init__(self, simulation, N_particles, total_mass,
-                 init_profile="hernquist", scale_radius=0.5):
+                 init_profile="hernquist",
+                 scale_radius=0.5,
+                 center=None,
+                 velocity=None,
+                 momenta=None,
+                 radius=None,
+                 truncation_radius=None,
+                 vel_sigma=0.0,
+                 pos_sigma=None,
+                 **kwargs):
+        """
+        Initialize N-body baryon particles.
+
+        Parameters
+        ----------
+        simulation : Simulation object
+            The main simulation object containing grid info and boundaries
+        N_particles : int
+            Number of particles to simulate
+        total_mass : float
+            Total mass of all particles
+        init_profile : str
+            Profile type: "hernquist", "uniform", "cold_clump", "ring", "spherical_clump"
+        scale_radius : float
+            Scale radius for Hernquist profile (default: 0.5)
+        center : tuple of 3 floats, optional
+            Center position for clump/ring profiles. If None, uses box center.
+        velocity : tuple of 3 floats, optional
+            Velocity vector for particles. If None, uses zero or auto-computed.
+        momenta : tuple of 3 floats, optional
+            Momentum vector (alternative to velocity). Will be divided by particle mass.
+        radius : float, optional
+            Radius for clump/ring profiles. For Hernquist, acts as truncation_radius if specified.
+        truncation_radius : float, optional
+            Maximum radius for truncated Hernquist. Overrides radius if both specified.
+        vel_sigma : float
+            Velocity dispersion (1-sigma) for random velocities (default: 0.0)
+        pos_sigma : float, optional
+            Position dispersion for clump profiles. If None, auto-computed.
+        **kwargs : dict
+            Additional profile-specific parameters
+        """
         self.simulation = simulation
         self.N = N_particles
         self.m_particle = total_mass / N_particles
         self.scale_radius = scale_radius
+        # For Hernquist: radius param can specify truncation
+        self.truncation_radius = truncation_radius if truncation_radius is not None else radius
 
         # Particle data (N_particles, 3)
         self.positions = cp.zeros((N_particles, 3), dtype=cp.float64)
-        #self.velocities = cp.zeros((N_particles, 3), dtype=cp.float64)
-        sigma = 0.1
-        self.velocities = cp.random.normal(0, sigma, size=(N_particles, 3))
 
-        #TODO: think about what to do with particles outside of the boundary - maybe try to get rid of particles outside of boundary
-        #TODO: once you delete a particle reduce the number of particles
+        # Default: small thermal velocities
+        if init_profile in ["hernquist", "uniform"] and velocity is None and momenta is None:
+            sigma = 0.1
+            self.velocities = cp.random.normal(0, sigma, size=(N_particles, 3))
+        else:
+            self.velocities = cp.zeros((N_particles, 3), dtype=cp.float64)
 
+        # Set default center to box center if not specified
+        if center is None:
+            center = tuple(
+                0.5 * (self.simulation.boundaries[i][0] + self.simulation.boundaries[i][1])
+                for i in range(3)
+            )
+
+        # Handle velocity vs momenta
+        if momenta is not None and velocity is not None:
+            raise ValueError("Cannot specify both 'velocity' and 'momenta'. Choose one.")
+
+        if momenta is not None:
+            velocity = tuple(p / self.m_particle for p in momenta)
 
         # Initialize spatial distribution
         if init_profile == "hernquist":
             self.initialize_hernquist()
+
         elif init_profile == "uniform":
             self.initialize_uniform()
-        elif init_profile == "cold_clump":
-            # kwargs (all optional): center, velocity, frac_main, pos_sigma, vel_sigma, as_momenta
-            self.initialize_cold_clump()
-        elif init_profile == "ring":
-            # defaults: center box middle, small radius, xy plane, auto v_circ
-            self.initialize_circular_ring(center=(5, 0, 0), radius=0.05, plane="xy",
-                                          velocity=None, vel_sigma=0.0)
-        elif init_profile == "spherical_clump":
-            # planar, circularly symmetric clump at r≈5 with fixed tangential v
-            self.initialize_spherical_clump(center=(0.0, 0.0, 0.0),
-                                            radius=0.1,
-                                            velocity=(0.0, 0.0, 0.0),
-                                            vel_sigma=0.0)
 
+        elif init_profile == "cold_clump":
+            frac_main = kwargs.get('frac_main', 0.9)
+            as_momenta = kwargs.get('as_momenta', False)
+            self.initialize_cold_clump(
+                center=center,
+                velocity=velocity if velocity is not None else (0.0, 0.0, 0.0),
+                frac_main=frac_main,
+                pos_sigma=pos_sigma,
+                vel_sigma=vel_sigma,
+                as_momenta=as_momenta
+            )
+
+        elif init_profile == "ring":
+            plane = kwargs.get('plane', 'xy')
+            if radius is None:
+                radius = 0.05
+            self.initialize_circular_ring(
+                center=center,
+                radius=radius,
+                plane=plane,
+                velocity=velocity,
+                vel_sigma=vel_sigma
+            )
+
+        elif init_profile == "spherical_clump":
+            if radius is None:
+                radius = 0.1
+            if velocity is None:
+                velocity = (0.0, 0.0, 0.0)
+            self.initialize_spherical_clump(
+                center=center,
+                radius=radius,
+                velocity=velocity,
+                vel_sigma=vel_sigma
+            )
+        else:
+            raise ValueError(f"Unknown init_profile: {init_profile}")
 
     def initialize_hernquist(self):
-        """Sample particle positions from Hernquist profile"""
-        # Use inverse transform sampling
-        # Hernquist cumulative mass: M(r) = M * r^2 / (r + a)^2
+        """
+        Sample particle positions from Hernquist profile.
+        Optionally truncates at self.truncation_radius.
+        """
+        if self.truncation_radius is None:
+            # Standard Hernquist sampling
+            u = cp.random.uniform(0, 1, self.N)
+            r = self.scale_radius * cp.sqrt(u) / (1 - cp.sqrt(u))
+        else:
+            # Truncated Hernquist: rejection sampling
+            r_max = self.truncation_radius
+            a = self.scale_radius
 
-        u = cp.random.uniform(0, 1, self.N)  # random [0,1]
-        # Inverse: r = a * sqrt(u) / (1 - sqrt(u))
-        r = self.scale_radius * cp.sqrt(u) / (1 - cp.sqrt(u))
+            # Maximum of cumulative mass at truncation
+            M_trunc = r_max ** 2 / (r_max + a) ** 2
+
+            # Sample from truncated distribution
+            u = cp.random.uniform(0, M_trunc, self.N)
+            r = a * cp.sqrt(u) / (1 - cp.sqrt(u))
+
+            # Double check truncation (should be automatic, but safety)
+            r = cp.minimum(r, r_max)
 
         # Random directions (spherical coordinates)
         theta = cp.arccos(2 * cp.random.uniform(0, 1, self.N) - 1)
         phi = 2 * cp.pi * cp.random.uniform(0, 1, self.N)
 
-        # Convert to Cartesian
+        # Convert to Cartesian (centered at origin initially)
         self.positions[:, 0] = r * cp.sin(theta) * cp.cos(phi)
         self.positions[:, 1] = r * cp.sin(theta) * cp.sin(phi)
         self.positions[:, 2] = r * cp.cos(theta)
 
-        # Velocities: start at rest or use virial theorem
-        self.velocities[:, :] = 0  # cold start
+        # Velocities: start at rest
+        self.velocities[:, :] = 0
 
     def initialize_uniform(self):
         """Uniform random distribution in simulation box"""
@@ -168,8 +265,6 @@ class NBodyBaryons:
         sim = self.simulation
 
         # --- grid axes as 1D numpy arrays (assumes your grids are regular) ---
-        # If your grids are stored as 3D broadcast arrays, these slices match your usage elsewhere:
-        #   x: sim.grids[0][:,0,0], y: sim.grids[1][0,:,0], z: sim.grids[2][0,0,:]
         x = cp.asnumpy(sim.grids[0][:, 0, 0])
         y = cp.asnumpy(sim.grids[1][0, :, 0])
         z = cp.asnumpy(sim.grids[2][0, 0, :])
@@ -193,23 +288,20 @@ class NBodyBaryons:
         Fy_grid = cp.asnumpy(-dphidy)
         Fz_grid = cp.asnumpy(-dphidz)
 
-
-        # bounds_error=False + fill_value=None -> linear extrapolation at edges (but we’ll wrap anyway)
         Fx_interp = RegularGridInterpolator((x, y, z), Fx_grid, bounds_error=False, fill_value=None)
         Fy_interp = RegularGridInterpolator((x, y, z), Fy_grid, bounds_error=False, fill_value=None)
         Fz_interp = RegularGridInterpolator((x, y, z), Fz_grid, bounds_error=False, fill_value=None)
 
-        # --- query points: particle positions in domain, wrapped periodically like before ---
+        # --- query points: particle positions in domain, wrapped periodically ---
         pos = cp.asnumpy(self.positions)  # (N, 3) -> numpy
 
-        # Periodic wrap into [low, high) in each dim, using your simulation boundaries
+        # Periodic wrap into [low, high) in each dim
         for d in range(3):
             low, high = sim.boundaries[d]
             L = (high - low)
             pos[:, d] = ((pos[:, d] - low) % L) + low
 
         # Interpolate forces at particle positions
-        # RegularGridInterpolator expects points as (N, 3) in the same axis order as (x,y,z)
         Fx = Fx_interp(pos)
         Fy = Fy_interp(pos)
         Fz = Fz_interp(pos)
@@ -238,8 +330,6 @@ class NBodyBaryons:
         forces = self.interpolate_force_from_grid(potential_grid)
         self.velocities += forces * (dt / 2)
 
-
-
     def initialize_cold_clump(
             self,
             center=(5.0, 0.0, 0.0),
@@ -251,89 +341,57 @@ class NBodyBaryons:
     ):
         """
         Place most particles in a tight Gaussian around `center` with bulk `velocity`.
-        Great for circular-orbit sanity tests against a central point mass.
-
-        Parameters
-        ----------
-        center : tuple of 3 floats
-            Target position in box units (same units as sim.grids).
-        velocity : tuple of 3 floats
-            Either velocity or momentum vector (see `as_momenta`).
-        frac_main : float in (0,1]
-            Fraction of particles in the main clump (rest sprinkled uniformly).
-        pos_sigma : float or None
-            1σ positional spread for the clump (same units as grid). If None, uses 0.2*Δx.
-        vel_sigma : float
-            1σ velocity spread added isotropically (same units as `velocity`).
-        as_momenta : bool
-            If True, interprets `velocity` as momentum p and divides by m_particle.
         """
         sim = self.simulation
         N = self.N
 
-        # Grid metrics (uniform spacing assumed)
+        # Grid metrics
         x_axis = sim.grids[0][:, 0, 0]
         dx = float(x_axis[1] - x_axis[0])
         if pos_sigma is None:
-            pos_sigma = 0.2 * dx  # tight clump by default
+            pos_sigma = 0.2 * dx
 
-        # Parse inputs
         cen = cp.asarray(center, dtype=cp.float32)
         bulk = cp.asarray(velocity, dtype=cp.float32)
         if as_momenta:
             bulk = bulk / cp.float32(self.m_particle)
 
-        # How many in clump vs background
         N_main = int(max(1, round(frac_main * N)))
         N_bg = N - N_main
 
-        # --- Main clump positions (Gaussian around center) ---
+        # Main clump positions
         self.positions[:N_main, :] = cen + pos_sigma * cp.random.standard_normal((N_main, 3), dtype=cp.float32)
 
-        # Periodic wrap into box
+        # Periodic wrap
         for d in range(3):
             low, high = sim.boundaries[d]
             L = (high - low)
             self.positions[:N_main, d] = ((self.positions[:N_main, d] - low) % L) + low
 
-        # --- Background (optional): sprinkle uniformly in box to avoid exact δ ---
+        # Background
         if N_bg > 0:
             for d in range(3):
                 low, high = sim.boundaries[d]
                 self.positions[N_main:, d] = cp.random.uniform(low, high, size=(N_bg,), dtype=cp.float32)
 
-        # --- Velocities: bulk + small Gaussian noise ---
-        # derive circular speed if velocity is None
-        if velocity is None:
-            # compose the same potential used during evolution
-            total_density = cp.zeros_like(self.simulation.grids[0], dtype=cp.float32)
-            V = self.simulation.propagator.compute_gravity_potential(total_density)
-            if self.simulation.static_potential is not None:
-                V = V + cp.real(self.simulation.static_potential(self.simulation))
-            v_c = self._circular_speed_from_grid(V, tuple(cen.tolist()))
-            # set bulk tangential velocity perpendicular to radius (xy-plane)
-            bulk = cp.asarray((0.0, v_c, 0.0), dtype=cp.float32)
-
-        # --- Velocities: bulk + small Gaussian noise ---
+        # Velocities
         if vel_sigma > 0.0:
             self.velocities[:] = bulk + vel_sigma * cp.random.standard_normal((N, 3), dtype=cp.float32)
         else:
             self.velocities[:] = bulk
 
     def _circular_speed_from_grid(self, potential_grid, center_xyz):
-        """Return v_circ at center_xyz from grid potential: v_circ = sqrt(r * |dPhi/dr|)."""
+        """Return v_circ at center_xyz from grid potential."""
         sim = self.simulation
 
-        # 1D axes as numpy
         x = cp.asnumpy(sim.grids[0][:, 0, 0])
         y = cp.asnumpy(sim.grids[1][0, :, 0])
         z = cp.asnumpy(sim.grids[2][0, 0, :])
 
         Phi = cp.asnumpy(potential_grid)
 
-        # FFT gradients on CPU for simplicity (consistent with your interpolate_force)
-        dx = float(x[1] - x[0]);
-        dy = float(y[1] - y[0]);
+        dx = float(x[1] - x[0])
+        dy = float(y[1] - y[0])
         dz = float(z[1] - z[0])
         kx = 2 * np.pi * np.fft.fftfreq(Phi.shape[0], d=dx)
         ky = 2 * np.pi * np.fft.fftfreq(Phi.shape[1], d=dy)
@@ -343,13 +401,11 @@ class NBodyBaryons:
         dphidy = np.fft.ifftn(1j * ky[None, :, None] * Phi_k).real
         dphidz = np.fft.ifftn(1j * kz[None, None, :] * Phi_k).real
 
-        # locate nearest cell to center
         cx, cy, cz = center_xyz
         ix = np.argmin(np.abs(x - cx))
         iy = np.argmin(np.abs(y - cy))
         iz = np.argmin(np.abs(z - cz))
 
-        # radial unit vector from box center to (cx,cy,cz)
         xc = 0.5 * (sim.boundaries[0][0] + sim.boundaries[0][1])
         yc = 0.5 * (sim.boundaries[1][0] + sim.boundaries[1][1])
         zc = 0.5 * (sim.boundaries[2][0] + sim.boundaries[2][1])
@@ -364,19 +420,13 @@ class NBodyBaryons:
 
     def initialize_circular_ring(self, center=(0.5, 0.5, 0.5), radius=0.05, plane="xy",
                                  velocity=None, vel_sigma=0.0):
-        """
-        Deterministic ring of N particles at a fixed radius around 'center'.
-        No stochastic placement. Angles are uniformly spaced.
-        plane: 'xy' | 'xz' | 'yz'
-        If velocity=None, set tangential speed to v_circ from the grid potential at 'center'.
-        """
+        """Deterministic ring of N particles at fixed radius."""
         N = self.N
         sim = self.simulation
 
         cen = cp.asarray(center, dtype=cp.float32)
         theta = cp.linspace(0, 2 * cp.pi, N, endpoint=False, dtype=cp.float32)
 
-        # Unit vectors in the chosen plane
         if plane == "xy":
             ex = cp.stack((cp.cos(theta), cp.sin(theta), cp.zeros_like(theta)), axis=1)
             tang = cp.stack((-cp.sin(theta), cp.cos(theta), cp.zeros_like(theta)), axis=1)
@@ -389,26 +439,20 @@ class NBodyBaryons:
         else:
             raise ValueError("plane must be 'xy', 'xz', or 'yz'")
 
-        # Positions: exact circle
         self.positions = cen[None, :] + radius * ex
 
-        # Bulk tangential velocity (consistent with grid potential if not provided)
         if velocity is None:
-            # compose potential exactly as in evolution
             total_density = cp.zeros_like(sim.grids[0], dtype=cp.float32)
             V = sim.propagator.compute_gravity_potential(total_density)
             if sim.static_potential is not None:
                 V = V + cp.real(sim.static_potential(sim))
-            # circular speed at 'center' (same for all ring points for small radius)
             v_c = self._circular_speed_from_grid(V, tuple(cp.asnumpy(cen)))
             bulk_mag = cp.asarray(v_c, dtype=cp.float32)
         else:
             bulk_mag = cp.asarray(velocity, dtype=cp.float32)
             if bulk_mag.ndim == 0:
-                # scalar speed → tangential direction for each particle
                 bulk_mag = cp.full((N,), float(bulk_mag), dtype=cp.float32)
 
-        # Velocities: purely tangential + optional tiny Gaussian if requested
         if vel_sigma > 0.0:
             if bulk_mag.ndim == 0:
                 self.velocities = bulk_mag * tang + vel_sigma * cp.random.standard_normal((N, 3), dtype=cp.float32)
@@ -421,40 +465,6 @@ class NBodyBaryons:
             else:
                 self.velocities = bulk_mag[:, None] * tang
 
-    def initialize_solid_clump(self, center=(0, 5.0, 0.0), radius=0.02,
-                               velocity=(0.0, 0.9485, 0.0), vel_sigma=0.0):
-        # put clump in the XY mid-plane: z = box center
-        sim = self.simulation
-        zc = 0.5 * (sim.boundaries[2][0] + sim.boundaries[2][1])
-
-        N = self.N
-        cx, cy, _ = center
-        cen = cp.asarray((cx, cy, zc), dtype=cp.float32)  # force z to mid-plane
-
-        # deterministic disk in XY (no z thickness)
-        n_side = int(cp.ceil(N ** (1 / 2)))
-        xs = cp.linspace(-1, 1, n_side, dtype=cp.float32)
-        xx, yy = cp.meshgrid(xs, xs, indexing="ij")
-        grid = cp.stack((xx.ravel(), yy.ravel(), cp.zeros_like(xx).ravel()), axis=1)[:N]
-        norms = cp.maximum(cp.linalg.norm(grid[:, :2], axis=1, keepdims=True), 1e-6)
-        pts = (grid / norms) * radius * 0.5
-        self.positions = cen[None, :] + pts
-
-        # velocities: exactly in-plane
-        vel = cp.asarray(velocity, dtype=cp.float32)
-        vel_3d = cp.zeros(3, dtype=cp.float32)
-        vel_3d[0] = vel[0]
-        vel_3d[1] = vel[1]
-        # vel_3d[2] is already 0
-
-        self.velocities = cp.tile(vel_3d[None, :], (N, 1))
-        if vel_sigma > 0.0:
-            noise = cp.random.standard_normal((N, 3), dtype=cp.float32)
-            noise[:, 2] = 0.0  # no z-noise
-            self.velocities += vel_sigma * noise
-
-        self.velocities[:, 2] = 0.0
-
     def initialize_spherical_clump(
             self,
             center=(0.0, 0.0, 0.0),
@@ -462,48 +472,36 @@ class NBodyBaryons:
             velocity=(0.0, 0.0, 0.0),
             vel_sigma=0.0,
     ):
-        """
-        3D spherically symmetric clump around `center`.
-
-        - Positions are distributed uniformly inside a sphere of radius `radius`.
-        - All particles start with the same velocity `velocity`
-          (typically tangential in the x–y plane, v_z = 0).
-        - Optional small Gaussian scatter in velocities with width `vel_sigma`.
-        """
-
+        """3D spherically symmetric clump around center."""
         sim = self.simulation
         N = self.N
 
         cen = cp.asarray(center, dtype=cp.float32)
 
-        # === positions: uniform in a sphere ===
-        # draw random directions
+        # Uniform in sphere
         dirs = cp.random.normal(size=(N, 3)).astype(cp.float32)
         norms = cp.linalg.norm(dirs, axis=1, keepdims=True)
         dirs /= cp.maximum(norms, 1e-6)
 
-        # draw radii with p(r) ∝ r^2 -> r = R * u^(1/3)
         u = cp.random.uniform(0.0, 1.0, size=(N, 1)).astype(cp.float32)
         radii = radius * u ** (1.0 / 3.0)
 
         offsets = dirs * radii
         self.positions = cen[None, :] + offsets
 
-        # periodic wrap into box
+        # Periodic wrap
         for d in range(3):
             low, high = sim.boundaries[d]
             L = (high - low)
             self.positions[:, d] = ((self.positions[:, d] - low) % L) + low
 
-        # === velocities: all the same (plus optional small noise) ===
+        # Velocities
         base_v = cp.asarray(velocity, dtype=cp.float32)
         v = cp.tile(base_v[None, :], (N, 1))
 
         if vel_sigma > 0.0:
             noise = vel_sigma * cp.random.standard_normal((N, 3), dtype=cp.float32)
-            # if you want to keep the COM strictly in the x–y plane, kill z-noise:
             noise[:, 2] = 0.0
             v += noise
 
         self.velocities = v
-

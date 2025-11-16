@@ -5,11 +5,8 @@ import matplotlib.pyplot as plt
 # 🔧 MANUALLY SET YOUR DIRECTORIES HERE
 simulation_dirs = [
 
-'resources/data/simulation_20251116_173357',
-    'resources/data/simulation_20251116_175318',
-    'resources/data/simulation_20251116_175549',
-    'resources/data/simulation_20251116_180156',
-    'resources/data/simulation_20251116_181109'
+
+    'resources/data/simulation_20251116_214117'
 
 ]
 

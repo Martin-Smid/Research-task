@@ -174,8 +174,8 @@ class Evolution_Class:
         if wave_functions:
             self._kick_all_wave_functions(wave_functions, total_density, is_first, is_last)
 
-        # Handle baryonic matter evolution
-        if self.simulation.baryonic_model is not None:
+        # is there baryonic matter in the sim?
+        if getattr(self.simulation, "baryonic_matter", None) is not None:
             potential_grid = self._compose_baryon_potential(total_density)
             self._drift_baryons(potential_grid)
 
@@ -208,10 +208,15 @@ class Evolution_Class:
                     self._kick_all_wave_functions(wave_functions, total_density, first_op, last_op, coeff_key)
 
                 # Evolve baryons at appropriate kick steps
-                if self.simulation.baryonic_model is not None:
+                if getattr(self.simulation, "baryonic_matter", None) is not None:
                     potential_grid = self._compose_baryon_potential(total_density)
                     time_factor = self.coefficients[coeff_key]
-                    self._drift_baryons(potential_grid, time_factor=time_factor, first_step=first_op, last_step=last_op)
+                    self._drift_baryons(
+                        potential_grid,
+                        time_factor=time_factor,
+                        first_step=first_op,
+                        last_step=last_op,
+                    )
             else:  # drift
                 if wave_functions:
                     self._drift_all_wave_functions(wave_functions, time_factor_key=coeff_key)
@@ -239,11 +244,15 @@ class Evolution_Class:
                     self._kick_all_wave_functions(wave_functions, total_density, first_kick, last_kick, coeff_key)
 
                 # Evolve baryons at appropriate kick steps
-                if self.simulation.baryonic_model is not None:
+                if getattr(self.simulation, "baryonic_matter", None) is not None:
                     potential_grid = self.propagator.compute_gravity_potential(total_density)
                     time_factor = self.coefficients[coeff_key]
-                    self._drift_baryons(potential_grid, time_factor=time_factor,
-                                        first_step=first_kick, last_step=last_kick)
+                    self._drift_baryons(
+                        potential_grid,
+                        time_factor=time_factor,
+                        first_step=first_kick,
+                        last_step=last_kick,
+                    )
             else:  # drift
                 if wave_functions:
                     self._drift_all_wave_functions(wave_functions, time_factor_key=coeff_key)
@@ -294,7 +303,7 @@ class Evolution_Class:
             density_i = wf.calculate_density()
             total_density += density_i
 
-        if self.simulation.baryonic_model is not None:
+        if getattr(self.simulation, "baryonic_matter", None) is not None:
             rho_baryons = self.simulation.baryonic_matter.deposit_to_grid()
             total_density += rho_baryons
 
@@ -517,7 +526,7 @@ class Evolution_Class:
         if self.save_max_vals:
             self.scribe.save_max_values(
                 resolution=int(self.simulation.N),
-                spin=self.simulation.spin
+                spin=self.simulation.spin if getattr(self.simulation, "spin", None) else None
             )
             plot_y_or_n = input("Should I plot these values? (y/n/del): ")
             if plot_y_or_n == "y":
@@ -565,7 +574,7 @@ class Evolution_Class:
             first_step: Whether this is the first step (half kick)
             last_step: Whether this is the last step (half kick)
         """
-        if self.simulation.baryonic_model is None:
+        if getattr(self.simulation, "baryonic_matter", None) is None:
             return  # no baryons to evolve
 
         baryons = self.simulation.baryonic_matter

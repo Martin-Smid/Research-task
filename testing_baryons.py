@@ -14,28 +14,31 @@ from resources.Classes.Baryonic_N_body import NBodyBaryons
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-20, 20),(-20, 20),(-20, 20)], # Spatial boundaries
-    N=256,                             # Grid resolution
-    total_time=1,                   # Total simulation time
-    h=0.001,                            # Time step
+    boundaries=[(-50, 50),(-50, 50),(-50, 50)], # Spatial boundaries
+    N=64,                             # Grid resolution
+    total_time=15,                   # Total simulation time
+    h=0.01,                            # Time step
     order_of_evolution=2,
-    baryonic_model="spherical_clump",
     use_gravity=True,  # Enable gravitational effects
     static_potential=None,
     save_max_vals=True,
+
 )
 
-'''
-sim.baryonic_matter.initialize_solid_clump(
-    center=(0.0, 5.0, 0.0),
-    radius=0.00001,                 # small physical size of the clump
-    velocity=(0.0, 0.9485, 0.0), # y-direction speed for circular motion
-    vel_sigma=0.0
-)'''
+baryons = NBodyBaryons(
+    simulation=sim,
+    N_particles=5000,
+    total_mass=1e6,
+    init_profile="hernquist",
+    radius=10
+
+)
+
+
+sim.add_baryons(baryons)
 
 
 
-# Extract grids and baryon density (move to CPU)
 rho = cp.asnumpy(sim.baryonic_matter.deposit_to_grid())
 x = sim.grids[0][:, 0, 0]
 y = sim.grids[1][0, :, 0]

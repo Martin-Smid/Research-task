@@ -78,6 +78,7 @@ class Scribe:
             step: Current step number
             h: Time step size
         """
+        rho_baryons = cp.zeros_like(self.simulation.grids[0])
         current_time = step * h
         for wf_idx, wf in enumerate(wave_functions):
             snapshot_path = f"{self.snapshot_directory}/wf_{wf_idx}_snapshot_at_time_{current_time:.6f}.npy"
@@ -85,8 +86,11 @@ class Scribe:
             self.wave_values[wf_idx].append(snapshot_path)
 
         if hasattr(self.simulation, "baryonic_matter") and self.simulation.baryonic_matter is not None:
+            for baryons in self.simulation.baryonic_matter:
+                rho_baryons += baryons.deposit_to_grid()
+
             try:
-                rho_baryons = self.simulation.baryonic_matter.deposit_to_grid()
+
                 baryon_path = f"{self.snapshot_directory}/baryons_snapshot_at_time_{current_time:.6f}.npy"
                 np.save(baryon_path, cp.asnumpy(rho_baryons))
             except Exception as e:

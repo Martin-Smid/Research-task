@@ -80,7 +80,17 @@ class NBodyBaryons:
 
         # Initialize spatial distribution
         if init_profile == "hernquist":
-            self.initialize_hernquist()
+            if radius is None:
+                radius = 1  # This would be scale_radius
+            if velocity is None:
+                velocity = (0.0, 0.0, 0.0)
+            if center is None:
+                center = (0.0, 0.0, 0.0)
+            self.initialize_hernquist(
+                center=center,
+                velocity=velocity,
+                vel_sigma=vel_sigma
+            )
 
         elif init_profile == "uniform":
             self.initialize_uniform()
@@ -123,17 +133,33 @@ class NBodyBaryons:
         else:
             raise ValueError(f"Unknown init_profile: {init_profile}")
 
-    def initialize_hernquist(self):
+    def initialize_hernquist(self, center=None, velocity=None, vel_sigma=0.0,angular_momentum=None, rotation_axis=None):
         """
         Sample particle positions from Hernquist profile.
         Optionally truncates at self.truncation_radius.
+
+        Parameters:
+        -----------
+        center : tuple or None
+            (x, y, z) coordinates for the center of the clump.
+            If None, defaults to (0, 0, 0).
+        velocity : tuple or None
+            (vx, vy, vz) bulk velocity of the clump.
+            If None, defaults to (0, 0, 0).
+        vel_sigma : float
+            Velocity dispersion to add random velocities (default: 0.0).
         """
+        # Set defaults
+        if center is None:
+            center = (0.0, 0.0, 0.0)
+        if velocity is None:
+            velocity = (0.0, 0.0, 0.0)
+
         if self.truncation_radius is None:
             # Standard Hernquist sampling
             u = cp.random.uniform(0, 1, self.N)
             r = self.scale_radius * cp.sqrt(u) / (1 - cp.sqrt(u))
         else:
-            # Truncated Hernquist: rejection sampling
             r_max = self.truncation_radius
             a = self.scale_radius
 
@@ -156,8 +182,42 @@ class NBodyBaryons:
         self.positions[:, 1] = r * cp.sin(theta) * cp.sin(phi)
         self.positions[:, 2] = r * cp.cos(theta)
 
-        # Velocities: start at rest
-        self.velocities[:, :] = 0
+        # Apply center offset
+        self.positions[:, 0] += center[0]
+        self.positions[:, 1] += center[1]
+        self.positions[:, 2] += center[2]
+
+        self.velocities[:, 0] = velocity[0]
+        self.velocities[:, 1] = velocity[1]
+        self.velocities[:, 2] = velocity[2]
+
+        # Add rotation if requested
+        if angular_momentum is not None:
+            print("here")
+            if rotation_axis is None:
+                rotation_axis = (0.0, 0.0, 1.0)
+
+            # Normalize rotation axis
+            axis = cp.array(rotation_axis)
+            axis = axis / cp.sqrt(cp.sum(axis ** 2))
+
+            # Get cylindrical radius from rotation axis
+            rel_pos = self.positions - cp.array(center)
+            R_cyl = cp.sqrt(cp.sum(rel_pos[:, :2] ** 2, axis=1))  # xy-plane distance
+
+            # Circular velocity: v = L / R
+            v_circ = angular_momentum / (R_cyl + 1e-10)  # avoid divide by zero
+
+            # Tangential direction (perpendicular to radial in xy-plane)
+            v_tang_x = -rel_pos[:, 1] / (R_cyl + 1e-10) * v_circ
+            v_tang_y = rel_pos[:, 0] / (R_cyl + 1e-10) * v_circ
+
+            self.velocities[:, 0] += v_tang_x
+            self.velocities[:, 1] += v_tang_y
+
+        # Add velocity dispersion if requested
+        if vel_sigma > 0:
+            self.velocities += cp.random.normal(0, vel_sigma, (self.N, 3))
 
     def initialize_uniform(self):
         """Uniform random distribution in simulation box"""
@@ -174,7 +234,12 @@ class NBodyBaryons:
         rho_grid = cp.zeros(shape, dtype=cp.float64)
 
         # Grid spacing
-        dx = self.simulation.dx
+        x_axis = self.simulation.grids[0][:, 0, 0]
+        y_axis = self.simulation.grids[1][0, :, 0]
+        z_axis = self.simulation.grids[2][0, 0, :]
+        dx = (float(x_axis[1] - x_axis[0]),
+              float(y_axis[1] - y_axis[0]),
+              float(z_axis[1] - z_axis[0]))
 
         # Grid boundaries
         (x_min, x_max) = self.simulation.boundaries[0]

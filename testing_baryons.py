@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-
+from mpl_toolkits.mplot3d import Axes3D
 from resources.Classes.Wave_function_class import *
 from resources.Functions.system_fucntions import *
 from matplotlib.colors import LogNorm
@@ -14,9 +14,9 @@ from resources.Classes.Baryonic_N_body import NBodyBaryons
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-50, 50),(-50, 50),(-50, 50)], # Spatial boundaries
+    boundaries=[(-20, 20),(-20, 20),(-20, 20)], # Spatial boundaries
     N=64,                             # Grid resolution
-    total_time=15,                   # Total simulation time
+    total_time=10,                   # Total simulation time
     h=0.01,                            # Time step
     order_of_evolution=2,
     use_gravity=True,  # Enable gravitational effects
@@ -25,12 +25,27 @@ sim = Simulation_Class(
 
 )
 
-baryons = NBodyBaryons(
+baryons_1 = NBodyBaryons(
     simulation=sim,
-    N_particles=5000,
-    total_mass=1e6,
+    N_particles=6500,
+    total_mass=1e8,
     init_profile="hernquist",
-    radius=10
+    radius=6,
+    center=[0, 5, 0],
+    velocity=[0,0, 0],
+    angular_momentum=[0.0,0.0,0]
+
+)
+
+baryons_2 = NBodyBaryons(
+    simulation=sim,
+    N_particles=6500,
+    total_mass=1e8,
+    init_profile="hernquist",
+    radius=6,
+    center=[0, -5, 0],
+    velocity=[0,0, 0],
+    angular_momentum=[0.0,0.0,0]
 
 )
 wave_vector = Wave_vector_class(
@@ -47,19 +62,28 @@ wave_vector = Wave_vector_class(
 )
 
 
-sim.add_baryons(baryons)
-sim.add_wave_vector(wave_vector)
 
 
-rho = cp.asnumpy(sim.baryonic_matter.deposit_to_grid())
+
+sim.add_baryons(baryons_1)
+sim.add_baryons(baryons_2)
+
+# BEFORE evolution - sum all baryonic systems
+rho = cp.zeros((sim.N, sim.N, sim.N), dtype=cp.float64)
+for baryons in sim.baryonic_matter:
+    rho += baryons.deposit_to_grid()
+
+rho = cp.asnumpy(rho)  # Move to CPU for plotting
+
 x = sim.grids[0][:, 0, 0]
 y = sim.grids[1][0, :, 0]
 z = sim.grids[2][0, 0, :]
 
 # ---- Quick diagnostics ----
 total_mass = np.sum(rho) * np.prod(sim.dx)
-print(f"Integrated baryonic mass: {total_mass:.3e}")
-print(f"Deviation: {(total_mass / 1e8 - 1) * 100:.3f}%")
+print(f"Integrated baryonic mass (before): {total_mass:.3e}")
+#print(f"Expected total mass: {sim.total_baryon_mass:.3e}")
+#print(f"Deviation: {(total_mass / sim.total_baryon_mass - 1) * 100:.3f}%")
 
 # ---- 3D scatter plot (coarse sample) ----
 skip = 4  # increase for lighter plot
@@ -77,7 +101,7 @@ fig.colorbar(p, ax=ax, label=r'$\log_{10}(\rho)$')
 ax.set_xlabel('x')
 ax.set_ylabel('y')
 ax.set_zlabel('z')
-ax.set_title('3D Hernquist baryon density')
+ax.set_title('3D Baryonic density (before evolution)')
 plt.tight_layout()
 plt.show()
 
@@ -93,28 +117,35 @@ im = ax.imshow(log_rho.T, origin='lower', extent=[x.min(), x.max(), y.min(), y.m
 fig.colorbar(im, ax=ax, label=r'$\log_{10}(\rho)$')
 ax.set_xlabel('x')
 ax.set_ylabel('y')
-ax.set_title('Hernquist baryon density slice (z=0)')
+ax.set_title('Baryonic density slice (z=0, before evolution)')
 plt.tight_layout()
 plt.show()
+
 
 sim.evolve(save_every=100)
 
-rho = cp.asnumpy(sim.baryonic_matter.deposit_to_grid())
+# AFTER evolution - sum all baryonic systems again
+rho = cp.zeros((sim.N, sim.N, sim.N), dtype=cp.float64)
+for baryons in sim.baryonic_matter:
+    rho += baryons.deposit_to_grid()
+
+rho = cp.asnumpy(rho)
+
 x = sim.grids[0][:, 0, 0]
 y = sim.grids[1][0, :, 0]
 z = sim.grids[2][0, 0, :]
 
 # ---- Quick diagnostics ----
 total_mass = np.sum(rho) * np.prod(sim.dx)
-print(f"Integrated baryonic mass: {total_mass:.3e}")
-print(f"Deviation: {(total_mass / 1e8 - 1) * 100:.3f}%")
+print(f"Integrated baryonic mass (after): {total_mass:.3e}")
+#print(f"Expected total mass: {sim.total_baryon_mass:.3e}")
+#print(f"Deviation: {(total_mass / sim.total_baryon_mass - 1) * 100:.3f}%")
 
 # ---- 3D scatter plot (coarse sample) ----
-skip = 4  # increase for lighter plot
+skip = 4
 X, Y, Z = np.meshgrid(x[::skip], y[::skip], z[::skip], indexing='ij')
 RHO = rho[::skip, ::skip, ::skip]
 
-# Mask near-zero densities for better color scaling
 mask = RHO > 0
 Cf = np.log10(RHO[mask])
 
@@ -125,7 +156,7 @@ fig.colorbar(p, ax=ax, label=r'$\log_{10}(\rho)$')
 ax.set_xlabel('x')
 ax.set_ylabel('y')
 ax.set_zlabel('z')
-ax.set_title('3D Hernquist baryon density')
+ax.set_title('3D Baryonic density (after evolution)')
 plt.tight_layout()
 plt.show()
 
@@ -141,7 +172,7 @@ im = ax.imshow(log_rho.T, origin='lower', extent=[x.min(), x.max(), y.min(), y.m
 fig.colorbar(im, ax=ax, label=r'$\log_{10}(\rho)$')
 ax.set_xlabel('x')
 ax.set_ylabel('y')
-ax.set_title('Hernquist baryon density slice (z=0)')
+ax.set_title('Baryonic density slice (z=0, after evolution)')
 plt.tight_layout()
 plt.show()
 

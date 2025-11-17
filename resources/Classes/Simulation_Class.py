@@ -160,7 +160,7 @@ class Simulation_Class:
         self.use_self_int =self_int
         self.a_s = a_s
 
-        self.baryonic_matter = None
+        self.baryonic_matter = []
 
         #I think this should make sim class backwards compatible (I aint testing that)
         self.baryonic_model = baryonic_model
@@ -476,19 +476,26 @@ class Simulation_Class:
 
     def add_baryons(self, baryonic_system):
         """
-        Attach an N-body baryonic component to this simulation.
+        Attach one or more N-body baryonic components to this simulation.
 
         Parameters
         ----------
-        baryonic_system : NBodyBaryons
-            Instance of resources.Classes.Baryonic_N_body.NBodyBaryons
+        baryonic_system : NBodyBaryons or list of NBodyBaryons
+            Instance or list of resources.Classes.Baryonic_N_body.NBodyBaryons
             constructed with this Simulation_Class as the `simulation` argument.
         """
         from resources.Classes.Baryonic_N_body import NBodyBaryons
 
+        # Handle list of baryonic systems
+        if isinstance(baryonic_system, list):
+            for baryon_sys in baryonic_system:
+                self.add_baryons(baryon_sys)  # Recursive call for each
+            return
+
+        # Validate single system
         if not isinstance(baryonic_system, NBodyBaryons):
             raise TypeError(
-                f"add_baryons expected NBodyBaryons instance, got {type(baryonic_system)}"
+                f"add_baryons expected NBodyBaryons instance or list, got {type(baryonic_system)}"
             )
 
         if baryonic_system.simulation is not self:
@@ -497,7 +504,8 @@ class Simulation_Class:
                 "instance. Construct NBodyBaryons with this simulation first."
             )
 
-        self.baryonic_matter = baryonic_system
+        # Append to list
+        self.baryonic_matter.append(baryonic_system)
 
 
 

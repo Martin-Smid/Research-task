@@ -14,9 +14,9 @@ sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-20, 20),(-20,20),(-20,20)], # Spatial boundaries
     N=64,                             # Grid resolution
-    total_time=10,              # Total simulation time
-    h=0.001,                            # Time step
-    order_of_evolution=4,
+    total_time=5,              # Total simulation time
+    h=0.01,                            # Time step
+    order_of_evolution=2,
     use_gravity=True ,
     static_potential=None,
     save_max_vals=True,
@@ -40,7 +40,7 @@ positions = []
 min_separation =5 # Adjust based on soliton radius
 boundary = [-15,15]  # Same for all dimensions
 
-for i in range(5):
+for i in range(1):
     while True:
         means = generate_random_position(boundary)
         if is_far_enough(means, positions, min_separation):

@@ -295,7 +295,7 @@ class Evolution_Class:
             wf.drift(kinetic_propagator)
 
     def _compute_total_density(self, wave_functions):
-        """Calculate the total density ρ = Σ|ψⁱ|² from all wave functions."""
+        """Calculate the total density ρ = Σ|ψᵢ|² from all wave functions."""
         shape = (self.simulation.N,) * self.simulation.dim
         total_density = cp.zeros(shape, dtype=cp.float64)
 
@@ -303,9 +303,9 @@ class Evolution_Class:
             density_i = wf.calculate_density()
             total_density += density_i
 
-        if getattr(self.simulation, "baryonic_matter", None) is not None:
-            rho_baryons = self.simulation.baryonic_matter.deposit_to_grid()
-            total_density += rho_baryons
+        if hasattr(self.simulation, 'baryonic_matter') and self.simulation.baryonic_matter:
+            for baryon_sys in self.simulation.baryonic_matter:
+                total_density += baryon_sys.deposit_to_grid()
 
         return total_density
 
@@ -404,14 +404,14 @@ class Evolution_Class:
             K_flow_total += K_flow
             U_quantum_total += U_quantum
 
-        # --- baryons: ½ m v² summed over particles ---
+        # --- baryons: ½ m v² summed over ALL particles in ALL systems ---
         K_baryons = 0.0
-        if getattr(self.simulation, "baryonic_matter", None) is not None:
-            baryons = self.simulation.baryonic_matter
-            v2 = cp.sum(baryons.velocities ** 2)
-            K_baryons = 0.5 * baryons.m_particle * v2
+        if hasattr(self.simulation, 'baryonic_matter') and self.simulation.baryonic_matter:
+            for baryons in self.simulation.baryonic_matter:
+                v2 = cp.sum(baryons.velocities ** 2)
+                K_baryons += 0.5 * baryons.m_particle * v2
 
-        # store for possible simple logging
+        # Store for possible simple logging
         self.K_flow = K_flow_total
         self.U_quantum = U_quantum_total
         self.K_baryons = K_baryons
@@ -597,16 +597,26 @@ class Evolution_Class:
         else:
             dt = self.h * time_factor
 
-        # Use the N-body integrator already defined in the baryon class
-        baryons.integrate_leapfrog(potential_grid, dt)
+        for baryons in self.simulation.baryonic_matter:
+            baryons.integrate_leapfrog(potential_grid, dt)
 
 
-# Evolution_Class.py
     def _compose_baryon_potential(self, total_density):
+        """
+        Compose the total potential felt by baryons: gravity + static potential.
 
+        Parameters:
+            total_density: Total density on grid (waves + baryons)
+
+        Returns:
+            Total potential field on the grid
+        """
+        # Gravitational potential from Poisson solver
         V = self.propagator.compute_gravity_potential(total_density)
 
+        # Add static external potential if present
         if self.simulation.static_potential is not None:
             V_stat = self.simulation.static_potential(self.simulation)
             V = V + cp.real(V_stat)
+
         return V

@@ -242,87 +242,89 @@ class NBodyBaryons:
 
     def deposit_to_grid(self):
         """
-        Deposit particle masses to grid using Cloud-In-Cell (CIC) (GPU: CuPy)
-        Returns: density field on simulation grid
+        Deposit particle masses to grid using Cloud-In-Cell (CIC) (GPU: CuPy).
+        Uses sim.dx directly to ensure consistency with the fixed boundary logic.
         """
-        shape = (self.simulation.N,) * self.simulation.dim
+        sim = self.simulation
+
+        # 1. Initialize density grid on GPU
+        shape = (sim.N,) * sim.dim
         rho_grid = cp.zeros(shape, dtype=cp.float64)
 
-        # Grid spacing
-        x_axis = self.simulation.grids[0][:, 0, 0]
-        y_axis = self.simulation.grids[1][0, :, 0]
-        z_axis = self.simulation.grids[2][0, 0, :]
-        dx = (float(x_axis[1] - x_axis[0]),
-              float(y_axis[1] - y_axis[0]),
-              float(z_axis[1] - z_axis[0]))
+        # 2. Get Grid Spacing & Boundaries directly from Simulation
+        # This avoids accessing the CPU-based 'grids' array
+        dx, dy, dz = sim.dx
 
-        # Grid boundaries
-        (x_min, x_max) = self.simulation.boundaries[0]
-        (y_min, y_max) = self.simulation.boundaries[1]
-        (z_min, z_max) = self.simulation.boundaries[2]
+        (x_min, x_max) = sim.boundaries[0]
+        (y_min, y_max) = sim.boundaries[1]
+        (z_min, z_max) = sim.boundaries[2]
 
         Lx = x_max - x_min
         Ly = y_max - y_min
         Lz = z_max - z_min
 
-        # Periodic wrap of positions (GPU)
+        # 3. Periodic Wrap of Positions (GPU)
+        # self.positions is (N_particles, 3) on GPU
         px = x_min + cp.mod(self.positions[:, 0] - x_min, Lx)
         py = y_min + cp.mod(self.positions[:, 1] - y_min, Ly)
         pz = z_min + cp.mod(self.positions[:, 2] - z_min, Lz)
 
-        # Convert positions to grid indices (fractional) (GPU)
-        ix = (px - x_min) / dx[0]
-        iy = (py - y_min) / dx[1]
-        iz = (pz - z_min) / dx[2]
+        # 4. Convert to Fractional Grid Indices (GPU)
+        # ix, iy, iz are effectively 'float' indices
+        fx = (px - x_min) / dx
+        fy = (py - y_min) / dy
+        fz = (pz - z_min) / dz
 
-        # Cloud-In-Cell: distribute to 8 nearest grid points
-        # Floor to get base cell (GPU)
-        i0 = cp.floor(ix).astype(cp.int32)
-        j0 = cp.floor(iy).astype(cp.int32)
-        k0 = cp.floor(iz).astype(cp.int32)
+        # 5. Cloud-In-Cell (CIC) Interpolation Weights (GPU)
+        # Floor to get the bottom-left-front cell index
+        i0 = cp.floor(fx).astype(cp.int32)
+        j0 = cp.floor(fy).astype(cp.int32)
+        k0 = cp.floor(fz).astype(cp.int32)
 
-        # Fractional offset within cell [0, 1] (GPU)
-        tx = ix - i0
-        ty = iy - j0
-        tz = iz - k0
+        # Calculate fractional offset (0.0 to 1.0)
+        tx = fx - i0
+        ty = fy - j0
+        tz = fz - k0
 
-        # Weights for 8 corners (GPU)
-        wx0, wx1 = 1 - tx, tx
-        wy0, wy1 = 1 - ty, ty
-        wz0, wz1 = 1 - tz, tz
+        # Weights for the 8 corners of the cube
+        wx0, wx1 = 1.0 - tx, tx
+        wy0, wy1 = 1.0 - ty, ty
+        wz0, wz1 = 1.0 - tz, tz
 
-        # Periodic boundary conditions (GPU)
-        N = self.simulation.N
-        i0 %= N
-        j0 %= N
-        k0 %= N
+        # 6. Handle Periodic Wrapping for Indices (GPU)
+        N = sim.N
         i1 = (i0 + 1) % N
         j1 = (j0 + 1) % N
         k1 = (k0 + 1) % N
+        i0 = i0 % N
+        j0 = j0 % N
+        k0 = k0 % N
 
-        # Mass per volume
-        mass = self.m_particle / (dx[0] * dx[1] * dx[2])
+        # 7. Mass Deposit
+        # Mass per cell volume
+        cell_volume = dx * dy * dz
+        mass_val = self.m_particle / cell_volume
 
-        # Pre-compute weights for all 8 corners (GPU)
-        weights = [
-            (wx0, wy0, wz0), (wx1, wy0, wz0),
-            (wx0, wy1, wz0), (wx1, wy1, wz0),
-            (wx0, wy0, wz1), (wx1, wy0, wz1),
-            (wx0, wy1, wz1), (wx1, wy1, wz1)
+        # We deposit mass into the 8 corners using atomic adds
+        # Define the 8 corner weights and indices
+        corners_weights = [
+            (wx0 * wy0 * wz0, i0, j0, k0), (wx1 * wy0 * wz0, i1, j0, k0),
+            (wx0 * wy1 * wz0, i0, j1, k0), (wx1 * wy1 * wz0, i1, j1, k0),
+            (wx0 * wy0 * wz1, i0, j0, k1), (wx1 * wy0 * wz1, i1, j0, k1),
+            (wx0 * wy1 * wz1, i0, j1, k1), (wx1 * wy1 * wz1, i1, j1, k1)
         ]
 
-        corners = [
-            (i0, j0, k0), (i1, j0, k0),
-            (i0, j1, k0), (i1, j1, k0),
-            (i0, j0, k1), (i1, j0, k1),
-            (i0, j1, k1), (i1, j1, k1)
-        ]
+        # Flatten resolution for add.at
+        N_sq = N * N
 
-        # Deposit to each corner using vectorized add.at (GPU)
-        # cp.add.at is a key GPU operation here
-        for (wx, wy, wz), (ii, jj, kk) in zip(weights, corners):
-            contribution = mass * wx * wy * wz
-            flat_indices = ii * (N * N) + jj * N + kk
+        for w, ii, jj, kk in corners_weights:
+            # Calculate flat index: i*N^2 + j*N + k
+            flat_indices = ii * N_sq + jj * N + kk
+
+            # Contribution to this corner
+            contribution = mass_val * w
+
+            # Atomic add to the grid
             cp.add.at(rho_grid.ravel(), flat_indices, contribution)
 
         return rho_grid

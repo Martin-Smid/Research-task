@@ -31,13 +31,7 @@ class Scribe:
 
     def setup_directories(self, num_wave_functions):
         """
-        Create directory structure for saving data.
-
-        Parameters:
-            num_wave_functions: Number of wave functions to track
-
-        Returns:
-            str: Path to the snapshot directory
+        Create directory structure for saving data AND initialize energy log.
         """
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         save_dir = f"resources/data/simulation_{timestamp}"
@@ -45,6 +39,12 @@ class Scribe:
         self.snapshot_directory = save_dir
 
         self.max_vals_filename = "resources/data/max_values.csv"
+
+        self.energy_path = os.path.join(self.snapshot_directory, "energy.txt")
+
+        header = "time,K_total,W,E_total,K_flow,U_quantum,K_baryons,W_self,W_static,W_over_E\n"
+        with open(self.energy_path, "w") as f:
+            f.write(header)
 
         # Initialize storage for each wave function
         self.wave_values = [[] for _ in range(num_wave_functions)]
@@ -207,6 +207,18 @@ class Scribe:
             "W_static": float(W_static) if W_static is not None else float("nan"),
             "W/|E|": float(W_over_E),
         })
+
+        line = (f"{float(time):.6e},{float(K_total):.6e},{float(W):.6e},{float(E):.6e},"
+                f"{float(K_flow):.6e},{float(U_quantum):.6e},{float(K_baryons):.6e},"
+                f"{float(W_self):.6e},{float(W_static):.6e},{float(W_over_E):.6e}\n")
+
+        # Open in 'a' (append) mode
+        try:
+            with open(self.energy_path, "a") as f:
+                f.write(line)
+        except Exception as e:
+            print(f"Error writing energy log: {e}")
+
     def save_energy_log(self):
         """Save energy log to CSV file."""
         energy_path = os.path.join(self.snapshot_directory, "energy.txt")

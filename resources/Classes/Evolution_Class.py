@@ -3,6 +3,7 @@ import numpy as np
 from resources.Functions.system_fucntions import plot_max_values_on_N
 from resources.Classes.Scribe_Class import Scribe
 import os
+from tqdm import tqdm
 
 #np.random.seed(1)
 
@@ -99,7 +100,7 @@ class Evolution_Class:
 
 
         # Main evolution loop
-        for step in range(self.num_steps):
+        for step in tqdm(range(self.num_steps), desc="Simulation Progress", unit="step"):
             if step == 0:
                 print("starting evolution")
             else:
@@ -125,7 +126,6 @@ class Evolution_Class:
             if step % save_every == 0 :
                 self._compute_and_save_radial_profile(total_density, current_time, ix, iy, iz)
                 self.scribe.save_snapshots(wave_functions, step, self.h)
-                print(f"Still working... Step {step} out of {self.num_steps}")
 
             # Memory cleanup
             cp.get_default_memory_pool().free_all_blocks()

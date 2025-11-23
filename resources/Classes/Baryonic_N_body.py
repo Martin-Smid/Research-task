@@ -1,6 +1,7 @@
 import cupy as cp
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
+import cupyx.scipy.ndimage as ndimage
 
 
 class NBodyBaryons:
@@ -328,71 +329,59 @@ class NBodyBaryons:
 
     def interpolate_force_from_grid(self, potential_grid):
         """
-        Return forces at particle positions.
-          1) compute F = -∇Φ on the grid (GPU: CuPy FFT)
-          2) interpolate (Fx, Fy, Fz) from the grid to particle positions
-             (CPU: SciPy RegularGridInterpolator, requires data transfer)
-
-        Inputs
-        ------
-        potential_grid : cupy.ndarray (Nx, Ny, Nz)
-            Gravitational potential Φ on the simulation grid (on GPU).
-
-        Returns
-        -------
-        forces : cupy.ndarray (N, 3)
-            Interpolated forces at particle positions (on GPU).
+        Calculate forces entirely on the GPU to avoid Host-Device transfers.
+        Correctly calculates dx/dy/dz from boundaries and grid shape to ensure
+        consistency with the FFT grid.
         """
+
+
         sim = self.simulation
 
-        # --- Grid axes (transfer to CPU for SciPy setup) ---
-        x = cp.asnumpy(sim.grids[0][:, 0, 0])
-        y = cp.asnumpy(sim.grids[1][0, :, 0])
-        z = cp.asnumpy(sim.grids[2][0, 0, :])
 
-        # Spacings
-        dx = float(x[1] - x[0])
-        dy = float(y[1] - y[0])
-        dz = float(z[1] - z[0])
-
-        # --- Compute F = -∇Φ on grid using FFT (GPU: CuPy FFT) ---
         Nx, Ny, Nz = potential_grid.shape
+
+
+        (x_min, x_max) = sim.boundaries[0]
+        (y_min, y_max) = sim.boundaries[1]
+        (z_min, z_max) = sim.boundaries[2]
+
+
+        dx = (x_max - x_min) / Nx
+        dy = (y_max - y_min) / Ny
+        dz = (z_max - z_min) / Nz
+
+        # F = -∇Φ
         kx = 2 * cp.pi * cp.fft.fftfreq(Nx, d=dx)
         ky = 2 * cp.pi * cp.fft.fftfreq(Ny, d=dy)
         kz = 2 * cp.pi * cp.fft.fftfreq(Nz, d=dz)
 
         Phi_k = cp.fft.fftn(potential_grid)
-        dphidx = cp.real(cp.fft.ifftn(1j * kx[:, None, None] * Phi_k))
-        dphidy = cp.real(cp.fft.ifftn(1j * ky[None, :, None] * Phi_k))
-        dphidz = cp.real(cp.fft.ifftn(1j * kz[None, None, :] * Phi_k))
 
-        # --- Transfer results to CPU for interpolation ---
-        Fx_grid = cp.asnumpy(-dphidx)
-        Fy_grid = cp.asnumpy(-dphidy)
-        Fz_grid = cp.asnumpy(-dphidz)
+        # force components in k-space: F_k = -ik * Phi_k
+        fx_k = -1j * kx[:, None, None] * Phi_k
+        fy_k = -1j * ky[None, :, None] * Phi_k
+        fz_k = -1j * kz[None, None, :] * Phi_k
 
-        Fx_interp = RegularGridInterpolator((x, y, z), Fx_grid, bounds_error=False, fill_value=None)
-        Fy_interp = RegularGridInterpolator((x, y, z), Fy_grid, bounds_error=False, fill_value=None)
-        Fz_interp = RegularGridInterpolator((x, y, z), Fz_grid, bounds_error=False, fill_value=None)
+        # back to real space (Forces on grid)
+        Fx_grid = cp.real(cp.fft.ifftn(fx_k))
+        Fy_grid = cp.real(cp.fft.ifftn(fy_k))
+        Fz_grid = cp.real(cp.fft.ifftn(fz_k))
 
-        # --- query points: particle positions (transfer to CPU) ---
-        pos = cp.asnumpy(self.positions)  # (N, 3) -> numpy
 
-        # Periodic wrap into [low, high) in each dim (CPU)
-        for d in range(3):
-            low, high = sim.boundaries[d]
-            L = (high - low)
-            pos[:, d] = ((pos[:, d] - low) % L) + low
+        coords = cp.empty((3, self.N), dtype=cp.float32)
 
-        # Interpolate forces at particle positions (CPU: SciPy)
-        Fx = Fx_interp(pos)
-        Fy = Fy_interp(pos)
-        Fz = Fz_interp(pos)
+        coords[0] = (self.positions[:, 0] - x_min) / dx
+        coords[1] = (self.positions[:, 1] - y_min) / dy
+        coords[2] = (self.positions[:, 2] - z_min) / dz
 
-        forces = np.column_stack([Fx, Fy, Fz])
+        Fx = ndimage.map_coordinates(Fx_grid, coords, order=1, mode='wrap')
+        Fy = ndimage.map_coordinates(Fy_grid, coords, order=1, mode='wrap')
+        Fz = ndimage.map_coordinates(Fz_grid, coords, order=1, mode='wrap')
 
-        # --- Transfer final forces back to GPU ---
-        return cp.asarray(forces)
+        # Stack into (N, 3)
+        forces = cp.stack((Fx, Fy, Fz), axis=1)
+
+        return forces
 
     def integrate_leapfrog(self, potential_grid, dt):
         """

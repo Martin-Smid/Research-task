@@ -242,8 +242,8 @@ class Simulation_Class:
                     message=f"Boundary {i} values are invalid: {a} must be less than {b}",
                     tag=f"boundary_{i}"
                 )
-            # If the boundaries are valid, unpack them
-            dx_dim = (b - a) / (self.N - 1)
+
+            dx_dim = (b - a) / (self.N )
             dx_values.append(dx_dim)
             grids.append(np.linspace(a, b, self.N, endpoint=False))
 

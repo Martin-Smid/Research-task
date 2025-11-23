@@ -13,42 +13,62 @@ import cupy as cp
 from resources.Classes.Baryonic_N_body import NBodyBaryons
 
 sim = Simulation_Class(
-    dim=3,                             # 2D simulation
-    boundaries=[(-20, 20),(-20, 20),(-20, 20)], # Spatial boundaries
-    N=64,                             # Grid resolution
-    total_time=10,                   # Total simulation time
-    h=0.01,                            # Time step
+
+    dim=3, # 2D simulation
+    boundaries=[(-50, 50),(-50, 50),(-50, 50)], # Spatial boundaries
+    N=256, # Grid resolution
+    total_time=5, # Total simulation time
+    h=0.001, # Time step
     order_of_evolution=2,
-    use_gravity=True,  # Enable gravitational effects
+    use_gravity=True, # Enable gravitational effects
     static_potential=None,
     save_max_vals=True,
 
+
+
 )
 
-baryons_1 = NBodyBaryons(
+
+
+bulge = NBodyBaryons(
+
     simulation=sim,
-    N_particles=6500,
-    total_mass=1e8,
+    N_particles=2_000_000,
+    total_mass=1e10, # Msun
     init_profile="hernquist",
-    radius=6,
-    center=[0, 5, 0],
-    velocity=[0,0, 0],
-    angular_momentum=[0.0,0.0,0]
+    scale_radius=0.5, # kpc
+    truncation_radius=1.5, # kpc
+    center=(0.0, 0.0, 0.0),
+    velocity=(0.0, 0.0, 0.0),
+    vel_sigma=20.0 # km/s → ~20 kpc/Gyr if you keep units implicit
 
 )
 
-baryons_2 = NBodyBaryons(
+
+
+
+
+disk = NBodyBaryons(
+
     simulation=sim,
-    N_particles=6500,
-    total_mass=1e8,
-    init_profile="hernquist",
-    radius=6,
-    center=[0, -5, 0],
-    velocity=[0,0, 0],
-    angular_momentum=[0.0,0.0,0]
+    N_particles=5_000_000,
+    total_mass=5e10, # Msun
+    init_profile="disk",
+    radius=3.0, # R_d in kpc
+    height=0.3, # z_0 in kpc
+    center=(0.0, 0.0, 0.0),
+    velocity=(0.0, 0.0, 0.0), # no bulk COM motion
+    vel_sigma=20.0, # random dispersion (radial/vertical)
+    circular_velocity = 220
 
 )
+
+
+
+
+
 wave_vector = Wave_vector_class(
+
     packet_type="resources/solitons/GroundState(1).dat",
     means=[0, 0, 0],
     st_deviations=[0.5, 0.5, 0.5],
@@ -57,7 +77,8 @@ wave_vector = Wave_vector_class(
     omega=1,
     momenta=[0, 0.0, 0],
     spin=0,
-    desired_soliton_mass=53090068
+    desired_soliton_mass=5.3090068e7
+
 
 )
 
@@ -65,8 +86,9 @@ wave_vector = Wave_vector_class(
 
 
 
-sim.add_baryons(baryons_1)
-sim.add_baryons(baryons_2)
+sim.add_baryons(disk)
+sim.add_baryons(bulge)
+#sim.add_wave_vector(wave_vector)
 
 # BEFORE evolution - sum all baryonic systems
 rho = cp.zeros((sim.N, sim.N, sim.N), dtype=cp.float64)

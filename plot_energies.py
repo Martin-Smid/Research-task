@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 simulation_dirs = [
 
 
-    'resources/data/simulation_20251117_205342',
+    'resources/data/simulation_20251124_155747',
     ''
 
 ]

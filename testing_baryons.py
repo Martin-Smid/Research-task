@@ -77,7 +77,7 @@ wave_vector = Wave_vector_class(
     omega=1,
     momenta=[0, 0.0, 0],
     spin=0,
-    desired_soliton_mass=5.3090068e7
+    desired_soliton_mass=53090068
 
 
 )

@@ -5,21 +5,23 @@ from resources.Functions.system_fucntions import *
 from resources.Classes.Wave_vector_class import Wave_vector_class
 
 # Setup parameters for the domain
-a, b = -10, 10  # Domain boundaries
-N = 512 # Number of spatial points
+a, b = -5, 5  # Domain boundaries
+N = 128 # Number of spatial points
 
 # Initialize the Wave_function instance
-
+def my_hardcoded_potential(sim_obj):
+    # V = 0.5 * m * w^2 * x^2
+    return 0.5 * 1.0 * (1.0**2) * sim_obj.grids[0]**2
 
 sim = Simulation_Class(
     dim=1,                             # 2D simulation
     boundaries=[(-40, 40)], # Spatial boundaries
-    N=512,                             # Grid resolution
+    N=128,                             # Grid resolution
     total_time=2.0,                   # Total simulation time
     h=0.01,                            # Time step
     use_gravity=False,  # Enable gravitational effects
-    static_potential=quadratic_potential,
-    use_units=True,
+    static_potential=my_hardcoded_potential,
+    use_units=False,
     order_of_evolution=2,
     self_int=False
 )
@@ -27,7 +29,7 @@ sim = Simulation_Class(
 vlna = Wave_function(
     packet_type="LHO",
     means=[0],
-    st_deviations=[0.2],
+    st_deviations=[1],
     simulation=sim,
     mass=1,
     omega=1,
@@ -42,15 +44,39 @@ sim.evolve(save_every=50)
 
 
 
-x_vals = np.linspace(a, b, N, endpoint=False)
+x_vals = cp.linspace(a, b, N, endpoint=False)
 
 #controlled_times = [0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.5,7,7.5,8,8.5,9,9.5,10]
+# BEFORE comparing, verify the setup
+print(f"Wave function omega: {vlna.omega}")
+print(f"h_bar_tilde: {sim.h_bar_tilde}")
+print(f"h_bar: {sim.h_bar}")
+print(f"st_deviations: {vlna.st_deviations}")
+
+# The initial state at t=0
+psi_init = sim.get_wave_function_at_time(0)
+psi_init_np = psi_init
+
+# Compute actual standard deviation from the numerical packet
+r = x_vals - 0  # Assuming centered at 0
+density = cp.abs(psi_init_np) ** 2
+rms_width = cp.sqrt(np.sum(density * r ** 2 * (x_vals[1] - x_vals[0])) / cp.sum(density * (x_vals[1] - x_vals[0])))
+print(f"Numerical packet width (RMS): {rms_width}")
+
+# Expected width from theory
+expected_width = np.sqrt(sim.h_bar_tilde / vlna.omega)
+print(f"Theoretical packet width: {expected_width}")
+
+# Now do the comparison
 for time in sim.accessible_times:
+    x_vals = cp.asnumpy(x_vals)
 
-
-    an_psi = asnumpy(cp.abs(sim.get_wave_function_at_time(0)  * cp.exp(-1j * energy_nd([0], omega=1, hbar=sim.h_bar) * time))**2)
-    an_psi_real = asnumpy(cp.real(sim.get_wave_function_at_time(0)  * cp.exp(-1j * energy_nd([0], omega=1, hbar=sim.h_bar) * time)))
-    an_psi_imag = asnumpy(cp.imag(sim.get_wave_function_at_time(0)  * cp.exp(-1j * energy_nd([0], omega=1, hbar=sim.h_bar) * time)))
+    an_psi = asnumpy(cp.abs(
+        sim.get_wave_function_at_time(0) * cp.exp(-1j * energy_nd([0], omega=1, hbar=sim.h_bar) * time)) ** 2)
+    an_psi_real = asnumpy(
+        cp.real(sim.get_wave_function_at_time(0) * cp.exp(-1j * energy_nd([0], omega=1, hbar=sim.h_bar) * time)))
+    an_psi_imag = asnumpy(
+        cp.imag(sim.get_wave_function_at_time(0) * cp.exp(-1j * energy_nd([0], omega=1, hbar=sim.h_bar) * time)))
 
     num_psi = sim.get_wave_function_at_time(time)
     num_psi = asnumpy(num_psi)

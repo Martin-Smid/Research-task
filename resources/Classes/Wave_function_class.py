@@ -5,7 +5,7 @@ from resources.Functions.Schrodinger_eq_functions import *
 from resources.Classes.Simulation_Class import Simulation_Class
 from resources.Classes.Wave_Packet_Class import Packet
 from astropy import units, constants
-
+import os
 
 #-----------------------------------------------------------------------------------------------------------------------
 
@@ -38,12 +38,13 @@ class Wave_function():  # Streamlined and unified evolution logic
         self.h_bar_tilde = self.simulation.h_bar_tilde
 
         self.omega = omega
+        self.st_deviations = st_deviations
         self.packet_type = packet_type
         self.packet_creator = Packet(
             packet_type=self.packet_type,
             momenta=self.momenta,
             means=self.means,
-            st_deviations=st_deviations,
+            st_deviations=self.st_deviations,
             grids=self.grids,
             dx=self.dx,
             h_bar_tilde=self.h_bar_tilde,
@@ -54,20 +55,28 @@ class Wave_function():  # Streamlined and unified evolution logic
 
         self.psi = self.packet_creator.create_psi_0()
         self.desired_soliton_mass = desired_soliton_mass
+
+
         print(f"passed mass is {desired_soliton_mass}")
-        #self.rescale_psi_to_phys_units()
-        self.soliton_mass = self.calculate_soliton_mass_from_spherical_data()
-        print(f"calclulated mass is {self.soliton_mass}")
-        self.scaling_lambda = self.desired_soliton_mass / self.soliton_mass
-        print(self.scaling_lambda)
-        print("above is lambda")
-        self.psi = self._rescale_psi_to_new_scale_based_on_mass()
+        if self.simulation.use_units and os.path.isfile(str(self.packet_type)):
+            print(f"passed mass is {desired_soliton_mass}")
 
-        massss = self.calclulate_soliton_mass()
-        print(f"{massss} sol massss")
+            try:
+                self.soliton_mass = self.calculate_soliton_mass_from_spherical_data()
+                print(f"calculated mass is {self.soliton_mass}")
 
-        self.potential = potential
-        self.gravity_potential = gravity_potential
+                if self.soliton_mass > 0:
+                    self.scaling_lambda = self.desired_soliton_mass / self.soliton_mass
+                    print(self.scaling_lambda)
+                    print("above is lambda")
+                    self.psi = self._rescale_psi_to_new_scale_based_on_mass()
+            except Exception as e:
+                print(f"Warning: Could not rescale mass for packet {self.packet_type}. Using raw packet. Error: {e}")
+
+            massss = self.calclulate_soliton_mass()  # Typo in original method name kept for consistency
+            print(f"{massss} sol massss")
+
+
 
 
     def calclulate_soliton_mass(self):

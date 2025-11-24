@@ -50,8 +50,10 @@ class Propagator_Class:
         for k in self.k_space:
             k_squared_sum += k ** 2
 
+        dt_half = (self.h * time_factor) / 2.0
+        exponent = -1j * dt_half * k_squared_sum * self.h_bar_tilde
+        self.kinetic_propagator = cp.exp(exponent, dtype=cp.complex64)
 
-        self.kinetic_propagator = cp.exp(((-1j * ((self.h*time_factor) / 2) * k_squared_sum )*(self.h_bar_tilde)), dtype=cp.complex64)
         return self.kinetic_propagator
 
 
@@ -69,10 +71,11 @@ class Propagator_Class:
 
         if potential_function is not None:
             potential_values = potential_function(self.simulation)
-            self.static_potential_propagator = cp.exp((-1j * self.h*time_factor * potential_values)/(self.h_bar_tilde) , dtype=cp.complex64)
+            dt = self.h * time_factor / 2
+            exponent = -1j * dt * cp.asarray(potential_values) / self.h_bar_tilde
+            self.static_potential_propagator = cp.exp(exponent, dtype=cp.complex64)
 
         else:
-            # If no potential is provided, use unit propagator (no effect)
             self.static_potential_propagator = cp.ones(self.simulation.grids[0].shape, dtype=cp.complex64)
 
         return self.static_potential_propagator
@@ -139,7 +142,6 @@ class Propagator_Class:
         V_sponge = self.compute_sponge_potential()
         V_total = V_grav + V_self_int + V_sponge
 
-        # DO NOT add static potential here - it's pre-computed in static_propagators
 
         self.total_potential = V_total
         return V_total

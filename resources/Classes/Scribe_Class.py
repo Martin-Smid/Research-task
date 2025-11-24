@@ -72,29 +72,27 @@ class Scribe:
     def save_snapshots(self, wave_functions, step, h):
         """
         Save wave function snapshots at current step.
-
-        Parameters:
-            wave_functions: List of wave function objects
-            step: Current step number
-            h: Time step size
         """
         rho_baryons = cp.zeros_like(self.simulation.grids[0])
         current_time = step * h
+
+        # Save Wave Functions
         for wf_idx, wf in enumerate(wave_functions):
             snapshot_path = f"{self.snapshot_directory}/wf_{wf_idx}_snapshot_at_time_{current_time:.6f}.npy"
             np.save(snapshot_path, cp.asnumpy(wf.psi))
             self.wave_values[wf_idx].append(snapshot_path)
 
-        if hasattr(self.simulation, "baryonic_matter") and self.simulation.baryonic_matter is not None:
+
+        if hasattr(self.simulation, "baryonic_matter") and self.simulation.baryonic_matter:
             for baryons in self.simulation.baryonic_matter:
                 rho_baryons += baryons.deposit_to_grid()
 
             try:
-
                 baryon_path = f"{self.snapshot_directory}/baryons_snapshot_at_time_{current_time:.6f}.npy"
                 np.save(baryon_path, cp.asnumpy(rho_baryons))
             except Exception as e:
                 print(f"[Scribe] Warning: could not save baryon snapshot at time {current_time:.6f}: {e}")
+
         self.accessible_times.append(current_time)
 
     def save_final_state(self, wave_functions, num_steps, save_every, h, total_time):

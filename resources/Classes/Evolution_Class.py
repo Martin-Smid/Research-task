@@ -76,18 +76,22 @@ class Evolution_Class:
 
 
         current_time = 0
-        ix, iy, iz = cp.asnumpy(cp.argwhere(total_density == total_density.max())[0])
+        if self.simulation.dim == 3:
+            ix, iy, iz = cp.asnumpy(cp.argwhere(total_density == total_density.max())[0])
 
-        self.scribe.record_max_location(int(ix), int(iy), int(iz), float(current_time))
-        self._compute_and_save_radial_profile(total_density, current_time, ix, iy, iz)
+            self.scribe.record_max_location(int(ix), int(iy), int(iz), float(current_time))
+            self._compute_and_save_radial_profile(total_density, current_time, ix, iy, iz)
         self.compute_total_energy(wave_functions, total_density, current_time)
 
         # Check mass conservation
         if wave_functions:
-            mass_diff = (
+            try:
+                mass_diff = (
                             (abs(total_density).sum() * (self.simulation.dV ** 3))
                             / wave_functions[0].soliton_mass
                     ) - self.simulation.num_of_w_vects_in_sim
+            except AttributeError:
+                mass_diff = 0
         else:
             mass_diff = 0
             print("no wave functions detected")
@@ -113,8 +117,9 @@ class Evolution_Class:
             self.compute_total_energy(wave_functions, total_density, current_time)
 
             # Track max location
-            ix, iy, iz = cp.asnumpy(cp.argwhere(total_density == total_density.max())[0])
-            self.scribe.record_max_location(int(ix), int(iy), int(iz), float(current_time))
+            if self.simulation.dim == 3:
+                ix, iy, iz = cp.asnumpy(cp.argwhere(total_density == total_density.max())[0])
+                self.scribe.record_max_location(int(ix), int(iy), int(iz), float(current_time))
 
             if step % save_every == 0 and step > 0:
                 save_step = True
@@ -124,7 +129,8 @@ class Evolution_Class:
 
             # Save snapshots and profiles
             if step % save_every == 0 :
-                self._compute_and_save_radial_profile(total_density, current_time, ix, iy, iz)
+                if self.simulation.dim == 3:
+                    self._compute_and_save_radial_profile(total_density, current_time, ix, iy, iz)
                 self.scribe.save_snapshots(wave_functions, step, self.h)
 
             # Memory cleanup
@@ -132,9 +138,10 @@ class Evolution_Class:
 
         # Final state
         total_density = self._compute_total_density(wave_functions)
-        ix, iy, iz = cp.asnumpy(cp.argwhere(total_density == total_density.max())[0])
-        self.scribe.record_max_location(int(ix), int(iy), int(iz), float(current_time))
-        self._compute_and_save_radial_profile(total_density, current_time, ix, iy, iz)
+        if self.simulation.dim == 3:
+            ix, iy, iz = cp.asnumpy(cp.argwhere(total_density == total_density.max())[0])
+            self.scribe.record_max_location(int(ix), int(iy), int(iz), float(current_time))
+            self._compute_and_save_radial_profile(total_density, current_time, ix, iy, iz)
         cp.get_default_memory_pool().free_all_blocks()
 
         # Save final state and finalize
@@ -172,7 +179,7 @@ class Evolution_Class:
         """Second-order split-step evolution."""
         # Kick step (for wave functions if present)
         if wave_functions:
-            self._kick_all_wave_functions(wave_functions, total_density, is_first, is_last)
+            self._kick_all_wave_functions(wave_functions, total_density, is_first, False)
 
         # is there baryonic matter in the sim?
         if getattr(self.simulation, "baryonic_matter", None) is not None:
@@ -186,7 +193,8 @@ class Evolution_Class:
         # Final kick for last step
         if is_last and wave_functions:
             total_density = self._compute_total_density(wave_functions)
-            self._kick_all_wave_functions(wave_functions, total_density, is_first, is_last)
+            self._kick_all_wave_functions(wave_functions, total_density, False, True)
+            print("is last")
 
         return wave_functions
 
@@ -275,8 +283,7 @@ class Evolution_Class:
                 time_factor=time_factor
             )
 
-            # Combine with pre-computed static propagator
-            # Get the appropriate static propagator for this time factor
+
             if time_factor_key in self.static_propagators:
                 static_propagator = self.static_propagators[time_factor_key]
                 full_propagator = dynamic_propagator * static_propagator
@@ -510,7 +517,6 @@ class Evolution_Class:
             self.static_propagators[label] = self.propagator.compute_static_potential_propagator(
                 self.simulation.static_potential, time_factor=factor
             )
-            print("this is static propagator")
             print(self.static_propagators[label])
 
         # Pre-calculate kinetic propagators

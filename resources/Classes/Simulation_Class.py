@@ -208,6 +208,7 @@ class Simulation_Class:
             self.h_bar = 1
             self.G = 1
             self.mass_s = 1
+            self.c = 1
 
     def unpack_boundaries(self):
         """
@@ -313,25 +314,29 @@ class Simulation_Class:
         Sets up the Propagator and Evolution helper classes.
         """
 
-
+        # Extract wave functions from the dictionary storage (used for Wave_vector_class)
         vlnky = []
         for spin in self.wave_vectors:
             vlnky.append(self.wave_vectors[spin])
-        self.wave_vectors = {}
-        self.wave_functions = list(chain.from_iterable(vlnky))
-        print(f"pracuji s len {len(self.wave_functions)}{self.wave_functions}")
 
-        #TODO: make it so that its possible to use sim without units
+
+        wave_vectors_flat = list(chain.from_iterable(vlnky))
+        self.wave_functions.extend(wave_vectors_flat)
+
+
+        self.wave_vectors = {}
+
+        print(f"pracuji s len {len(self.wave_functions)} functions: {self.wave_functions}")
+
+        # TODO: make it so that its possible to use sim without units
         if self.use_units:
             self.calculate_physical_units()
 
         if not self.check_time_step_restriction():
             return
 
-
-
         self.propagator = Propagator_Class(self)
-        self.evolution = Evolution_Class(self, self.propagator,order=self.order_of_evolution)
+        self.evolution = Evolution_Class(self, self.propagator, order=self.order_of_evolution)
 
 
 
@@ -386,7 +391,7 @@ class Simulation_Class:
         # Calculate second constraint based on potential
         if self.static_potential is not None:
             potential_values = self.static_potential(self)
-            phi_max = cp.abs(potential_values).max()
+            phi_max = np.abs(potential_values).max()
         else:
             phi_max = 1e-10  # Small value if no potential is set
 
@@ -394,7 +399,7 @@ class Simulation_Class:
         if phi_max < 1e-10:
             phi_max = 1e-10
 
-        second_constraint = (2 * cp.pi * (self.h_bar_tilde) * (1 / phi_max))
+        second_constraint = (2 * np.pi * (self.h_bar_tilde) * (1 / phi_max))
 
         # Maximum allowed time step
         max_allowed_dt = 0.5 * min(float(first_constraint), float(second_constraint))

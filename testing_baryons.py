@@ -11,7 +11,7 @@ sim = Simulation_Class(
 
     dim=3, # 2D simulation
     boundaries=[(-50, 50),(-50, 50),(-50, 50)], # Spatial boundaries
-    N=128, # Grid resolution
+    N=256, # Grid resolution
     total_time=5, # Total simulation time
     h=0.001, # Time step
     order_of_evolution=2,
@@ -28,7 +28,7 @@ sim = Simulation_Class(
 bulge = Baryons(
 
     simulation=sim,
-    N_particles=2_00_00,
+    N_particles=2_000_000,
     total_mass=1e8, # Msun
     init_profile="hernquist",
     scale_radius=0.5, # kpc
@@ -46,7 +46,7 @@ bulge = Baryons(
 disk = Baryons(
 
     simulation=sim,
-    N_particles=5_00_00,
+    N_particles=5_000_000,
     total_mass=5e8, # Msun
     init_profile="disk",
     radius=3.0, # R_d in kpc
@@ -81,9 +81,9 @@ wave_vector = Wave_vector_class(
 
 
 
-#sim.add_baryons(disk)
-#sim.add_baryons(bulge)
-sim.add_wave_vector(wave_vector)
+sim.add_baryons(disk)
+sim.add_baryons(bulge)
+#sim.add_wave_vector(wave_vector)
 
 # BEFORE evolution - sum all baryonic systems
 rho = cp.zeros((sim.N, sim.N, sim.N), dtype=cp.float64)

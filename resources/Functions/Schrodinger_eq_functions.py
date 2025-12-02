@@ -73,7 +73,7 @@ def gravity_potential(simulation_instance, mass_multiplier=1, center=None):
     r[r==0 ] = epsilon
 
 
-    mass = 1000000
+    mass = 1e8
     G = simulation_instance.G
     #print(mass*G)
 

@@ -5,15 +5,16 @@ from resources.Functions.system_fucntions import *
 from matplotlib.colors import LogNorm
 from resources.Classes.Simulation_Class import Simulation_Class
 from resources.Classes.Wave_vector_class import Wave_vector_class
+from resources.Classes.Nbody_classes.Baryonic_N_body import Baryons
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-20, 20),(-20, 20),(-20, 20)], # Spatial boundaries
     N=128,                             # Grid resolution
     total_time=32.3,                   # Total simulation time
-    h=0.01,                            # Time step
+    h=0.001,                            # Time step
     order_of_evolution=2,
-    use_gravity=True , # Enable gravitational effects
+    use_gravity=False , # Enable gravitational effects
     static_potential=gravity_potential,
     save_max_vals=False,
     self_int=False,
@@ -37,9 +38,22 @@ wave_vector = Wave_vector_class(
 
 )
 
+bulge = Baryons(
 
-sim.add_wave_vector(wave_vector)
+    simulation=sim,
+    N_particles=1,
+    total_mass=1e3, # Msun
+    init_profile="hernquist",
+    scale_radius=0.001, # kpc
+    truncation_radius=0.1, # kpc
+    center=(5.0, 0.0, 0.0),
+    velocity=(0.0, 9.2747, 0.0),
+    vel_sigma=0 # km/s → ~20 kpc/Gyr if you keep units implicit
 
+)
+
+#sim.add_wave_vector(wave_vector)
+sim.add_baryons(bulge)
 #TODO: make it so that baryons are added tp simulations similarly to wave vectors
 #TODO: plot both the wfs and baryons
 #TODO: add conservation of mass during the sim

@@ -370,7 +370,7 @@ class NBodyBaryons:
         Fz_grid = cp.real(cp.fft.ifftn(fz_k))
 
 
-        coords = cp.empty((3, self.N), dtype=cp.float32)
+        coords = cp.empty((3, self.N), dtype=cp.float64)
 
         coords[0] = (self.positions[:, 0] - x_min) / dx
         coords[1] = (self.positions[:, 1] - y_min) / dy

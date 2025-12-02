@@ -127,10 +127,10 @@ plt.show()
 '''
 #------------------------------------------JUST BARYONS-------------------------------------------------
 
-snapshot_dir = "resources/data/simulation_20251124_201322"  # your snapshot folder
+snapshot_dir = "resources/data/simulation_20251202_103722"  # your snapshot folder
 boundaries = [(-50, 50), (-50, 50), (-50, 50)]              # same as in Simulation_Class
 slice_axis = 2                                              # 0=x,1=y,2=z
-time_target =5                                           # pick saved time
+time_target =0.5                                           # pick saved time
 
 import numpy as np
 import matplotlib.pyplot as plt

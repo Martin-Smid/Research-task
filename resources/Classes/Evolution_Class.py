@@ -183,8 +183,12 @@ class Evolution_Class:
 
         # is there baryonic matter in the sim?
         if getattr(self.simulation, "baryonic_matter", None) is not None:
-            potential_grid = self._compose_baryon_potential(total_density)
-            self._drift_baryons(potential_grid)
+            self._drift_baryons(
+                time_factor=1.0,
+                first_step=is_first,
+                last_step=False,
+                wave_functions=wave_functions
+            )
 
         # Drift step (for wave functions if present)
         if wave_functions:
@@ -579,32 +583,44 @@ class Evolution_Class:
             num_wave_functions=self.num_wave_functions
         )
 
-
-
-    def _drift_baryons(self, potential_grid, time_factor=1.0, first_step=False, last_step=False):
+    def _drift_baryons(self, time_factor=1.0, first_step=False, last_step=False, wave_functions=None):
         """
         Update baryonic particle positions and velocities using leapfrog integration.
-        The baryonic system reacts to the total gravitational potential.
-
-        Parameters:
-            potential_grid: Gravitational potential on the grid
-            time_factor: Coefficient for time step (for higher-order methods)
-            first_step: Whether this is the first step (half kick)
-            last_step: Whether this is the last step (half kick)
         """
         if getattr(self.simulation, "baryonic_matter", None) is None:
-            return  # no baryons to evolve
+            return
 
-        baryons = self.simulation.baryonic_matter
-
-        # Adjust time step based on position in split-step sequence
         if first_step or last_step:
             dt = (self.h * time_factor) / 2
         else:
             dt = self.h * time_factor
 
+        # Compute initial potential once for all baryon systems
+        def compute_potential():
+            total_density = self._compute_total_density(wave_functions)
+            return self._compose_baryon_potential(total_density)
+
+        # First half-kick for all systems
+        potential = compute_potential()
         for baryons in self.simulation.baryonic_matter:
-            baryons.integrate_leapfrog(potential_grid, dt)
+            forces = baryons.interpolate_force_from_grid(potential)
+            baryons.velocities += forces * (dt / 2)
+
+        # Drift for all systems
+        for baryons in self.simulation.baryonic_matter:
+            baryons.positions += baryons.velocities * dt
+
+            # Apply periodic boundaries
+            for dim in range(3):
+                low, high = self.simulation.boundaries[dim]
+                width = high - low
+                baryons.positions[:, dim] = ((baryons.positions[:, dim] - low) % width) + low
+
+        # Second half-kick with updated potential
+        potential = compute_potential()
+        for baryons in self.simulation.baryonic_matter:
+            forces = baryons.interpolate_force_from_grid(potential)
+            baryons.velocities += forces * (dt / 2)
 
 
     def _compose_baryon_potential(self, total_density):

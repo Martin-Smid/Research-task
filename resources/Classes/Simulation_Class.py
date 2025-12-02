@@ -4,13 +4,10 @@ from resources.Functions.Schrodinger_eq_functions import *
 from resources.Classes.Propagator_Class import Propagator_Class
 from resources.Classes.Evolution_Class import Evolution_Class
 #from resources.Classes.Baryonic_liquid_Class import BaryonicMatter_Class
-from resources.Classes.Baryonic_N_body import NBodyBaryons
-import pandas as pd
+from resources.Classes.Nbody_classes.Baryonic_N_body import Baryons
 import functools
 import sys
 import inspect
-import os
-import datetime
 from itertools import chain
 import numpy as np
 from astropy import units, constants
@@ -166,7 +163,7 @@ class Simulation_Class:
         self.baryonic_model = baryonic_model
         if self.baryonic_model is not None:
             self.add_baryons(
-                NBodyBaryons(
+                Baryons(
                     self,
                     N_particles=5000,
                     total_mass=53090,
@@ -485,11 +482,11 @@ class Simulation_Class:
 
         Parameters
         ----------
-        baryonic_system : NBodyBaryons or list of NBodyBaryons
+        baryonic_system : Baryons or list of NBodyBaryons
             Instance or list of resources.Classes.Baryonic_N_body.NBodyBaryons
             constructed with this Simulation_Class as the `simulation` argument.
         """
-        from resources.Classes.Baryonic_N_body import NBodyBaryons
+        from resources.Classes.Nbody_classes.Baryonic_N_body import Baryons
 
         # Handle list of baryonic systems
         if isinstance(baryonic_system, list):
@@ -498,7 +495,7 @@ class Simulation_Class:
             return
 
         # Validate single system
-        if not isinstance(baryonic_system, NBodyBaryons):
+        if not isinstance(baryonic_system, Baryons):
             raise TypeError(
                 f"add_baryons expected NBodyBaryons instance or list, got {type(baryonic_system)}"
             )

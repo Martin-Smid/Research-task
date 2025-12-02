@@ -1,8 +1,3 @@
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-from resources.Classes.Wave_function_class import *
-from resources.Functions.system_fucntions import *
-from matplotlib.colors import LogNorm
 from resources.Classes.Simulation_Class import Simulation_Class
 from resources.Classes.Wave_vector_class import Wave_vector_class
 import matplotlib.pyplot as plt
@@ -10,13 +5,13 @@ import numpy as np
 import cupy as cp
 
 
-from resources.Classes.Baryonic_N_body import NBodyBaryons
+from resources.Classes.Nbody_classes.Baryonic_N_body import Baryons
 
 sim = Simulation_Class(
 
     dim=3, # 2D simulation
     boundaries=[(-50, 50),(-50, 50),(-50, 50)], # Spatial boundaries
-    N=256, # Grid resolution
+    N=128, # Grid resolution
     total_time=5, # Total simulation time
     h=0.001, # Time step
     order_of_evolution=2,
@@ -30,7 +25,7 @@ sim = Simulation_Class(
 
 
 
-bulge = NBodyBaryons(
+bulge = Baryons(
 
     simulation=sim,
     N_particles=2_000_00,
@@ -48,7 +43,7 @@ bulge = NBodyBaryons(
 
 
 
-disk = NBodyBaryons(
+disk = Baryons(
 
     simulation=sim,
     N_particles=5_000_00,
@@ -86,9 +81,9 @@ wave_vector = Wave_vector_class(
 
 
 
-sim.add_baryons(disk)
-sim.add_baryons(bulge)
-#sim.add_wave_vector(wave_vector)
+#sim.add_baryons(disk)
+#sim.add_baryons(bulge)
+sim.add_wave_vector(wave_vector)
 
 # BEFORE evolution - sum all baryonic systems
 rho = cp.zeros((sim.N, sim.N, sim.N), dtype=cp.float64)

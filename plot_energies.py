@@ -1,13 +1,19 @@
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 
 # 🔧 MANUALLY SET YOUR DIRECTORIES HERE
 simulation_dirs = [
 
 
-    'resources/data/simulation_20251124_155747',
-    ''
+
+
+
+    "resources/data/simulation_20251202_130613"
+
+
+
 
 ]
 
@@ -158,10 +164,10 @@ def plot_virial_check(paths):
         W_self     = df["W_self"]
 
         # Total kinetic (waves + baryons)
-        K_tot_for_virial = K_flow + U_quantum + K_baryons
+
 
         # Virial residual: should be ~0 for a relaxed, self-gravitating system
-        virial_residual = 2.0 * K_tot_for_virial + W_self
+        virial_residual = 2 * (K_flow + U_quantum + K_baryons) / np.abs(W_self)
 
         label = os.path.basename(os.path.normpath(path))
         plt.plot(time, virial_residual, label=f"{label}: 2K_tot + W_self")

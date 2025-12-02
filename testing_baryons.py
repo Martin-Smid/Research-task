@@ -28,8 +28,8 @@ sim = Simulation_Class(
 bulge = Baryons(
 
     simulation=sim,
-    N_particles=2_000_00,
-    total_mass=1e10, # Msun
+    N_particles=2_00_00,
+    total_mass=1e8, # Msun
     init_profile="hernquist",
     scale_radius=0.5, # kpc
     truncation_radius=1.5, # kpc
@@ -46,8 +46,8 @@ bulge = Baryons(
 disk = Baryons(
 
     simulation=sim,
-    N_particles=5_000_00,
-    total_mass=5e10, # Msun
+    N_particles=5_00_00,
+    total_mass=5e8, # Msun
     init_profile="disk",
     radius=3.0, # R_d in kpc
     height=0.3, # z_0 in kpc

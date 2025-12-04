@@ -177,12 +177,13 @@ class Evolution_Class:
 
     def _evolve_order_2(self, wave_functions, total_density, is_first, is_last, save_step):
         """Second-order split-step evolution."""
-        # Kick step (for wave functions if present)
+
         if wave_functions:
             self._kick_all_wave_functions(wave_functions, total_density, is_first, False)
 
         # is there baryonic matter in the sim?
-        if getattr(self.simulation, "baryonic_matter", None) is not None:
+        if self.simulation.baryonic_matter:
+            print("baryonic matter")
             self._drift_baryons(
                 time_factor=1.0,
                 first_step=is_first,
@@ -220,7 +221,7 @@ class Evolution_Class:
                     self._kick_all_wave_functions(wave_functions, total_density, first_op, last_op, coeff_key)
 
                 # Evolve baryons at appropriate kick steps
-                if getattr(self.simulation, "baryonic_matter", None) is not None:
+                if self.simulation.baryonic_matter:
                     potential_grid = self._compose_baryon_potential(total_density)
                     time_factor = self.coefficients[coeff_key]
                     self._drift_baryons(
@@ -256,7 +257,7 @@ class Evolution_Class:
                     self._kick_all_wave_functions(wave_functions, total_density, first_kick, last_kick, coeff_key)
 
                 # Evolve baryons at appropriate kick steps
-                if getattr(self.simulation, "baryonic_matter", None) is not None:
+                if self.simulation.baryonic_matter:
                     potential_grid = self.propagator.compute_gravity_potential(total_density)
                     time_factor = self.coefficients[coeff_key]
                     self._drift_baryons(
@@ -585,42 +586,91 @@ class Evolution_Class:
 
     def _drift_baryons(self, time_factor=1.0, first_step=False, last_step=False, wave_functions=None):
         """
-        Update baryonic particle positions and velocities using leapfrog integration.
+        Update baryonic particle positions/velocities with substeps.
+        UPDATES density/potential inside the loop for energy conservation.
         """
-        if getattr(self.simulation, "baryonic_matter", None) is None:
+        if not self.simulation.baryonic_matter:
             return
 
+        print("do I get here?")
+        # 1. Determine total time window for this drift
         if first_step or last_step:
-            dt = (self.h * time_factor) / 2
+            total_dt_window = (self.h * time_factor) / 2
         else:
-            dt = self.h * time_factor
+            total_dt_window = self.h * time_factor
 
-        # Compute initial potential once for all baryon systems
-        def compute_potential():
-            total_density = self._compute_total_density(wave_functions)
-            return self._compose_baryon_potential(total_density)
+        # 2. Compute Wave Function Density ONCE (Frozen during baryon substeps)
+        #    We do this manually here to avoid re-calculating it inside the loop
+        shape = (self.simulation.N,) * self.simulation.dim
+        rho_waves = cp.zeros(shape, dtype=cp.float64)
+        if wave_functions:
+            for wf in wave_functions:
+                rho_waves += wf.calculate_density()
 
-        # First half-kick for all systems
-        potential = compute_potential()
+        # 3. Setup Substeps
+        #    Calculate max velocity to determine safe substep count
+        v_max = 0.0
         for baryons in self.simulation.baryonic_matter:
-            forces = baryons.interpolate_force_from_grid(potential)
-            baryons.velocities += forces * (dt / 2)
+            v_sq = cp.sum(baryons.velocities ** 2, axis=1)
+            local_max = float(cp.sqrt(cp.max(v_sq)))
+            if local_max > v_max:
+                v_max = local_max
 
-        # Drift for all systems
-        for baryons in self.simulation.baryonic_matter:
-            baryons.positions += baryons.velocities * dt
+        if v_max < 1e-10: v_max = 1e-10
+        min_dx = min(self.simulation.dx)
 
-            # Apply periodic boundaries
-            for dim in range(3):
-                low, high = self.simulation.boundaries[dim]
-                width = high - low
-                baryons.positions[:, dim] = ((baryons.positions[:, dim] - low) % width) + low
+        # CFL Condition: Cross only 10% of a cell per substep
+        cfl_factor = 0.1
+        dt_safe = cfl_factor * (min_dx / v_max)
 
-        # Second half-kick with updated potential
-        potential = compute_potential()
-        for baryons in self.simulation.baryonic_matter:
-            forces = baryons.interpolate_force_from_grid(potential)
-            baryons.velocities += forces * (dt / 2)
+        num_substeps = int(np.ceil(total_dt_window / dt_safe))
+        num_substeps = max(1, min(num_substeps, 50))  # Cap at 50 to prevent freezing
+        dt_sub = total_dt_window / num_substeps
+
+        # --- SUBSTEP LOOP ---
+        for step_i in range(num_substeps):
+
+            # A. Compute Current Potential (Baryons + Waves)
+            #    We must re-deposit baryons every substep because they moved!
+            total_density = rho_waves.copy()
+            for baryons in self.simulation.baryonic_matter:
+                total_density += baryons.deposit_to_grid()
+
+            # Solve Poisson (This is the expensive part, but necessary for Virial stability)
+            potential_grid = self._compose_baryon_potential(total_density)
+
+            # B. Apply Kick-Drift-Kick (Velocity Verlet) for this substep
+            #    Note: Ideally we would reuse the potential from the end of the previous
+            #    substep, but for clarity/stability, we compute fresh here.
+
+            for baryons in self.simulation.baryonic_matter:
+                # 1. First Half-Kick (v += a * dt/2)
+                forces = baryons.interpolate_force_from_grid(potential_grid)
+                baryons.velocities += forces * (dt_sub / 2)
+
+                # 2. Full Drift (x += v * dt)
+                baryons.positions += baryons.velocities * dt_sub
+
+                # Periodic Boundaries
+                for dim in range(3):
+                    low, high = self.simulation.boundaries[dim]
+                    width = high - low
+                    baryons.positions[:, dim] = ((baryons.positions[:, dim] - low) % width) + low
+
+            # C. UPDATE POTENTIAL (The Critical Fix)
+            #    Particles moved, so we MUST update the potential for the closing kick
+
+            total_density = rho_waves.copy()
+            for baryons in self.simulation.baryonic_matter:
+                total_density += baryons.deposit_to_grid()
+
+            # Re-solve Poisson
+            potential_grid = self._compose_baryon_potential(total_density)
+
+            for baryons in self.simulation.baryonic_matter:
+                # 3. Second Half-Kick (v += a * dt/2) using NEW potential
+                forces = baryons.interpolate_force_from_grid(potential_grid)
+                baryons.velocities += forces * (dt_sub / 2)
 
 
     def _compose_baryon_potential(self, total_density):

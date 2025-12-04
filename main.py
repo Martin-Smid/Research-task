@@ -15,7 +15,7 @@ def my_hardcoded_potential(sim_obj):
 
 sim = Simulation_Class(
     dim=1,                             # 2D simulation
-    boundaries=[(-40, 40)], # Spatial boundaries
+    boundaries=[(-10, 10)], # Spatial boundaries
     N=128,                             # Grid resolution
     total_time=2.0,                   # Total simulation time
     h=0.01,                            # Time step

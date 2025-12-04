@@ -177,14 +177,11 @@ class Propagator_Class:
 
         k_squared_sum = sum(k ** 2 for k in self.k_space)
 
-        # Add softening: k² + (2π/λ_s)²
-        k_soft_sq = k_squared_sum + (2 * cp.pi / softening) ** 2
+        mask_zero = k_squared_sum == 0
+        k_squared_sum[mask_zero] = 1.0
 
-        mask = k_squared_sum == 0
-        k_soft_sq[mask] = 1
+        potential_k = (-4 * cp.pi * self.G * density_k) / k_squared_sum.astype(cp.complex64)
+        potential_k[mask_zero] = 0.0
 
-        potential_k = (-4 * cp.pi * self.G * density_k) / k_soft_sq.astype(cp.complex64)
-        potential_k[mask] = 0
-
-        potential = cp.fft.ifftn(potential_k).real.astype(cp.float32)
+        potential = cp.fft.ifftn(potential_k).real.astype(cp.float64)
         return potential

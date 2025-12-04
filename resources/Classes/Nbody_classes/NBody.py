@@ -147,6 +147,8 @@ class NBody:
         coords[1] = (self.positions[:, 1] - y_min) / dy
         coords[2] = (self.positions[:, 2] - z_min) / dz
 
+
+        #order 1 results in highest precision
         Fx = ndimage.map_coordinates(Fx_grid, coords, order=1, mode='wrap')
         Fy = ndimage.map_coordinates(Fy_grid, coords, order=1, mode='wrap')
         Fz = ndimage.map_coordinates(Fz_grid, coords, order=1, mode='wrap')

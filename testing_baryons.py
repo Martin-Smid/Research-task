@@ -10,8 +10,8 @@ from resources.Classes.Nbody_classes.Baryonic_N_body import Baryons
 sim = Simulation_Class(
 
     dim=3, # 2D simulation
-    boundaries=[(-50, 50),(-50, 50),(-50, 50)], # Spatial boundaries
-    N=256, # Grid resolution
+    boundaries=[(-25, 25),(-25, 25),(-25, 25)], # Spatial boundaries
+    N=128, # Grid resolution
     total_time=5, # Total simulation time
     h=0.001, # Time step
     order_of_evolution=2,
@@ -28,11 +28,11 @@ sim = Simulation_Class(
 bulge = Baryons(
 
     simulation=sim,
-    N_particles=2_000_000,
+    N_particles=2_00_00,
     total_mass=1e8, # Msun
     init_profile="hernquist",
     scale_radius=0.5, # kpc
-    truncation_radius=1.5, # kpc
+    truncation_radius=1, # kpc
     center=(0.0, 0.0, 0.0),
     velocity=(0.0, 0.0, 0.0),
     vel_sigma=20.0 # km/s → ~20 kpc/Gyr if you keep units implicit
@@ -46,10 +46,10 @@ bulge = Baryons(
 disk = Baryons(
 
     simulation=sim,
-    N_particles=5_000_000,
+    N_particles=5_00_00,
     total_mass=5e8, # Msun
     init_profile="disk",
-    radius=3.0, # R_d in kpc
+    radius=1.50, # R_d in kpc
     height=0.3, # z_0 in kpc
     center=(0.0, 0.0, 0.0),
     velocity=(0.0, 0.0, 0.0), # no bulk COM motion

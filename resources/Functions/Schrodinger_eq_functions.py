@@ -73,10 +73,10 @@ def gravity_potential(simulation_instance, mass_multiplier=1, center=None):
     r[r==0 ] = epsilon
 
 
-    mass = 1e6
+    mass = 1e8
     G = simulation_instance.G
     #print(mass*G)
-
+    #print(np.sqrt(G*mass/5))
     # Calculate potential
     potential = -(G * mass) / r
 

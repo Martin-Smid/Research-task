@@ -51,7 +51,7 @@ for i in range(1):
 
     vlna = Wave_vector_class(
         packet_type="resources/solitons/GroundState(1).dat",
-        means=means,
+        means=[0,0,0],
         st_deviations=[0.5, 0.5, 0.5],
         simulation=sim,
         mass=1,

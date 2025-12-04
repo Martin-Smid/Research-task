@@ -183,11 +183,11 @@ class Evolution_Class:
 
         # is there baryonic matter in the sim?
         if self.simulation.baryonic_matter:
-            print("baryonic matter")
+
             self._drift_baryons(
                 time_factor=1.0,
                 first_step=is_first,
-                last_step=False,
+                last_step=is_last,
                 wave_functions=wave_functions
             )
 
@@ -592,8 +592,7 @@ class Evolution_Class:
         if not self.simulation.baryonic_matter:
             return
 
-        print("do I get here?")
-        # 1. Determine total time window for this drift
+
         if first_step or last_step:
             total_dt_window = (self.h * time_factor) / 2
         else:
@@ -620,11 +619,12 @@ class Evolution_Class:
         min_dx = min(self.simulation.dx)
 
         # CFL Condition: Cross only 10% of a cell per substep
-        cfl_factor = 0.1
+        cfl_factor = 0.25
         dt_safe = cfl_factor * (min_dx / v_max)
 
         num_substeps = int(np.ceil(total_dt_window / dt_safe))
         num_substeps = max(1, min(num_substeps, 50))  # Cap at 50 to prevent freezing
+        print(f"Substeps: {num_substeps}")
         dt_sub = total_dt_window / num_substeps
 
         # --- SUBSTEP LOOP ---
@@ -657,8 +657,6 @@ class Evolution_Class:
                     width = high - low
                     baryons.positions[:, dim] = ((baryons.positions[:, dim] - low) % width) + low
 
-            # C. UPDATE POTENTIAL (The Critical Fix)
-            #    Particles moved, so we MUST update the potential for the closing kick
 
             total_density = rho_waves.copy()
             for baryons in self.simulation.baryonic_matter:

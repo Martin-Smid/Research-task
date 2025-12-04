@@ -179,7 +179,7 @@ class Evolution_Class:
         """Second-order split-step evolution."""
 
         if wave_functions:
-            self._kick_all_wave_functions(wave_functions, total_density, is_first, False)
+            self._kick_all_wave_functions(wave_functions, total_density, is_first, is_last)
 
         # is there baryonic matter in the sim?
         if self.simulation.baryonic_matter:

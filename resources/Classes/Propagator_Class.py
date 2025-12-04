@@ -68,13 +68,10 @@ class Propagator_Class:
             cp.ndarray: The potential propagator in real space
         """
 
-
         if potential_function is not None:
             potential_values = potential_function(self.simulation)
-            dt = self.h * time_factor / 2
-            exponent = -1j * dt * cp.asarray(potential_values) / self.h_bar_tilde
+            exponent = -1j * self.h * time_factor * cp.asarray(potential_values) / self.h_bar_tilde
             self.static_potential_propagator = cp.exp(exponent, dtype=cp.complex64)
-
         else:
             self.static_potential_propagator = cp.ones(self.simulation.grids[0].shape, dtype=cp.complex64)
 

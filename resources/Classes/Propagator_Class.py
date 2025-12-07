@@ -164,20 +164,20 @@ class Propagator_Class:
         return propagator
 
     def solve_poisson(self, density, softening=None):
-        """
-        Solve Poisson equation with optional softening.
-        """
         if softening is None:
-            softening = 0.5 * min(self.dx)  # Half grid spacing
+            softening = 0.1 * min(self.dx)
 
         density_k = cp.fft.fftn((density - cp.mean(density)).astype(cp.complex64))
-
         k_squared_sum = sum(k ** 2 for k in self.k_space)
 
-        mask_zero = k_squared_sum == 0
-        k_squared_sum[mask_zero] = 1.0
+        # APPLY SOFTENING
+        softening_k = (2 * cp.pi / softening) ** 2
+        k_squared_softened = k_squared_sum + softening_k
 
-        potential_k = (-4 * cp.pi * self.G * density_k) / k_squared_sum.astype(cp.complex64)
+        mask_zero = k_squared_softened == 0
+        k_squared_softened[mask_zero] = 1.0
+
+        potential_k = (-4 * cp.pi * self.G * density_k) / k_squared_softened.astype(cp.complex64)
         potential_k[mask_zero] = 0.0
 
         potential = cp.fft.ifftn(potential_k).real.astype(cp.float64)

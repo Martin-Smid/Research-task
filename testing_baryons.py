@@ -10,10 +10,10 @@ from resources.Classes.Nbody_classes.Baryonic_N_body import Baryons
 sim = Simulation_Class(
 
     dim=3, # 2D simulation
-    boundaries=[(-15, 15),(-15, 15),(-15, 15)], # Spatial boundaries
+    boundaries=[(-50, 50),(-50, 50),(-50, 50)], # Spatial boundaries
     N=128, # Grid resolution
     total_time=1, # Total simulation time
-    h=0.0005, # Time step
+    h=3.33e-04, # Time step
     order_of_evolution=2,
     use_gravity=True, # Enable gravitational effects
     static_potential=None,
@@ -23,6 +23,21 @@ sim = Simulation_Class(
 
 )
 
+baryons = Baryons(
+    simulation=sim,
+    N_particles=int(1e6),
+    total_mass=0,
+    init_profile="from_file",
+    file_path="resources/solitons/Test100_S0_Nbody.bin",
+
+
+    dist_factor=1000.0,
+
+
+    apply_center_offset=True,
+    center=(-50,-50,-50)
+
+)
 
 
 bulge = Baryons(
@@ -110,7 +125,7 @@ wave_vector = Wave_vector_class(
 
 
 #sim.add_baryons(baryon1)
-sim.add_baryons(bulge)
+sim.add_baryons(baryons)
 #sim.add_wave_vector(wave_vector)
 
 # BEFORE evolution - sum all baryonic systems
@@ -167,7 +182,7 @@ plt.tight_layout()
 plt.show()
 
 
-sim.evolve(save_every=10)
+sim.evolve(save_every=50)
 
 # AFTER evolution - sum all baryonic systems again
 rho = cp.zeros((sim.N, sim.N, sim.N), dtype=cp.float64)

@@ -33,7 +33,7 @@ class NBody:
     # Generic grid-coupling methods
     # ----------------------------
 
-    def deposit_to_grid(self):
+    '''def deposit_to_grid(self):
         """
         Deposit particle masses to grid using Cloud-In-Cell (CIC) (GPU: CuPy).
         Uses sim.dx directly to ensure consistency with the fixed boundary logic.
@@ -105,16 +105,11 @@ class NBody:
             contribution = mass_val * w
             cp.add.at(rho_grid.ravel(), flat_indices, contribution)
 
-        return rho_grid
+        return rho_grid'''
 
     def interpolate_force_from_grid(self, potential_grid):
-        """
-        Calculate forces entirely on the GPU to avoid Host-Device transfers.
-        Correctly calculates dx/dy/dz from boundaries and grid shape to ensure
-        consistency with the FFT grid.
-        """
+        """Calculate forces using CIC interpolation (matches deposition)."""
         sim = self.simulation
-
         Nx, Ny, Nz = potential_grid.shape
 
         (x_min, x_max) = sim.boundaries[0]
@@ -125,36 +120,23 @@ class NBody:
         dy = (y_max - y_min) / Ny
         dz = (z_max - z_min) / Nz
 
-        # F = -∇Φ
+        # Compute force grids via FFT
         kx = 2 * cp.pi * cp.fft.fftfreq(Nx, d=dx)
         ky = 2 * cp.pi * cp.fft.fftfreq(Ny, d=dy)
         kz = 2 * cp.pi * cp.fft.fftfreq(Nz, d=dz)
 
         Phi_k = cp.fft.fftn(potential_grid)
 
-        # force components in k-space: F_k = -ik * Phi_k
         fx_k = -1j * kx[:, None, None] * Phi_k
         fy_k = -1j * ky[None, :, None] * Phi_k
         fz_k = -1j * kz[None, None, :] * Phi_k
 
-        # back to real space (Forces on grid)
         Fx_grid = cp.real(cp.fft.ifftn(fx_k))
         Fy_grid = cp.real(cp.fft.ifftn(fy_k))
         Fz_grid = cp.real(cp.fft.ifftn(fz_k))
 
-        coords = cp.empty((3, self.N), dtype=cp.float64)
-        coords[0] = (self.positions[:, 0] - x_min) / dx
-        coords[1] = (self.positions[:, 1] - y_min) / dy
-        coords[2] = (self.positions[:, 2] - z_min) / dz
-
-
-        #order 1 results in highest precision
-        Fx = ndimage.map_coordinates(Fx_grid, coords, order=1, mode='wrap')
-        Fy = ndimage.map_coordinates(Fy_grid, coords, order=1, mode='wrap')
-        Fz = ndimage.map_coordinates(Fz_grid, coords, order=1, mode='wrap')
-
-        forces = cp.stack((Fx, Fy, Fz), axis=1)
-        return forces
+        # Use CIC interpolation instead of map_coordinates
+        return self.interpolate_force_from_grid_CIC(Fx_grid, Fy_grid, Fz_grid)
 
     def integrate_leapfrog(self, force_computer, dt):
         """
@@ -221,3 +203,149 @@ class NBody:
         ux, uy, uz = rx / r, ry / r, rz / r
         dphidr = dphidx[ix, iy, iz] * ux + dphidy[ix, iy, iz] * uy + dphidz[ix, iy, iz] * uz
         return np.sqrt(abs(r * dphidr))
+
+
+
+    def deposit_to_grid(self):
+        """Deposit with atomic operations via cupyx.scatter_add"""
+        import cupyx
+        sim = self.simulation
+        shape = (sim.N,) * sim.dim
+        rho_grid = cp.zeros(shape, dtype=cp.float64)
+
+        sim = self.simulation
+
+        # 1. Initialize density grid on GPU
+        shape = (sim.N,) * sim.dim
+        rho_grid = cp.zeros(shape, dtype=cp.float64)
+
+        # 2. Get Grid Spacing & Boundaries directly from Simulation
+        dx, dy, dz = sim.dx
+
+        (x_min, x_max) = sim.boundaries[0]
+        (y_min, y_max) = sim.boundaries[1]
+        (z_min, z_max) = sim.boundaries[2]
+
+        Lx = x_max - x_min
+        Ly = y_max - y_min
+        Lz = z_max - z_min
+
+        # 3. Periodic Wrap of Positions (GPU)
+        px = x_min + cp.mod(self.positions[:, 0] - x_min, Lx)
+        py = y_min + cp.mod(self.positions[:, 1] - y_min, Ly)
+        pz = z_min + cp.mod(self.positions[:, 2] - z_min, Lz)
+
+        # 4. Convert to Fractional Grid Indices (GPU)
+        fx = (px - x_min) / dx
+        fy = (py - y_min) / dy
+        fz = (pz - z_min) / dz
+
+        # 5. Cloud-In-Cell (CIC) Interpolation Weights (GPU)
+        i0 = cp.floor(fx).astype(cp.int32)
+        j0 = cp.floor(fy).astype(cp.int32)
+        k0 = cp.floor(fz).astype(cp.int32)
+
+        tx = fx - i0
+        ty = fy - j0
+        tz = fz - k0
+
+        wx0, wx1 = 1.0 - tx, tx
+        wy0, wy1 = 1.0 - ty, ty
+        wz0, wz1 = 1.0 - tz, tz
+
+        # 6. Handle Periodic Wrapping for Indices (GPU)
+        N = sim.N
+        i1 = (i0 + 1) % N
+        j1 = (j0 + 1) % N
+        k1 = (k0 + 1) % N
+        i0 = i0 % N
+        j0 = j0 % N
+        k0 = k0 % N
+
+        # 7. Mass Deposit
+        cell_volume = dx * dy * dz
+        mass_val = self.m_particle / cell_volume
+
+        corners_weights = [
+            (wx0 * wy0 * wz0, i0, j0, k0), (wx1 * wy0 * wz0, i1, j0, k0),
+            (wx0 * wy1 * wz0, i0, j1, k0), (wx1 * wy1 * wz0, i1, j1, k0),
+            (wx0 * wy0 * wz1, i0, j0, k1), (wx1 * wy0 * wz1, i1, j0, k1),
+            (wx0 * wy1 * wz1, i0, j1, k1), (wx1 * wy1 * wz1, i1, j1, k1)
+        ]
+
+        N_sq = N * N
+        rho_flat = rho_grid.ravel()
+
+        for w, ii, jj, kk in corners_weights:
+            flat_indices = ii * N_sq + jj * N + kk
+            contribution = mass_val * w
+
+            # Thread-safe scatter add
+            cupyx.scatter_add(rho_flat, flat_indices, contribution)
+
+        if cp.any(cp.isnan(rho_grid)) or cp.any(rho_grid < 0):
+            print(f"⚠️  DENSITY CORRUPTION DETECTED!")
+            print(f"   NaN count: {cp.sum(cp.isnan(rho_grid))}")
+            print(f"   Negative count: {cp.sum(rho_grid < 0)}")
+            print(f"   Max density: {cp.max(rho_grid):.3e}")
+
+        total_deposited = cp.sum(rho_grid) * cell_volume
+        expected_mass = self.N * self.m_particle
+        error = abs(total_deposited - expected_mass) / expected_mass
+
+        if error > 1e-6:
+            print(f"⚠️  MASS CONSERVATION ERROR: {error:.3e}")
+
+        return rho_grid
+
+    def interpolate_force_from_grid_CIC(self, Fx_grid, Fy_grid, Fz_grid):
+        """
+        Interpolate forces using CIC (matching the deposition scheme).
+        """
+        sim = self.simulation
+        dx, dy, dz = sim.dx
+        (x_min, x_max) = sim.boundaries[0]
+        (y_min, y_max) = sim.boundaries[1]
+        (z_min, z_max) = sim.boundaries[2]
+
+        Lx, Ly, Lz = x_max - x_min, y_max - y_min, z_max - z_min
+
+        # Periodic wrap
+        px = x_min + cp.mod(self.positions[:, 0] - x_min, Lx)
+        py = y_min + cp.mod(self.positions[:, 1] - y_min, Ly)
+        pz = z_min + cp.mod(self.positions[:, 2] - z_min, Lz)
+
+        # Fractional indices
+        fx = (px - x_min) / dx
+        fy = (py - y_min) / dy
+        fz = (pz - z_min) / dz
+
+        i0 = cp.floor(fx).astype(cp.int32)
+        j0 = cp.floor(fy).astype(cp.int32)
+        k0 = cp.floor(fz).astype(cp.int32)
+
+        tx, ty, tz = fx - i0, fy - j0, fz - k0
+        wx0, wx1 = 1.0 - tx, tx
+        wy0, wy1 = 1.0 - ty, ty
+        wz0, wz1 = 1.0 - tz, tz
+
+        N = sim.N
+        i1, j1, k1 = (i0 + 1) % N, (j0 + 1) % N, (k0 + 1) % N
+        i0, j0, k0 = i0 % N, j0 % N, k0 % N
+
+        # Interpolate each force component using same CIC weights
+        forces = cp.zeros((self.N, 3), dtype=cp.float64)
+
+        corners = [
+            (wx0 * wy0 * wz0, i0, j0, k0), (wx1 * wy0 * wz0, i1, j0, k0),
+            (wx0 * wy1 * wz0, i0, j1, k0), (wx1 * wy1 * wz0, i1, j1, k0),
+            (wx0 * wy0 * wz1, i0, j0, k1), (wx1 * wy0 * wz1, i1, j0, k1),
+            (wx0 * wy1 * wz1, i0, j1, k1), (wx1 * wy1 * wz1, i1, j1, k1)
+        ]
+
+        for w, ii, jj, kk in corners:
+            forces[:, 0] += w * Fx_grid[ii, jj, kk]
+            forces[:, 1] += w * Fy_grid[ii, jj, kk]
+            forces[:, 2] += w * Fz_grid[ii, jj, kk]
+
+        return forces

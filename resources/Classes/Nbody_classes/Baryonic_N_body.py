@@ -3,7 +3,7 @@ import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 import cupyx.scipy.ndimage as ndimage
 from resources.Classes.Nbody_classes.NBody import NBody
-
+import os
 import cupy as cp
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
@@ -144,6 +144,33 @@ class Baryons(NBody):
                 radius=radius,
                 velocity=velocity,
                 vel_sigma=vel_sigma
+            )
+        elif init_profile == "from_file":
+            file_path = kwargs.get('file_path')
+
+            # Default center to the middle of the simulation box
+            if center is None:
+                center = tuple(
+                    0.5 * (self.simulation.boundaries[i][0] + self.simulation.boundaries[i][1])
+                    for i in range(3)
+                )
+
+            # Check if user wants to offset (Default to True usually for external files)
+            apply_center_offset = kwargs.get('apply_center_offset', True)
+
+            # Get scaling factors
+            dist_factor = kwargs.get('dist_factor', 1.0)
+            vel_factor = kwargs.get('vel_factor', 1.0)
+
+            if file_path is None:
+                raise ValueError("init_profile='from_file' requires a 'file_path' argument.")
+
+            self.initialize_from_file(
+                file_path,
+                center,
+                apply_center_offset,
+                dist_factor=dist_factor,
+                vel_factor=vel_factor
             )
 
         else:
@@ -469,3 +496,63 @@ class Baryons(NBody):
         # Small **vertical** dispersion (GPU)
         sigma = vel_sigma * 1.0227  # km/s → kpc/Gyr
         self.velocities[:, 2] += cp.random.normal(0, sigma, self.N)
+
+    def initialize_from_file(self, file_path, center, apply_center_offset=False, dist_factor=1.0, vel_factor=1.0):
+        """
+        Load particle data from a binary file.
+        """
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"Binary file not found: {file_path}")
+
+        print(f"Loading N-body data from: {file_path}")
+
+        raw_data = np.fromfile(file_path, dtype=np.float64)
+
+        # 1. Extract Particle Mass
+        self.m_particle = float(raw_data[0])
+
+        # 2. Extract Data Arrays
+        data = raw_data[1:]
+        N_in_file = data.size // 6
+
+        print(f"  -> Applying Distance Factor: {dist_factor}")
+
+        # Slice and Scale
+        x_cpu = data[:N_in_file] * dist_factor
+        y_cpu = data[N_in_file: 2 * N_in_file] * dist_factor
+        z_cpu = data[2 * N_in_file: 3 * N_in_file] * dist_factor
+
+        vx_cpu = data[3 * N_in_file: 4 * N_in_file] * vel_factor
+        vy_cpu = data[4 * N_in_file: 5 * N_in_file] * vel_factor
+        vz_cpu = data[5 * N_in_file:] * vel_factor
+
+        # 3. Handle Mismatch
+        if N_in_file < self.N:
+            raise ValueError(f"Simulation requires {self.N} particles, but file only contains {N_in_file}.")
+
+        indices = np.arange(self.N)
+
+        # Transfer to GPU
+        self.positions[:, 0] = cp.asarray(x_cpu[indices])
+        self.positions[:, 1] = cp.asarray(y_cpu[indices])
+        self.positions[:, 2] = cp.asarray(z_cpu[indices])
+
+        self.velocities[:, 0] = cp.asarray(vx_cpu[indices])
+        self.velocities[:, 1] = cp.asarray(vy_cpu[indices])
+        self.velocities[:, 2] = cp.asarray(vz_cpu[indices])
+
+        # 4. Apply Center Offset
+        # This fixes the "Corners" bug by moving (0,0,0) to (Box/2, Box/2, Box/2)
+        if apply_center_offset:
+            print(f"  -> Shifting particles by center: {center}")
+            self.positions[:, 0] += center[0]
+            self.positions[:, 1] += center[1]
+            self.positions[:, 2] += center[2]
+
+        # 5. Periodic Wrap (Safety check)
+        sim = self.simulation
+        for dim in range(3):
+            low, high = sim.boundaries[dim]
+            L = high - low
+            # The wrap ensures particles are strictly inside [low, high]
+            self.positions[:, dim] = ((self.positions[:, dim] - low) % L) + low

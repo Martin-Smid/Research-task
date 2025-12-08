@@ -206,9 +206,10 @@ class Scribe:
             "W/|E|": float(W_over_E),
         })
 
-        line = (f"{float(time):.6e},{float(K_total):.6e},{float(W):.6e},{float(E):.6e},"
-                f"{float(K_flow):.6e},{float(U_quantum):.6e},{float(K_baryons):.6e},"
-                f"{float(W_self):.6e},{float(W_static):.6e},{float(W_over_E):.6e}\n")
+        line = (f"{float(time):.15e},{float(K_total):.15e},{float(W):.15e},{float(E):.15e},"
+                f"{float(K_flow):.15e},{float(U_quantum):.15e},{float(K_baryons):.15e},"
+                f"{float(W_self):.15e},{float(W_static):.15e},{float(W_over_E):.15e}\n")
+
 
         # Open in 'a' (append) mode
         try:
@@ -221,7 +222,7 @@ class Scribe:
         """Save energy log to CSV file."""
         energy_path = os.path.join(self.snapshot_directory, "energy.txt")
         df = pd.DataFrame(self.energy_log)
-        df.to_csv(energy_path, index=False, float_format="%.6e")
+        df.to_csv(energy_path, index=False, float_format="%.15e")
         print(f"Energy log saved to: {energy_path}")
 
     def save_radial_density_profile(self, bin_centers, rho_avg, current_time):

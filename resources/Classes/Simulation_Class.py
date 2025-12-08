@@ -258,7 +258,7 @@ class Simulation_Class:
         """
         # Create k-space components with single-precision floats
         k_components = [
-            2 * np.pi * cp.fft.fftfreq(self.N, d=self.dx[i]).astype(cp.float32)
+            2 * np.pi * cp.fft.fftfreq(self.N, d=self.dx[i]).astype(cp.float64)
             for i in range(self.dim)
         ]
         # Create multidimensional k-space
@@ -451,17 +451,17 @@ class Simulation_Class:
             half_lengths.append(0.5 * L)
 
 
-        r2 = np.zeros_like(grids_cpu[0], dtype=np.float32)
+        r2 = np.zeros_like(grids_cpu[0], dtype=np.float64)
         for g, c in zip(grids_cpu, centers):
-            r2 += (g - np.float32(c)) ** 2
-        r = np.sqrt(r2, dtype=np.float32)
+            r2 += (g - np.float64(c)) ** 2
+        r = np.sqrt(r2, dtype=np.float64)
 
         #sponge params (paper values)
         rN = float(max(half_lengths))
         rp = (7.0 / 8.0) * rN
         rs = 0.5 * (rN + rp)
         delta = (rN - rp)
-        V0 = np.float32(self.sponge_V0)
+        V0 = np.float64(self.sponge_V0)
 
         # calar profile
         theta = (r > rp)

@@ -52,7 +52,7 @@ class Propagator_Class:
 
         dt_half = (self.h * time_factor) / 2.0
         exponent = -1j * dt_half * k_squared_sum * self.h_bar_tilde
-        self.kinetic_propagator = cp.exp(exponent, dtype=cp.complex64)
+        self.kinetic_propagator = cp.exp(exponent, dtype=cp.complex128)
 
         return self.kinetic_propagator
 
@@ -71,9 +71,9 @@ class Propagator_Class:
         if potential_function is not None:
             potential_values = potential_function(self.simulation)
             exponent = -1j * self.h * time_factor * cp.asarray(potential_values) / self.h_bar_tilde
-            self.static_potential_propagator = cp.exp(exponent, dtype=cp.complex64)
+            self.static_potential_propagator = cp.exp(exponent, dtype=cp.complex128)
         else:
-            self.static_potential_propagator = cp.ones(self.simulation.grids[0].shape, dtype=cp.complex64)
+            self.static_potential_propagator = cp.ones(self.simulation.grids[0].shape, dtype=cp.complex128)
 
         return self.static_potential_propagator
 
@@ -112,7 +112,7 @@ class Propagator_Class:
         """Get sponge potential - computed in simulation class ."""
         if self.simulation.sponge_potential is not None:
             return self.simulation.sponge_potential
-        return cp.zeros_like(self.grids[0], dtype=cp.complex64)
+        return cp.zeros_like(self.grids[0], dtype=cp.complex128)
 
     def compute_total_potential(self, psi, density, include_static=False):
         """
@@ -160,14 +160,14 @@ class Propagator_Class:
         else:
             dt = self.h * time_factor
 
-        propagator = cp.exp((-1j * dt * V_total) / self.simulation.h_bar_tilde, dtype=cp.complex64)
+        propagator = cp.exp((-1j * dt * V_total) / self.simulation.h_bar_tilde, dtype=cp.complex128)
         return propagator
 
     def solve_poisson(self, density, softening=None):
         if softening is None:
             softening = 0.1 * min(self.dx)
 
-        density_k = cp.fft.fftn((density - cp.mean(density)).astype(cp.complex64))
+        density_k = cp.fft.fftn((density - cp.mean(density)).astype(cp.complex128))
         k_squared_sum = sum(k ** 2 for k in self.k_space)
 
         # APPLY SOFTENING
@@ -177,7 +177,7 @@ class Propagator_Class:
         mask_zero = k_squared_softened == 0
         k_squared_softened[mask_zero] = 1.0
 
-        potential_k = (-4 * cp.pi * self.G * density_k) / k_squared_softened.astype(cp.complex64)
+        potential_k = (-4 * cp.pi * self.G * density_k) / k_squared_softened.astype(cp.complex128)
         potential_k[mask_zero] = 0.0
 
         potential = cp.fft.ifftn(potential_k).real.astype(cp.float64)

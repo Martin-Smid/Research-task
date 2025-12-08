@@ -108,7 +108,11 @@ class NBody:
         return rho_grid'''
 
     def interpolate_force_from_grid(self, potential_grid):
-        """Calculate forces using CIC interpolation (matches deposition)."""
+        """
+        Compute forces from a potential grid via FFT, then interpolate them
+        to particle positions using trilinear interpolation (CIC style),
+        in the same coordinate convention as deposit_to_grid.
+        """
         sim = self.simulation
         Nx, Ny, Nz = potential_grid.shape
 
@@ -120,23 +124,24 @@ class NBody:
         dy = (y_max - y_min) / Ny
         dz = (z_max - z_min) / Nz
 
-        # Compute force grids via FFT
+        # k-vectors (FFT frequencies) – double precision
         kx = 2 * cp.pi * cp.fft.fftfreq(Nx, d=dx)
         ky = 2 * cp.pi * cp.fft.fftfreq(Ny, d=dy)
         kz = 2 * cp.pi * cp.fft.fftfreq(Nz, d=dz)
 
-        Phi_k = cp.fft.fftn(potential_grid)
+        # FFT of potential (cast to complex128 for better phase accuracy)
+        Phi_k = cp.fft.fftn(potential_grid.astype(cp.complex128))
 
         fx_k = -1j * kx[:, None, None] * Phi_k
         fy_k = -1j * ky[None, :, None] * Phi_k
         fz_k = -1j * kz[None, None, :] * Phi_k
 
-        Fx_grid = cp.real(cp.fft.ifftn(fx_k))
-        Fy_grid = cp.real(cp.fft.ifftn(fy_k))
-        Fz_grid = cp.real(cp.fft.ifftn(fz_k))
+        Fx_grid = cp.real(cp.fft.ifftn(fx_k)).astype(cp.float64)
+        Fy_grid = cp.real(cp.fft.ifftn(fy_k)).astype(cp.float64)
+        Fz_grid = cp.real(cp.fft.ifftn(fz_k)).astype(cp.float64)
 
-        # Use CIC interpolation instead of map_coordinates
-        return self.interpolate_force_from_grid_CIC(Fx_grid, Fy_grid, Fz_grid)
+        # Trilinear interpolate the three components
+        return self._interpolate_force_trilinear(Fx_grid, Fy_grid, Fz_grid)
 
     def integrate_leapfrog(self, force_computer, dt):
         """
@@ -209,19 +214,16 @@ class NBody:
     def deposit_to_grid(self):
         """Deposit with atomic operations via cupyx.scatter_add"""
         import cupyx
-        sim = self.simulation
-        shape = (sim.N,) * sim.dim
-        rho_grid = cp.zeros(shape, dtype=cp.float64)
 
         sim = self.simulation
+        N = sim.N
+        dim = sim.dim
 
-        # 1. Initialize density grid on GPU
-        shape = (sim.N,) * sim.dim
+        # 1. Allocate density grid
+        shape = (N,) * dim
         rho_grid = cp.zeros(shape, dtype=cp.float64)
 
-        # 2. Get Grid Spacing & Boundaries directly from Simulation
-        dx, dy, dz = sim.dx
-
+        # 2. Boundaries and box sizes
         (x_min, x_max) = sim.boundaries[0]
         (y_min, y_max) = sim.boundaries[1]
         (z_min, z_max) = sim.boundaries[2]
@@ -230,65 +232,66 @@ class NBody:
         Ly = y_max - y_min
         Lz = z_max - z_min
 
-        # 3. Periodic Wrap of Positions (GPU)
+        # 3. Periodic-wrap particle positions into [x_min, x_max), etc.
         px = x_min + cp.mod(self.positions[:, 0] - x_min, Lx)
         py = y_min + cp.mod(self.positions[:, 1] - y_min, Ly)
         pz = z_min + cp.mod(self.positions[:, 2] - z_min, Lz)
 
-        # 4. Convert to Fractional Grid Indices (GPU)
-        fx = (px - x_min) / dx
-        fy = (py - y_min) / dy
-        fz = (pz - z_min) / dz
 
-        # 5. Cloud-In-Cell (CIC) Interpolation Weights (GPU)
-        i0 = cp.floor(fx).astype(cp.int32)
-        j0 = cp.floor(fy).astype(cp.int32)
-        k0 = cp.floor(fz).astype(cp.int32)
+        #    rx = (x / BoxSize) * N  → here BoxSize = Lx, but shifted by x_min
+        rx = (px - x_min) / Lx * N
+        ry = (py - y_min) / Ly * N
+        rz = (pz - z_min) / Lz * N
 
-        tx = fx - i0
-        ty = fy - j0
-        tz = fz - k0
+        i0 = cp.floor(rx).astype(cp.int32)
+        j0 = cp.floor(ry).astype(cp.int32)
+        k0 = cp.floor(rz).astype(cp.int32)
 
+        # fractional offsets inside the cell
+        tx = rx - i0
+        ty = ry - j0
+        tz = rz - k0
+
+        # CIC weights (same as your original code, just expressed like the C++)
         wx0, wx1 = 1.0 - tx, tx
         wy0, wy1 = 1.0 - ty, ty
         wz0, wz1 = 1.0 - tz, tz
 
-        # 6. Handle Periodic Wrapping for Indices (GPU)
-        N = sim.N
+        # periodic neighbour indices
         i1 = (i0 + 1) % N
         j1 = (j0 + 1) % N
         k1 = (k0 + 1) % N
+
         i0 = i0 % N
         j0 = j0 % N
         k0 = k0 % N
 
-        # 7. Mass Deposit
-        cell_volume = dx * dy * dz
+        # 5. Mass per volume
+        cell_volume = sim.cell_volume
         mass_val = self.m_particle / cell_volume
 
+        # 6. 8 corners and their weights
         corners_weights = [
-            (wx0 * wy0 * wz0, i0, j0, k0), (wx1 * wy0 * wz0, i1, j0, k0),
-            (wx0 * wy1 * wz0, i0, j1, k0), (wx1 * wy1 * wz0, i1, j1, k0),
-            (wx0 * wy0 * wz1, i0, j0, k1), (wx1 * wy0 * wz1, i1, j0, k1),
-            (wx0 * wy1 * wz1, i0, j1, k1), (wx1 * wy1 * wz1, i1, j1, k1)
+            (wx0 * wy0 * wz0, i0, j0, k0),
+            (wx1 * wy0 * wz0, i1, j0, k0),
+            (wx0 * wy1 * wz0, i0, j1, k0),
+            (wx1 * wy1 * wz0, i1, j1, k0),
+            (wx0 * wy0 * wz1, i0, j0, k1),
+            (wx1 * wy0 * wz1, i1, j0, k1),
+            (wx0 * wy1 * wz1, i0, j1, k1),
+            (wx1 * wy1 * wz1, i1, j1, k1),
         ]
 
         N_sq = N * N
         rho_flat = rho_grid.ravel()
 
+        # 7. Thread-safe scatter-add onto flattened grid
         for w, ii, jj, kk in corners_weights:
             flat_indices = ii * N_sq + jj * N + kk
             contribution = mass_val * w
-
-            # Thread-safe scatter add
             cupyx.scatter_add(rho_flat, flat_indices, contribution)
 
-        if cp.any(cp.isnan(rho_grid)) or cp.any(rho_grid < 0):
-            print(f"⚠️  DENSITY CORRUPTION DETECTED!")
-            print(f"   NaN count: {cp.sum(cp.isnan(rho_grid))}")
-            print(f"   Negative count: {cp.sum(rho_grid < 0)}")
-            print(f"   Max density: {cp.max(rho_grid):.3e}")
-
+        # optional sanity checks (you can keep these)
         total_deposited = cp.sum(rho_grid) * cell_volume
         expected_mass = self.N * self.m_particle
         error = abs(total_deposited - expected_mass) / expected_mass
@@ -298,54 +301,106 @@ class NBody:
 
         return rho_grid
 
-    def interpolate_force_from_grid_CIC(self, Fx_grid, Fy_grid, Fz_grid):
+    def _interpolate_force_trilinear(self, Fx_grid, Fy_grid, Fz_grid):
         """
         Interpolate forces using CIC (matching the deposition scheme).
         """
         sim = self.simulation
-        dx, dy, dz = sim.dx
+        N = sim.N
+
         (x_min, x_max) = sim.boundaries[0]
         (y_min, y_max) = sim.boundaries[1]
         (z_min, z_max) = sim.boundaries[2]
 
-        Lx, Ly, Lz = x_max - x_min, y_max - y_min, z_max - z_min
+        Lx = x_max - x_min
+        Ly = y_max - y_min
+        Lz = z_max - z_min
 
-        # Periodic wrap
+        # Periodic wrap of particle positions
         px = x_min + cp.mod(self.positions[:, 0] - x_min, Lx)
         py = y_min + cp.mod(self.positions[:, 1] - y_min, Ly)
         pz = z_min + cp.mod(self.positions[:, 2] - z_min, Lz)
 
-        # Fractional indices
-        fx = (px - x_min) / dx
-        fy = (py - y_min) / dy
-        fz = (pz - z_min) / dz
+        # Normalize to grid units (0..N) as for deposition
+        rx = (px - x_min) / Lx * N
+        ry = (py - y_min) / Ly * N
+        rz = (pz - z_min) / Lz * N
 
-        i0 = cp.floor(fx).astype(cp.int32)
-        j0 = cp.floor(fy).astype(cp.int32)
-        k0 = cp.floor(fz).astype(cp.int32)
+        i0 = cp.floor(rx).astype(cp.int32)
+        j0 = cp.floor(ry).astype(cp.int32)
+        k0 = cp.floor(rz).astype(cp.int32)
 
-        tx, ty, tz = fx - i0, fy - j0, fz - k0
+        tx = rx - i0
+        ty = ry - j0
+        tz = rz - k0
+
         wx0, wx1 = 1.0 - tx, tx
         wy0, wy1 = 1.0 - ty, ty
         wz0, wz1 = 1.0 - tz, tz
 
-        N = sim.N
-        i1, j1, k1 = (i0 + 1) % N, (j0 + 1) % N, (k0 + 1) % N
-        i0, j0, k0 = i0 % N, j0 % N, k0 % N
+        i1 = (i0 + 1) % N
+        j1 = (j0 + 1) % N
+        k1 = (k0 + 1) % N
 
-        # Interpolate each force component using same CIC weights
+        i0 = i0 % N
+        j0 = j0 % N
+        k0 = k0 % N
+
+        # Helper to gather values at corners
+        def gather(grid, ii, jj, kk):
+            return grid[ii, jj, kk]
+
+        # 8 corners for each component
+        # Fx
+        Fx000 = gather(Fx_grid, i0, j0, k0)
+        Fx100 = gather(Fx_grid, i1, j0, k0)
+        Fx010 = gather(Fx_grid, i0, j1, k0)
+        Fx110 = gather(Fx_grid, i1, j1, k0)
+        Fx001 = gather(Fx_grid, i0, j0, k1)
+        Fx101 = gather(Fx_grid, i1, j0, k1)
+        Fx011 = gather(Fx_grid, i0, j1, k1)
+        Fx111 = gather(Fx_grid, i1, j1, k1)
+
+        # Fy
+        Fy000 = gather(Fy_grid, i0, j0, k0)
+        Fy100 = gather(Fy_grid, i1, j0, k0)
+        Fy010 = gather(Fy_grid, i0, j1, k0)
+        Fy110 = gather(Fy_grid, i1, j1, k0)
+        Fy001 = gather(Fy_grid, i0, j0, k1)
+        Fy101 = gather(Fy_grid, i1, j0, k1)
+        Fy011 = gather(Fy_grid, i0, j1, k1)
+        Fy111 = gather(Fy_grid, i1, j1, k1)
+
+        # Fz
+        Fz000 = gather(Fz_grid, i0, j0, k0)
+        Fz100 = gather(Fz_grid, i1, j0, k0)
+        Fz010 = gather(Fz_grid, i0, j1, k0)
+        Fz110 = gather(Fz_grid, i1, j1, k0)
+        Fz001 = gather(Fz_grid, i0, j0, k1)
+        Fz101 = gather(Fz_grid, i1, j0, k1)
+        Fz011 = gather(Fz_grid, i0, j1, k1)
+        Fz111 = gather(Fz_grid, i1, j1, k1)
+
+        # Now trilinear interpolation for each component:
+        # combine x, then y, then z as in the C++ code
+        def trilinear(c000, c100, c010, c110, c001, c101, c011, c111):
+            c00 = c000 * (1.0 - tx) + c100 * tx
+            c01 = c001 * (1.0 - tx) + c101 * tx
+            c10 = c010 * (1.0 - tx) + c110 * tx
+            c11 = c011 * (1.0 - tx) + c111 * tx
+
+            c0 = c00 * (1.0 - ty) + c10 * ty
+            c1 = c01 * (1.0 - ty) + c11 * ty
+
+            return c0 * (1.0 - tz) + c1 * tz
+
+        Fx_part = trilinear(Fx000, Fx100, Fx010, Fx110, Fx001, Fx101, Fx011, Fx111)
+        Fy_part = trilinear(Fy000, Fy100, Fy010, Fy110, Fy001, Fy101, Fy011, Fy111)
+        Fz_part = trilinear(Fz000, Fz100, Fz010, Fz110, Fz001, Fz101, Fz011, Fz111)
+
         forces = cp.zeros((self.N, 3), dtype=cp.float64)
-
-        corners = [
-            (wx0 * wy0 * wz0, i0, j0, k0), (wx1 * wy0 * wz0, i1, j0, k0),
-            (wx0 * wy1 * wz0, i0, j1, k0), (wx1 * wy1 * wz0, i1, j1, k0),
-            (wx0 * wy0 * wz1, i0, j0, k1), (wx1 * wy0 * wz1, i1, j0, k1),
-            (wx0 * wy1 * wz1, i0, j1, k1), (wx1 * wy1 * wz1, i1, j1, k1)
-        ]
-
-        for w, ii, jj, kk in corners:
-            forces[:, 0] += w * Fx_grid[ii, jj, kk]
-            forces[:, 1] += w * Fy_grid[ii, jj, kk]
-            forces[:, 2] += w * Fz_grid[ii, jj, kk]
+        forces[:, 0] = Fx_part
+        forces[:, 1] = Fy_part
+        forces[:, 2] = Fz_part
 
         return forces

@@ -12,7 +12,8 @@ simulation_dirs = [
 
 
 
-    "resources/data/simulation_20251204_153544"
+    "resources/data/simulation_20251208_174154"
+
 
 
 
@@ -235,8 +236,8 @@ def plot_kinetic_energy_components_1(paths):
 
 
 if __name__ == "__main__":
-    plot_energy_ratio(simulation_dirs)
+    #plot_energy_ratio(simulation_dirs)
     plot_total_energy(simulation_dirs)
-    plot_kinetic_energy_components(simulation_dirs)
+    #plot_kinetic_energy_components(simulation_dirs)
     plot_virial_check(simulation_dirs)
-    plot_kinetic_energy_components_1(simulation_dirs)
+    #plot_kinetic_energy_components_1(simulation_dirs)

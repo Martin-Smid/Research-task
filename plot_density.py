@@ -9,14 +9,14 @@ from scipy.optimize import curve_fit
 
 simulation_dirs = [
 
-'resources/data/simulation_20251001_085152'
+'resources/data/simulation_20251208_174154'
 
 
 
 
 ]
 
-specific_times = [1.5,1.99]
+specific_times = [0,0.100233,0.199800]
 
 
 

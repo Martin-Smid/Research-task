@@ -304,16 +304,16 @@ class Baryons(NBody):
         if pos_sigma is None:
             pos_sigma = 0.2 * dx
 
-        cen = cp.asarray(center, dtype=cp.float32)
-        bulk = cp.asarray(velocity, dtype=cp.float32)
+        cen = cp.asarray(center, dtype=cp.float64)
+        bulk = cp.asarray(velocity, dtype=cp.float64)
         if as_momenta:
-            bulk = bulk / cp.float32(self.m_particle)
+            bulk = bulk / cp.float64(self.m_particle)
 
         N_main = int(max(1, round(frac_main * N)))
         N_bg = N - N_main
 
         # Main clump positions (GPU)
-        self.positions[:N_main, :] = cen + pos_sigma * cp.random.standard_normal((N_main, 3), dtype=cp.float32)
+        self.positions[:N_main, :] = cen + pos_sigma * cp.random.standard_normal((N_main, 3), dtype=cp.float64)
 
         # Periodic wrap (GPU)
         for d in range(3):
@@ -325,11 +325,11 @@ class Baryons(NBody):
         if N_bg > 0:
             for d in range(3):
                 low, high = sim.boundaries[d]
-                self.positions[N_main:, d] = cp.random.uniform(low, high, size=(N_bg,), dtype=cp.float32)
+                self.positions[N_main:, d] = cp.random.uniform(low, high, size=(N_bg,), dtype=cp.float64)
 
         # Velocities (GPU)
         if vel_sigma > 0.0:
-            self.velocities[:] = bulk + vel_sigma * cp.random.standard_normal((N, 3), dtype=cp.float32)
+            self.velocities[:] = bulk + vel_sigma * cp.random.standard_normal((N, 3), dtype=cp.float64)
         else:
             self.velocities[:] = bulk
 
@@ -355,8 +355,8 @@ class Baryons(NBody):
         N = self.N
         sim = self.simulation
 
-        cen = cp.asarray(center, dtype=cp.float32)
-        theta = cp.linspace(0, 2 * cp.pi, N, endpoint=False, dtype=cp.float32)
+        cen = cp.asarray(center, dtype=cp.float64)
+        theta = cp.linspace(0, 2 * cp.pi, N, endpoint=False, dtype=cp.float64)
 
         if plane == "xy":
             ex = cp.stack((cp.cos(theta), cp.sin(theta), cp.zeros_like(theta)), axis=1)
@@ -374,24 +374,24 @@ class Baryons(NBody):
 
         if velocity is None:
             # Compute circular velocity from potential
-            total_density = cp.zeros_like(sim.grids[0], dtype=cp.float32)
+            total_density = cp.zeros_like(sim.grids[0], dtype=cp.float64)
             V = sim.propagator.compute_gravity_potential(total_density)
             if sim.static_potential is not None:
                 V = V + cp.real(sim.static_potential(sim))
             v_c = self._circular_speed_from_grid(V, tuple(cp.asnumpy(cen)))
-            bulk_mag = cp.asarray(v_c, dtype=cp.float32)
+            bulk_mag = cp.asarray(v_c, dtype=cp.float64)
         else:
-            bulk_mag = cp.asarray(velocity, dtype=cp.float32)
+            bulk_mag = cp.asarray(velocity, dtype=cp.float64)
             if bulk_mag.ndim == 0:
-                bulk_mag = cp.full((N,), float(bulk_mag), dtype=cp.float32)
+                bulk_mag = cp.full((N,), float(bulk_mag), dtype=cp.float64)
 
         # Velocity assignment (GPU)
         if vel_sigma > 0.0:
             if bulk_mag.ndim == 0:
-                self.velocities = bulk_mag * tang + vel_sigma * cp.random.standard_normal((N, 3), dtype=cp.float32)
+                self.velocities = bulk_mag * tang + vel_sigma * cp.random.standard_normal((N, 3), dtype=cp.float64)
             else:
                 self.velocities = bulk_mag[:, None] * tang + vel_sigma * cp.random.standard_normal((N, 3),
-                                                                                                   dtype=cp.float32)
+                                                                                                   dtype=cp.float64)
         else:
             if bulk_mag.ndim == 0:
                 self.velocities = bulk_mag * tang
@@ -416,14 +416,14 @@ class Baryons(NBody):
         sim = self.simulation
         N = self.N
 
-        cen = cp.asarray(center, dtype=cp.float32)
+        cen = cp.asarray(center, dtype=cp.float64)
 
         # Uniform in sphere (GPU)
-        dirs = cp.random.normal(size=(N, 3)).astype(cp.float32)
+        dirs = cp.random.normal(size=(N, 3)).astype(cp.float64)
         norms = cp.linalg.norm(dirs, axis=1, keepdims=True)
         dirs /= cp.maximum(norms, 1e-6)
 
-        u = cp.random.uniform(0.0, 1.0, size=(N, 1)).astype(cp.float32)
+        u = cp.random.uniform(0.0, 1.0, size=(N, 1)).astype(cp.float64)
         radii = radius * u ** (1.0 / 3.0)
 
         offsets = dirs * radii
@@ -436,11 +436,11 @@ class Baryons(NBody):
             self.positions[:, d] = ((self.positions[:, d] - low) % L) + low
 
         # Velocities (GPU)
-        base_v = cp.asarray(velocity, dtype=cp.float32)
+        base_v = cp.asarray(velocity, dtype=cp.float64)
         v = cp.tile(base_v[None, :], (N, 1))
 
         if vel_sigma > 0.0:
-            noise = vel_sigma * cp.random.standard_normal((N, 3), dtype=cp.float32)
+            noise = vel_sigma * cp.random.standard_normal((N, 3), dtype=cp.float64)
             noise[:, 2] = 0.0
             v += noise
 
@@ -483,7 +483,7 @@ class Baryons(NBody):
         self.positions[:, 2] = z + center[2]
 
         # Circular velocities (simplified flat rotation curve) (GPU)
-        v_circ = cp.full(self.N, circular_velocity * 1.0227, dtype=cp.float32)  # Convert km/s → kpc/Gyr
+        v_circ = cp.full(self.N, circular_velocity * 1.0227, dtype=cp.float64)  # Convert km/s → kpc/Gyr
 
         # Tangential velocities (GPU)
         self.velocities[:, 0] = -v_circ * cp.sin(phi)
@@ -522,9 +522,9 @@ class Baryons(NBody):
         y_cpu = data[N_in_file: 2 * N_in_file] * dist_factor
         z_cpu = data[2 * N_in_file: 3 * N_in_file] * dist_factor
 
-        vx_cpu = data[3 * N_in_file: 4 * N_in_file] * vel_factor
-        vy_cpu = data[4 * N_in_file: 5 * N_in_file] * vel_factor
-        vz_cpu = data[5 * N_in_file:] * vel_factor
+        vx_cpu = data[3 * N_in_file: 4 * N_in_file] * dist_factor
+        vy_cpu = data[4 * N_in_file: 5 * N_in_file] * dist_factor
+        vz_cpu = data[5 * N_in_file:] * dist_factor
 
         # 3. Handle Mismatch
         if N_in_file < self.N:

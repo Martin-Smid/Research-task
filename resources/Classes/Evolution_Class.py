@@ -114,7 +114,7 @@ class Evolution_Class:
 
 
 
-            self.compute_total_energy(wave_functions, total_density, current_time)
+            #self.compute_total_energy(wave_functions, total_density, current_time)
 
             # Track max location
             if self.simulation.dim == 3:
@@ -126,6 +126,10 @@ class Evolution_Class:
 
             # Perform evolution step
             wave_functions = self._perform_evolution_step(wave_functions, total_density, step, save_step)
+
+            total_density = self._compute_total_density(wave_functions)
+            current_time = (step + 1) * self.h
+            self.compute_total_energy(wave_functions, total_density, current_time)
 
             # Save snapshots and profiles
             if step % save_every == 0 :
@@ -522,7 +526,7 @@ class Evolution_Class:
             self.static_propagators[label] = self.propagator.compute_static_potential_propagator(
                 self.simulation.static_potential, time_factor=factor
             )
-            print(self.static_propagators[label])
+
 
         # Pre-calculate kinetic propagators
         self.kinetic_propagators = {}
@@ -648,7 +652,7 @@ class Evolution_Class:
         num_substeps = max(1, min(num_substeps, 50))
         dt_sub = total_dt_window / num_substeps
 
-        print(f"Substeps: {num_substeps}, dt_sub={dt_sub:.3e}")
+        #print(f"Substeps: {num_substeps}, dt_sub={dt_sub:.3e}")
 
         # --- 6. DKD substep loop: ONLY ONE FORCE EVALUATION PER SUBSTEP ---
         for step_i in range(num_substeps):

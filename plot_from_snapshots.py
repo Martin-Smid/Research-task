@@ -127,18 +127,17 @@ plt.show()
 '''
 #------------------------------------------JUST BARYONS-------------------------------------------------
 
-snapshot_dir = "resources/data/simulation_20251204_131803"  # your snapshot folder
+snapshot_dir = "resources/data/simulation_20251208_174154"  # your snapshot folder
 boundaries = [(-50, 50), (-50, 50), (-50, 50)]              # same as in Simulation_Class
 slice_axis = 2                                              # 0=x,1=y,2=z
-time_target =1                                        # pick saved time
+time_target = 0.2                                       # pick saved time
 
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 import glob, os
 
-# --- find baryon density snapshots ---
-# --- find baryon density snapshots (robust numeric sort & parse) ---
+
 baryon_files = sorted(
     glob.glob(os.path.join(snapshot_dir, "baryons_snapshot_at_time_*.npy"))
 )

@@ -21,12 +21,14 @@ class Scribe:
         self.simulation = simulation
         self.snapshot_directory = None
         self.max_locations_path = None
+        self.trajectory_path = None
 
         # Data storage
         self.wave_values = []
         self.accessible_times = []
         self.energy_log = []
         self.max_location_log = []
+        self.trajectory_log = []
         self.max_wave_vals_during_evolution = {}
 
     def setup_directories(self, num_wave_functions):
@@ -49,6 +51,10 @@ class Scribe:
         # Initialize storage for each wave function
         self.wave_values = [[] for _ in range(num_wave_functions)]
         self.accessible_times.append(0)
+
+        self.trajectory_path = os.path.join(self.snapshot_directory, "particle_trajectory.csv")
+        with open(self.trajectory_path, "w") as f:
+            f.write("time,x,y,z\n")
 
         # Initialize max location logger
         self.max_locations_path = os.path.join(self.snapshot_directory, "max_locations.txt")
@@ -325,3 +331,29 @@ class Scribe:
                     summed_wave_function += wave_function
 
             return summed_wave_function
+
+    def log_single_particle(self, time, position):
+        """
+        Buffer the single particle position.
+        position should be a CPU array/list of [x, y, z].
+        """
+        # Appending to a list is faster than writing to disk every step
+        self.trajectory_log.append({
+            "time": float(time),
+            "x": float(position[0]),
+            "y": float(position[1]),
+            "z": float(position[2])
+        })
+
+    def flush_trajectory_buffer(self):
+        """
+        Write currently buffered trajectory points to CSV and clear buffer.
+        Call this periodically or at the end of simulation.
+        """
+        if not self.trajectory_log:
+            return
+
+        df = pd.DataFrame(self.trajectory_log)
+        # Append to csv, avoiding rewriting header
+        df.to_csv(self.trajectory_path, mode='a', header=False, index=False)
+        self.trajectory_log = []  # Clear memory

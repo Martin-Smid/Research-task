@@ -9,12 +9,12 @@ from resources.Classes.Nbody_classes.Baryonic_N_body import Baryons
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-10, 10),(-10, 10),(-10, 10)], # Spatial boundaries
+    boundaries=[(-40, 40),(-40, 40),(-40, 40)], # Spatial boundaries
     N=128,                             # Grid resolution
-    total_time=10,                   # Total simulation time
-    h=0.002,                            # Time step
+    total_time=4,                   # Total simulation time
+    h=0.01,                            # Time step
     order_of_evolution=2,
-    use_gravity=False , # Enable gravitational effects
+    use_gravity=True , # Enable gravitational effects
     static_potential=gravity_potential,
     save_max_vals=False,
     self_int=False,

@@ -163,16 +163,14 @@ class Propagator_Class:
         propagator = cp.exp((-1j * dt * V_total) / self.simulation.h_bar_tilde, dtype=cp.complex128)
         return propagator
 
-    def solve_poisson(self, density, softening=None):
-        if softening is None:
-            softening = 0.1 * min(self.dx)
+    def solve_poisson(self, density):
+
 
         density_k = cp.fft.fftn((density - cp.mean(density)).astype(cp.complex128))
         k_squared_sum = sum(k ** 2 for k in self.k_space)
 
-        # APPLY SOFTENING
-        softening_k = (2 * cp.pi / softening) ** 2
-        k_squared_softened = k_squared_sum + softening_k
+
+        k_squared_softened = k_squared_sum
 
         mask_zero = k_squared_softened == 0
         k_squared_softened[mask_zero] = 1.0

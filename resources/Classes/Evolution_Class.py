@@ -55,6 +55,13 @@ class Evolution_Class:
         save_every = max(1, save_every)
         self.num_wave_functions = len(wave_functions)
 
+        if (hasattr(self.simulation, 'baryonic_matter') and
+                self.simulation.baryonic_matter and
+                len(self.simulation.baryonic_matter) == 1 and
+                self.simulation.baryonic_matter[0].N == 1):
+            track_particle = True
+            print("Single particle detected: Trajectory tracking enabled.")
+
         # Convert to CuPy arrays
         for wf in wave_functions:
             wf.psi = cp.asarray(wf.psi)
@@ -112,9 +119,14 @@ class Evolution_Class:
             save_step = False
             current_time = step * self.h
 
+            if track_particle:
+                # Get position from GPU to CPU
+                baryons = self.simulation.baryonic_matter[0]
+                pos_gpu = baryons.positions[0]
+                pos_cpu = cp.asnumpy(pos_gpu)
 
-
-            #self.compute_total_energy(wave_functions, total_density, current_time)
+                # Log to scribe
+                self.scribe.log_single_particle(current_time, pos_cpu)
 
             # Track max location
             if self.simulation.dim == 3:
@@ -136,6 +148,7 @@ class Evolution_Class:
                 if self.simulation.dim == 3:
                     self._compute_and_save_radial_profile(total_density, current_time, ix, iy, iz)
                 self.scribe.save_snapshots(wave_functions, step, self.h)
+                self.scribe.flush_trajectory_buffer()
 
             # Memory cleanup
             cp.get_default_memory_pool().free_all_blocks()

@@ -12,8 +12,8 @@ sim = Simulation_Class(
     dim=3, # 2D simulation
     boundaries=[(-50, 50),(-50, 50),(-50, 50)], # Spatial boundaries
     N=128, # Grid resolution
-    total_time=0.2, # Total simulation time
-    h=3.33e-04, # Time step
+    total_time=10, # Total simulation time
+    h=3.681169e-04, # Time step
     order_of_evolution=2,
     use_gravity=True, # Enable gravitational effects
     static_potential=None,
@@ -25,64 +25,27 @@ sim = Simulation_Class(
 
 baryons = Baryons(
     simulation=sim,
-    N_particles=int(1e6),
+    N_particles=int(1),
     total_mass=0,
     init_profile="from_file",
-    file_path="resources/solitons/Test100_S0_Nbody.bin",
-
+    file_path="resources/solitons/Orbit_Nbody.bin",
 
     dist_factor=1000.0,
-
-
     apply_center_offset=True,
     center=(-50,-50,-50)
 
 )
 
 
-bulge = Baryons(
-
-    simulation=sim,
-    N_particles=2_000_000,
-    total_mass=1e10, # Msun
-    init_profile="uniform",
-
-    center=(0.0, 0.0, 0.0),
-
-
-)
-
-M=1e6
-
-r = 5.0
-d = 2.0 * r
-v_orbit = np.sqrt(4.49 * M / (2.0 * d))
-vel_sigma = 0.1 * v_orbit   # e.g. 10% of orbital speed
-
-baryon1 = Baryons(
-    simulation=sim,
-    N_particles=20000,
-    total_mass=M,
-    init_profile="hernquist",
-    scale_radius=0.5,
-    truncation_radius=1.0,
-    center=(0.0,  r, 0.0),
-    velocity=( v_orbit, 0.0, 0.0),
-    vel_sigma=vel_sigma,
-)
-
-baryon2 = Baryons(
-    simulation=sim,
-    N_particles=20000,
-    total_mass=M,
-    init_profile="hernquist",
-    scale_radius=0.5,
-    truncation_radius=1.0,
-    center=(0.0, -r, 0.0),
-    velocity=(-v_orbit, 0.0, 0.0),
-    vel_sigma=vel_sigma,
-)
-
+Nmesh = 128
+rho_external = np.fromfile(
+    "resources/Orbit_Density.bin",
+    dtype=np.float64
+).reshape(Nmesh, Nmesh, Nmesh)
+rho_external *= 1e-9
+import cupy as cp
+rho_external_cp = cp.asarray(rho_external)
+sim.add_external_density(rho_external_cp)
 
 disk = Baryons(
 
@@ -182,7 +145,7 @@ plt.tight_layout()
 plt.show()
 
 
-sim.evolve(save_every=50)
+sim.evolve(save_every=250)
 
 # AFTER evolution - sum all baryonic systems again
 rho = cp.zeros((sim.N, sim.N, sim.N), dtype=cp.float64)

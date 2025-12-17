@@ -171,7 +171,8 @@ class Simulation_Class:
                 )
             )
 
-
+        self.external_density = None
+        self.overwrite_density = False
 
 
     def setup_units(self, sim_units, m_s):
@@ -511,3 +512,6 @@ class Simulation_Class:
 
 
 
+    def add_external_density(self, external_density):
+        self.external_density = external_density
+        self.overwrite_density = True

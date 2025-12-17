@@ -164,7 +164,8 @@ class Propagator_Class:
         return propagator
 
     def solve_poisson(self, density):
-
+        if self.simulation.overwrite_density:
+            density = self.simulation.external_density
 
         density_k = cp.fft.fftn((density - cp.mean(density)).astype(cp.complex128))
         k_squared_sum = sum(k ** 2 for k in self.k_space)

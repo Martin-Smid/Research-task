@@ -200,13 +200,24 @@ class Evolution_Class:
 
         # is there baryonic matter in the sim?
         if self.simulation.baryonic_matter:
+            # Potential used for baryon drift is computed in Evolution (Poisson + static potential if present)
+            if wave_functions:
+                total_density_baryons = self._compute_total_density(wave_functions)
+            else:
+                shape = (self.simulation.N,) * self.simulation.dim
+                total_density_baryons = cp.zeros(shape, dtype=cp.float64)
+                for baryon_sys in self.simulation.baryonic_matter:
+                    total_density_baryons += baryon_sys.deposit_to_grid()
 
-            self._drift_baryons(
-                time_factor=1.0,
-                first_step=is_first,
-                last_step=is_last,
-                wave_functions=wave_functions
-            )
+            potential_grid = self._compose_baryon_potential(total_density_baryons)
+
+            for baryons in self.simulation.baryonic_matter:
+                baryons.drift(
+                    dt = self.h * 1.0,
+                    potential_grid = potential_grid,
+                    first_step = is_first,
+                    last_step = is_last
+                )
 
         # Drift step (for wave functions if present)
         if wave_functions:
@@ -241,12 +252,13 @@ class Evolution_Class:
                 if self.simulation.baryonic_matter:
                     potential_grid = self._compose_baryon_potential(total_density)
                     time_factor = self.coefficients[coeff_key]
-                    self._drift_baryons(
-                        potential_grid,
-                        time_factor=time_factor,
-                        first_step=first_op,
-                        last_step=last_op,
-                    )
+                    for baryons in self.simulation.baryonic_matter:
+                        baryons.drift(
+                            dt = self.h * time_factor,
+                            potential_grid = potential_grid,
+                            first_step = first_op,
+                            last_step = last_op
+                        )
             else:  # drift
                 if wave_functions:
                     self._drift_all_wave_functions(wave_functions, time_factor_key=coeff_key)
@@ -277,12 +289,13 @@ class Evolution_Class:
                 if self.simulation.baryonic_matter:
                     potential_grid = self.propagator.compute_gravity_potential(total_density)
                     time_factor = self.coefficients[coeff_key]
-                    self._drift_baryons(
-                        potential_grid,
-                        time_factor=time_factor,
-                        first_step=first_kick,
-                        last_step=last_kick,
-                    )
+                    for baryons in self.simulation.baryonic_matter:
+                        baryons.drift(
+                            dt = self.h * time_factor,
+                            potential_grid = potential_grid,
+                            first_step = first_kick,
+                            last_step = last_kick
+                        )
             else:  # drift
                 if wave_functions:
                     self._drift_all_wave_functions(wave_functions, time_factor_key=coeff_key)
@@ -601,111 +614,6 @@ class Evolution_Class:
             num_wave_functions=self.num_wave_functions
         )
 
-    def _drift_baryons(self, time_factor=1.0, first_step=False, last_step=False, wave_functions=None):
-        """
-        Update baryonic particle positions/velocities with substeps.
-        Uses DKD (Drift-Kick-Drift) scheme with single force evaluation per substep.
-        """
-        if not self.simulation.baryonic_matter:
-            return
-
-        # --- 1. total dt window ---
-        if first_step or last_step:
-            total_dt_window = (self.h * time_factor) / 2.0
-        else:
-            total_dt_window = self.h * time_factor
-
-        # --- 2. wave density (frozen during baryon substeps) ---
-        shape = (self.simulation.N,) * self.simulation.dim
-        rho_waves = cp.zeros(shape, dtype=cp.float64)
-        if wave_functions:
-            for wf in wave_functions:
-                rho_waves += wf.calculate_density()
-
-        # --- 3. velocity-based criterion ---
-        v_max = 0.0
-        for baryons in self.simulation.baryonic_matter:
-            v_sq = cp.sum(baryons.velocities ** 2, axis=1)
-            local_max = float(cp.sqrt(cp.max(v_sq)))
-            if local_max > v_max:
-                v_max = local_max
-
-        if v_max < 1e-10:
-            v_max = 1e-10
-
-        min_dx = min(self.simulation.dx)
-        f_v = 0.25
-        dt_vel = f_v * (min_dx / v_max)
-
-        # --- 4. acceleration-based criterion ---
-        total_density = rho_waves.copy()
-        for baryons in self.simulation.baryonic_matter:
-            total_density += baryons.deposit_to_grid()
-
-        potential_grid = self._compose_baryon_potential(total_density)
-
-        a_max = 0.0
-        for baryons in self.simulation.baryonic_matter:
-            forces = baryons.interpolate_force_from_grid(potential_grid)
-            a_sq = cp.sum(forces ** 2, axis=1)
-            local_a = float(cp.sqrt(cp.max(a_sq)))
-            if local_a > a_max:
-                a_max = local_a
-
-        if a_max < 1e-10:
-            a_max = 1e-10
-
-        f_a = 0.20
-        dt_acc = float(f_a * cp.sqrt(min_dx / a_max))
-
-        # --- 5. determine substeps ---
-        n_vel = int(np.ceil(total_dt_window / dt_vel))
-        n_acc = int(np.ceil(total_dt_window / dt_acc))
-        num_substeps = max(n_vel, n_acc)
-        num_substeps = max(1, min(num_substeps, 50))
-        dt_sub = total_dt_window / num_substeps
-
-        #print(f"Substeps: {num_substeps}, dt_sub={dt_sub:.3e}")
-
-        # --- 6. DKD substep loop: ONLY ONE FORCE EVALUATION PER SUBSTEP ---
-        for step_i in range(num_substeps):
-
-            # SPECIAL CASE: First substep needs initial half-drift
-            if step_i == 0:
-                # Initial half-drift
-                for baryons in self.simulation.baryonic_matter:
-                    baryons.positions += baryons.velocities * (dt_sub / 2.0)
-
-                    # Periodic wrap
-                    for dim in range(3):
-                        low, high = self.simulation.boundaries[dim]
-                        width = high - low
-                        baryons.positions[:, dim] = ((baryons.positions[:, dim] - low) % width) + low
-
-            # A. Compute density at current positions (ONCE per substep)
-            total_density = rho_waves.copy()
-            for baryons in self.simulation.baryonic_matter:
-                total_density += baryons.deposit_to_grid()
-
-            # B. Solve Poisson (ONCE per substep)
-            potential_grid = self._compose_baryon_potential(total_density)
-
-            # C. Full kick with forces at current position
-            for baryons in self.simulation.baryonic_matter:
-                forces = baryons.interpolate_force_from_grid(potential_grid)
-                baryons.velocities += forces * dt_sub
-
-            # D. Full drift (except last substep does half-drift)
-            drift_time = dt_sub if step_i < num_substeps - 1 else (dt_sub / 2.0)
-
-            for baryons in self.simulation.baryonic_matter:
-                baryons.positions += baryons.velocities * drift_time
-
-                # Periodic wrap
-                for dim in range(3):
-                    low, high = self.simulation.boundaries[dim]
-                    width = high - low
-                    baryons.positions[:, dim] = ((baryons.positions[:, dim] - low) % width) + low
 
     def _compose_baryon_potential(self, total_density):
         """
@@ -719,7 +627,6 @@ class Evolution_Class:
         """
         # Gravitational potential from Poisson solver
         V = self.propagator.compute_gravity_potential(total_density)
-
         # Add static external potential if present
         if self.simulation.static_potential is not None:
             V_stat = self.simulation.static_potential(self.simulation)

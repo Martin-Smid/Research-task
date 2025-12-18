@@ -168,6 +168,74 @@ class NBody:
         forces = force_computer()
         self.velocities += forces * (dt / 2)
 
+    def drift(self, dt, potential_grid, first_step=False, last_step=False):
+        """
+        Update baryonic particle positions/velocities with substeps.
+        Uses DKD (Drift-Kick-Drift) scheme with single force evaluation per substep.
+        """
+        # --- 1. total dt window ---
+        if first_step or last_step:
+            total_dt_window = dt / 2.0
+        else:
+            total_dt_window = dt
+
+        # --- 3. velocity-based criterion ---
+        v_sq = cp.sum(self.velocities ** 2, axis=1)
+        v_max = float(cp.sqrt(cp.max(v_sq)))
+
+        if v_max < 1e-10:
+            v_max = 1e-10
+
+        min_dx = min(self.simulation.dx)
+        f_v = 0.25
+        dt_vel = f_v * (min_dx / v_max)
+
+        # --- 4. acceleration-based criterion ---
+        forces = self.interpolate_force_from_grid(potential_grid)
+        a_sq = cp.sum(forces ** 2, axis=1)
+        a_max = float(cp.sqrt(cp.max(a_sq)))
+
+        if a_max < 1e-10:
+            a_max = 1e-10
+
+        f_a = 0.20
+        dt_acc = float(f_a * cp.sqrt(min_dx / a_max))
+
+        # --- 5. determine substeps ---
+        n_vel = int(np.ceil(total_dt_window / dt_vel))
+        n_acc = int(np.ceil(total_dt_window / dt_acc))
+        num_substeps = max(n_vel, n_acc)
+        num_substeps = max(1, min(num_substeps, 50))
+        dt_sub = total_dt_window / num_substeps
+
+        # --- 6. DKD substep loop: ONLY ONE FORCE EVALUATION PER SUBSTEP ---
+        for step_i in range(num_substeps):
+
+            # SPECIAL CASE: First substep needs initial half-drift
+            if step_i == 0:
+                # Initial half-drift
+                self.positions += self.velocities * (dt_sub / 2.0)
+
+                # Periodic wrap
+                for dim in range(3):
+                    low, high = self.simulation.boundaries[dim]
+                    width = high - low
+                    self.positions[:, dim] = ((self.positions[:, dim] - low) % width) + low
+
+            # C. Full kick with forces at current position
+            forces = self.interpolate_force_from_grid(potential_grid)
+            self.velocities += forces * dt_sub
+
+            # D. Full drift (except last substep does half-drift)
+            drift_time = dt_sub if step_i < num_substeps - 1 else (dt_sub / 2.0)
+            self.positions += self.velocities * drift_time
+
+            # Periodic wrap
+            for dim in range(3):
+                low, high = self.simulation.boundaries[dim]
+                width = high - low
+                self.positions[:, dim] = ((self.positions[:, dim] - low) % width) + low
+
     def _circular_speed_from_grid(self, potential_grid, center_xyz):
         """Return v_circ at center_xyz from grid potential. (CPU/NumPy/SciPy due to complexity)"""
         sim = self.simulation

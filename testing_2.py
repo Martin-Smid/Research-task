@@ -40,7 +40,7 @@ positions = []
 min_separation =5 # Adjust based on soliton radius
 boundary = [-15,15]  # Same for all dimensions
 
-for i in range(1):
+for i in range(5):
     while True:
         means = generate_random_position(boundary)
         if is_far_enough(means, positions, min_separation):

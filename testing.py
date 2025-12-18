@@ -15,7 +15,7 @@ sim = Simulation_Class(
     h=0.01,                            # Time step
     order_of_evolution=2,
     use_gravity=True , # Enable gravitational effects
-    static_potential=gravity_potential,
+    static_potential=None,
     save_max_vals=False,
     self_int=False,
     use_sponge=False,
@@ -41,7 +41,7 @@ wave_vector = Wave_vector_class(
 bulge = Baryons(
 
     simulation=sim,
-    N_particles=1,
+    N_particles=1e7,
     total_mass=1e2, # Msun
     init_profile="hernquist",
     scale_radius=0.001, # kpc
@@ -52,7 +52,7 @@ bulge = Baryons(
 
 )
 
-#sim.add_wave_vector(wave_vector)
+sim.add_wave_vector(wave_vector)
 sim.add_baryons(bulge)
 #TODO: make it so that baryons are added tp simulations similarly to wave vectors
 #TODO: plot both the wfs and baryons

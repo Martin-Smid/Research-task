@@ -472,3 +472,11 @@ class NBody:
         forces[:, 2] = Fz_part
 
         return forces
+
+    def kinetic_energy(self):
+        """
+        Default: constant per-particle mass (Baryons-style).
+        Override in subclasses with variable particle masses.
+        """
+        v2 = (self.velocities ** 2).sum(axis=1)  # |v|^2 per particle
+        return 0.5 * self.m_particle * v2.sum()

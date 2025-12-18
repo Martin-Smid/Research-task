@@ -349,10 +349,15 @@ class SinkFormationTracker:
         radius : float
             Radius around sink to mark
         """
-        # This is a simple implementation - could be enhanced
         # For now, just mark the cell itself
         pass
 
+    def kinetic_energy(self):
+        """
+        Variable per-sink masses.
+        """
+        v2 = (self.velocities ** 2).sum(axis=1)  # |v|^2 per sink
+        return 0.5 * (self.masses * v2).sum()
 
 def check_and_create_sinks(simulation, sink_tracker, density_threshold,
                            aggregation_radius=None):
@@ -463,3 +468,5 @@ def check_and_create_sinks(simulation, sink_tracker, density_threshold,
         'positions': cp.stack(new_positions, axis=0),
         'velocities': cp.stack(new_velocities, axis=0)
     }
+
+

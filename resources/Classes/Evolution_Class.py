@@ -41,6 +41,16 @@ class Evolution_Class:
         # Pre-compute propagators and coefficients
         self._calculate_coefficients_and_propagators()
 
+        self.track_particle = False
+
+        #sink particle params
+        self.enable_sink_formation = False
+        self.sink_density_threshold = None
+        self.sink_consecutive_steps = 5
+        self.sink_tracker = None
+        self.sink_system = None
+        self.sink_check_interval = 1
+
     def evolve(self, wave_functions, save_every=1):
         """
         Perform the full time evolution for multiple wave functions.
@@ -136,10 +146,14 @@ class Evolution_Class:
             if step % save_every == 0 and step > 0:
                 save_step = True
 
+            #checking if BH appeared
+            self._check_and_form_sinks(step)
+            self._perform_sink_accretion()
+
             # Perform evolution step
             wave_functions = self._perform_evolution_step(wave_functions, total_density, step, save_step)
 
-            total_density = self._compute_total_density(wave_functions)
+
             current_time = (step + 1) * self.h
             self.compute_total_energy(wave_functions, total_density, current_time)
 
@@ -451,7 +465,8 @@ class Evolution_Class:
         if hasattr(self.simulation, 'baryonic_matter') and self.simulation.baryonic_matter:
             for baryons in self.simulation.baryonic_matter:
                 v2 = cp.sum(baryons.velocities ** 2)
-                K_baryons += 0.5 * baryons.m_particle * v2
+                K_baryons += baryons.kinetic_energy()
+
 
         # Store for possible simple logging
         self.K_flow = K_flow_total
@@ -633,3 +648,99 @@ class Evolution_Class:
             V = V + cp.real(V_stat)
 
         return V
+
+    def enable_sink_particle_formation(self, density_threshold, consecutive_steps=5,
+                                       check_interval=1):
+        """
+        Enable dynamic sink particle formation during evolution.
+
+        Parameters
+        ----------
+        density_threshold : float
+            Critical baryonic density for sink formation
+        consecutive_steps : int
+            Number of consecutive steps density must exceed threshold
+        check_interval : int
+            Check for sink formation every N steps (default: 1)
+        """
+        from resources.Classes.Nbody_classes.SinkNBody import SinkFormationTracker
+
+        self.enable_sink_formation = True
+        self.sink_density_threshold = density_threshold
+        self.sink_consecutive_steps = consecutive_steps
+        self.sink_check_interval = check_interval
+
+        # Initialize tracker
+        grid_shape = (self.simulation.N,) * self.simulation.dim
+        self.sink_tracker = SinkFormationTracker(
+            grid_shape=grid_shape,
+            consecutive_steps_required=consecutive_steps
+        )
+
+        print(f"Sink formation enabled:")
+        print(f"  - Density threshold: {density_threshold}")
+        print(f"  - Consecutive steps required: {consecutive_steps}")
+        print(f"  - Check interval: {check_interval} steps")
+
+    def _check_and_form_sinks(self, step):
+        """
+        Check for sink formation conditions and create sinks if needed.
+        Called during evolution loop.
+
+        Parameters
+        ----------
+        step : int
+            Current evolution step
+        """
+        if not self.enable_sink_formation:
+            return
+
+        # Only check at specified intervals
+        if step % self.sink_check_interval != 0:
+            return
+
+        from resources.Classes.Nbody_classes.SinkNBody import (
+            check_and_create_sinks,
+            SinkNBody
+        )
+
+        # Check for new sinks
+        new_sinks_data = check_and_create_sinks(
+            simulation=self.simulation,
+            sink_tracker=self.sink_tracker,
+            density_threshold=self.sink_density_threshold,
+            aggregation_radius=None  # Will use default
+        )
+
+        if new_sinks_data is not None:
+            # Merge with existing or create new
+            self.sink_system = SinkNBody.merge_or_create(
+                existing_sink_system=self.sink_system,
+                new_sinks_data=new_sinks_data,
+                simulation=self.simulation
+            )
+
+            # Add to simulation's baryonic_matter if not already there
+            if self.sink_system not in self.simulation.baryonic_matter:
+                self.simulation.baryonic_matter.append(self.sink_system)
+
+            print(f"  Total sinks now: {self.sink_system.N}")
+
+    def _perform_sink_accretion(self):
+        """
+        Perform sink accretion on all baryonic systems.
+        Called during evolution loop.
+        """
+        if self.sink_system is None or self.sink_system.N == 0:
+            return
+
+        # Get non-sink baryonic systems
+        regular_baryons = [
+            b for b in self.simulation.baryonic_matter
+            if not isinstance(b, type(self.sink_system))
+        ]
+
+        if len(regular_baryons) > 0:
+            n_accreted = self.sink_system.accrete_from_baryons(regular_baryons)
+            if n_accreted > 0:
+                print(f"  Sinks accreted {n_accreted} particles")

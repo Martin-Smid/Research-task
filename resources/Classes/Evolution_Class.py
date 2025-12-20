@@ -224,7 +224,8 @@ class Evolution_Class:
                 for baryon_sys in self.simulation.baryonic_matter:
                     total_density_baryons += baryon_sys.deposit_to_grid()
 
-            potential_grid = self._compose_baryon_potential(total_density_baryons)
+            phi_sink = self._compute_sink_potential_analytic_kspace()
+            potential_grid = self.propagator.compute_gravity_potential(total_density) + phi_sink
 
             for baryons in self.simulation.baryonic_matter:
                 baryons.drift(
@@ -265,7 +266,8 @@ class Evolution_Class:
 
                 # Evolve baryons at appropriate kick steps
                 if self.simulation.baryonic_matter:
-                    potential_grid = self._compose_baryon_potential(total_density)
+                    phi_sink = self._compute_sink_potential_analytic_kspace()
+                    potential_grid = self.propagator.compute_gravity_potential(total_density) + phi_sink
                     time_factor = self.coefficients[coeff_key]
                     for baryons in self.simulation.baryonic_matter:
                         baryons.drift(
@@ -294,22 +296,23 @@ class Evolution_Class:
         for i, (operation, coeff_key) in enumerate(steps):
             if operation == 'kick':
                 total_density = self._compute_total_density(wave_functions)
-                first_kick = is_first and i == kick_indices[0]
-                last_kick = is_last and i == kick_indices[-1]
+                first_op = is_first and i == 0
+                last_op = is_last and i == len(steps) - 1
 
                 if wave_functions:
-                    self._kick_all_wave_functions(wave_functions, total_density, first_kick, last_kick, coeff_key)
+                    self._kick_all_wave_functions(wave_functions, total_density, first_op, last_op, coeff_key)
 
                 # Evolve baryons at appropriate kick steps
                 if self.simulation.baryonic_matter:
-                    potential_grid = self.propagator.compute_gravity_potential(total_density)
+                    phi_sink = self._compute_sink_potential_analytic_kspace()
+                    potential_grid = self.propagator.compute_gravity_potential(total_density) + phi_sink
                     time_factor = self.coefficients[coeff_key]
                     for baryons in self.simulation.baryonic_matter:
                         baryons.drift(
                             dt = self.h * time_factor,
                             potential_grid = potential_grid,
-                            first_step = first_kick,
-                            last_step = last_kick
+                            first_step = first_op,
+                            last_step = last_op
                         )
             else:  # drift
                 if wave_functions:
@@ -362,7 +365,10 @@ class Evolution_Class:
 
         if hasattr(self.simulation, 'baryonic_matter') and self.simulation.baryonic_matter:
             for baryon_sys in self.simulation.baryonic_matter:
+                if self._is_sink_system(baryon_sys):
+                 continue  # sinks handled analytically
                 total_density += baryon_sys.deposit_to_grid()
+
 
         return total_density
 
@@ -404,8 +410,10 @@ class Evolution_Class:
         rho = total_density
 
         #self-gravity from Poisson (no static here on purpose)
-        phi_self = self.propagator.compute_gravity_potential(rho)
-        W_self = 0.5 * cp.sum(rho * phi_self) * dx  # 1/2 to avoid double counting
+        phi_self = self.propagator.compute_gravity_potential(rho)          # from rho (no sinks)
+        phi_sink = self._compute_sink_potential_analytic_kspace()          # analytic sinks
+        W_self = 0.5 * cp.sum(rho * phi_self) * self.simulation.dV + cp.sum(rho * phi_sink) * self.simulation.dV
+
 
         # external static potential energy: ∫ ρ Φ_static dV
         W_static = 0.0
@@ -749,3 +757,54 @@ class Evolution_Class:
             n_accreted = self.sink_system.accrete_from_baryons(regular_baryons)
             if n_accreted > 0:
                 print(f"  Sinks accreted {n_accreted} particles")
+
+    def _is_sink_system(self, sys):
+        return sys.__class__.__name__.lower().startswith("sink")
+
+    def _compute_sink_potential_analytic_kspace(self):
+        """
+        Periodic analytic sink potential via k-space phase factors.
+        Returns phi_sink(x) on the grid (cupy array).
+        """
+        # collect sink systems
+        sink_systems = []
+        if getattr(self.simulation, "baryonic_matter", None):
+            for sys in self.simulation.baryonic_matter:
+                if self._is_sink_system(sys):
+                    sink_systems.append(sys)
+
+        if not sink_systems:
+            shape = (self.simulation.N,) * self.simulation.dim
+            return cp.zeros(shape, dtype=cp.float64)
+
+        # k-space grids from simulation (already used in your FFT Poisson)
+        kx, ky, kz = self.propagator.k_space  # cupy arrays from Simulation.create_k_space() 
+        k2 = kx*kx + ky*ky + kz*kz
+        k = cp.sqrt(k2)
+
+        mask0 = (k2 == 0)
+
+        # cell volume for scaling: your density grid integrates with sum(rho)*dV
+        dV = float(np.prod(self.simulation.dx))
+
+        phi_k_total = cp.zeros_like(k2, dtype=cp.complex128)
+
+        for sink_sys in sink_systems:
+            # choose softening length; if you store per-sink, you can vary it per sink too
+            eps = float(getattr(sink_sys, "softening_length", min(self.simulation.dx)))
+
+            # k-space softening filter
+            soft = cp.exp(-0.5 * (k * eps)**2)
+
+            # IMPORTANT: iterating over cupy arrays yields host scalars; fine if sinks are few
+            for m, pos in zip(cp.asnumpy(sink_sys.masses), cp.asnumpy(sink_sys.positions)):
+                xs, ys, zs = float(pos[0]), float(pos[1]), float(pos[2])
+
+                phase = cp.exp(-1j * (kx*xs + ky*ys + kz*zs))
+                rho_k = (m / dV) * phase * soft
+
+                phi_k_total += (-4.0 * cp.pi * self.propagator.G) * rho_k / k2
+
+        phi_k_total[mask0] = 0.0 + 0.0j
+        phi_sink = cp.fft.ifftn(phi_k_total).real.astype(cp.float64)
+        return phi_sink

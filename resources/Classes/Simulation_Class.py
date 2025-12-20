@@ -81,9 +81,9 @@ class Simulation_Class:
     separate classes.
     """
 
-    @parameter_check(int, list, int, (int, float), (int, float),int, float, float,bool, bool, object, (str, type(None)), bool, dict,bool,bool,float)
+    @parameter_check(int, list, int, (int, float), (int, float),int, float, float,bool, bool, object, (str, type(None)), bool,(type(None),dict), dict,bool,bool,float)
     def __init__(self, dim, boundaries, N, total_time, h,order_of_evolution = 2, m_s=2.5e-22, sponge_V0 =0.6 ,use_sponge=True, use_gravity=False,
-                 static_potential=None, baryonic_model = None, save_max_vals=False,
+                 static_potential=None, baryonic_model = None, save_max_vals=False, sink_formation=None,
                  sim_units={"dUnits": "kpc", "tUnits": "Gyr", "mUnits": "Msun", "eUnits": "eV"},use_units=True,self_int=True,a_s=-10e-80,):
         """
         Initialize the simulation parameters and setup.
@@ -174,6 +174,7 @@ class Simulation_Class:
         self.external_density = None
         self.overwrite_density = False
 
+        self._sink_cfg = self._sink_cfg = None if sink_formation is None else dict(sink_formation) #configuration for sink particles
 
     def setup_units(self, sim_units, m_s):
         """
@@ -335,6 +336,14 @@ class Simulation_Class:
 
         self.propagator = Propagator_Class(self)
         self.evolution = Evolution_Class(self, self.propagator, order=self.order_of_evolution)
+        if self._sink_cfg is not None:
+            try:
+                self.evolution.enable_sink_particle_formation(**self._sink_cfg)
+            except TypeError as e:
+                raise TypeError(
+                    f"Invalid sink_formation config keys/values: {self._sink_cfg}. "
+                    f"Expected keys: density_threshold, consecutive_steps, check_interval."
+                ) from e
 
 
 
@@ -515,3 +524,10 @@ class Simulation_Class:
     def add_external_density(self, external_density):
         self.external_density = external_density
         self.overwrite_density = True
+
+    def enable_sink_particle_formation(self, **cfg):
+        self._sink_cfg = dict(cfg)
+
+        # if evolution already exists, apply immediately too
+        if getattr(self, "evolution", None) is not None:
+            self.evolution.enable_sink_particle_formation(**self._sink_cfg)

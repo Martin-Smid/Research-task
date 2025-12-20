@@ -12,7 +12,8 @@ simulation_dirs = [
 
 
 
-    "resources/data/simulation_20251208_174154"
+    "resources/data/simulation_20251220_144736",
+    "resources/data/simulation_20251220_145334"
 
 
 

@@ -249,6 +249,7 @@ class SinkNBody(NBody):
         SinkNBody
             Updated or new sink system
         """
+        print("got to merge or create")
         if new_sinks_data is None:
             return existing_sink_system
 
@@ -274,6 +275,13 @@ class SinkNBody(NBody):
                     velocity=new_sinks_data['velocities'][i]
                 )
             return existing_sink_system
+
+    def kinetic_energy(self):
+        """
+        Variable per-sink masses.
+        """
+        v2 = (self.velocities ** 2).sum(axis=1)  # |v|^2 per sink
+        return 0.5 * (self.masses * v2).sum()
 
 
 class SinkFormationTracker:
@@ -323,7 +331,7 @@ class SinkFormationTracker:
         self.threshold_counter = cp.where(exceeds,
                                           self.threshold_counter + 1,
                                           0)
-
+        print(self.threshold_counter.max())
         # Find cells that have exceeded threshold for required consecutive steps
         # AND don't already have a sink
         ready_for_sink = (self.threshold_counter >= self.consecutive_steps_required) & (~self.has_sink)
@@ -352,12 +360,7 @@ class SinkFormationTracker:
         # For now, just mark the cell itself
         pass
 
-    def kinetic_energy(self):
-        """
-        Variable per-sink masses.
-        """
-        v2 = (self.velocities ** 2).sum(axis=1)  # |v|^2 per sink
-        return 0.5 * (self.masses * v2).sum()
+
 
 def check_and_create_sinks(simulation, sink_tracker, density_threshold,
                            aggregation_radius=None):
@@ -384,6 +387,7 @@ def check_and_create_sinks(simulation, sink_tracker, density_threshold,
     # Compute baryonic density only (exclude ULDM and existing sinks)
     shape = (simulation.N,) * simulation.dim
     baryonic_density = cp.zeros(shape, dtype=cp.float64)
+    print("d")
 
     regular_baryons = []
     for baryons in simulation.baryonic_matter:
@@ -404,7 +408,7 @@ def check_and_create_sinks(simulation, sink_tracker, density_threshold,
     grids = simulation.grids
     min_dx = min(simulation.dx)
     if aggregation_radius is None:
-        aggregation_radius = 2.0 * min_dx
+        aggregation_radius = 1.0 * min_dx
 
     new_masses = []
     new_positions = []

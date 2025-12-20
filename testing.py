@@ -9,17 +9,22 @@ from resources.Classes.Nbody_classes.Baryonic_N_body import Baryons
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-40, 40),(-40, 40),(-40, 40)], # Spatial boundaries
+    boundaries=[(-20, 20),(-20, 20),(-20, 20)], # Spatial boundaries
     N=128,                             # Grid resolution
     total_time=4,                   # Total simulation time
-    h=0.01,                            # Time step
+    h=1e-3,                            # Time step
     order_of_evolution=2,
     use_gravity=True , # Enable gravitational effects
     static_potential=None,
     save_max_vals=False,
     self_int=False,
     use_sponge=False,
-    baryonic_model=None
+    baryonic_model=None,
+    sink_formation=dict(
+        density_threshold=1e8,
+        consecutive_steps=5,
+        check_interval=1,
+    ),
 
 )
 
@@ -41,19 +46,23 @@ wave_vector = Wave_vector_class(
 bulge = Baryons(
 
     simulation=sim,
-    N_particles=1e7,
-    total_mass=1e2, # Msun
+    N_particles=int(1e5),
+    total_mass=1e9, # Msun
     init_profile="hernquist",
-    scale_radius=0.001, # kpc
-    truncation_radius=0.1, # kpc
-    center=(5.0, 0.0, 0.0),
-    velocity=(0.0, 9.485253978117353, 0.0),
+    scale_radius=5, # kpc
+    truncation_radius=10, # kpc
+    center=(0.0, 0.0, 0.0),
+    velocity=(0.0, 0, 0.0),
     vel_sigma=0 # km/s → ~20 kpc/Gyr if you keep units implicit
 
 )
 
-sim.add_wave_vector(wave_vector)
 sim.add_baryons(bulge)
+
+
+
+#sim.add_wave_vector(wave_vector)
+
 #TODO: make it so that baryons are added tp simulations similarly to wave vectors
 #TODO: plot both the wfs and baryons
 #TODO: add conservation of mass during the sim
@@ -62,7 +71,7 @@ sim.add_baryons(bulge)
 #sim.add_wave_function(vlna3)
 
 
-sim.evolve(save_every=100 )
+sim.evolve(save_every=10 )
 
 '''1D
 plt.figure()

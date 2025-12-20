@@ -1,6 +1,7 @@
 import cupy as cp
 import numpy as np
 from resources.Functions.system_fucntions import plot_max_values_on_N
+from resources.Classes.Nbody_classes import Sink_N_Body
 from resources.Classes.Scribe_Class import Scribe
 import os
 from tqdm import tqdm
@@ -69,7 +70,7 @@ class Evolution_Class:
                 self.simulation.baryonic_matter and
                 len(self.simulation.baryonic_matter) == 1 and
                 self.simulation.baryonic_matter[0].N == 1):
-            track_particle = True
+            self.track_particle = True
             print("Single particle detected: Trajectory tracking enabled.")
 
         # Convert to CuPy arrays
@@ -129,7 +130,7 @@ class Evolution_Class:
             save_step = False
             current_time = step * self.h
 
-            if track_particle:
+            if self.track_particle:
                 # Get position from GPU to CPU
                 baryons = self.simulation.baryonic_matter[0]
                 pos_gpu = baryons.positions[0]
@@ -663,7 +664,7 @@ class Evolution_Class:
         check_interval : int
             Check for sink formation every N steps (default: 1)
         """
-        from resources.Classes.Nbody_classes.SinkNBody import SinkFormationTracker
+        from resources.Classes.Nbody_classes.Sink_N_Body import SinkFormationTracker
 
         self.enable_sink_formation = True
         self.sink_density_threshold = density_threshold
@@ -692,14 +693,18 @@ class Evolution_Class:
         step : int
             Current evolution step
         """
+        print("a")
+        #self.enable_sink_formation = True
         if not self.enable_sink_formation:
+            print("b")
             return
 
         # Only check at specified intervals
         if step % self.sink_check_interval != 0:
+            print("c")
             return
 
-        from resources.Classes.Nbody_classes.SinkNBody import (
+        from resources.Classes.Nbody_classes.Sink_N_Body import (
             check_and_create_sinks,
             SinkNBody
         )

@@ -701,15 +701,12 @@ class Evolution_Class:
         step : int
             Current evolution step
         """
-        print("a")
         #self.enable_sink_formation = True
         if not self.enable_sink_formation:
-            print("b")
             return
 
         # Only check at specified intervals
         if step % self.sink_check_interval != 0:
-            print("c")
             return
 
         from resources.Classes.Nbody_classes.Sink_N_Body import (

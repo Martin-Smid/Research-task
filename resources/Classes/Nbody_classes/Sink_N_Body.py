@@ -149,6 +149,8 @@ class SinkNBody(NBody):
         """
         total_accreted = 0
 
+        total_accreted = 0
+
         for baryons in baryon_systems:
             # Skip if it's a sink system or has no particles
             if isinstance(baryons, SinkNBody) or baryons.N == 0:
@@ -160,7 +162,8 @@ class SinkNBody(NBody):
                 sink_vel = self.velocities[sink_idx]
                 sink_mass = self.masses[sink_idx]
 
-                # Compute distances (periodic)
+                # 1. Compute distances (periodic)
+                # 'dx' here represents the position vector r relative to the sink
                 dx = baryons.positions - sink_pos[None, :]
                 for d in range(3):
                     low, high = self.simulation.boundaries[d]
@@ -175,17 +178,31 @@ class SinkNBody(NBody):
                 if not cp.any(capture_mask):
                     continue
 
-                # Check escape velocity criterion
+                # escape velocity criterion  v_esc = sqrt(2 * G * M_sink / r_soft)
                 G = self.simulation.G
                 rel_vel = baryons.velocities - sink_vel[None, :]
                 v_rel_mag = cp.sqrt(cp.sum(rel_vel ** 2, axis=1))
 
-                # Escape velocity: v_esc = sqrt(2 * G * M_sink / r_soft)
                 r_soft = cp.maximum(dist, self.softening_length)
                 v_esc = cp.sqrt(2 * G * sink_mass / r_soft)
 
-                # Accrete if v_rel < v_esc and within capture radius
-                accrete_mask = capture_mask & (v_rel_mag < v_esc)
+                # angular momentum criterion (L = r x v) cross product maybe use cp.cross later
+                
+                Lx = dx[:, 1] * rel_vel[:, 2] - dx[:, 2] * rel_vel[:, 1]
+                Ly = dx[:, 2] * rel_vel[:, 0] - dx[:, 0] * rel_vel[:, 2]
+                Lz = dx[:, 0] * rel_vel[:, 1] - dx[:, 1] * rel_vel[:, 0]
+                
+               
+                L_sq = Lx**2 + Ly**2 + Lz**2
+                
+                # max allowed L is circular orbit at the capture radius L_max = R * v_circ = R * sqrt(G*M/R) = sqrt(G*M*R),  L_max^2 = G * M * R
+                L_max_sq = G * sink_mass * self.capture_radius
+                
+                # check inequality, if particle can run away
+                ang_mom_condition = L_sq < L_max_sq
+
+                # Must be close enough AND bound (v < v_esc) AND low enough angular momentum
+                accrete_mask = capture_mask & (v_rel_mag < v_esc) & ang_mom_condition
 
                 n_accrete = int(cp.sum(accrete_mask))
                 if n_accrete == 0:
@@ -195,7 +212,7 @@ class SinkNBody(NBody):
                 accreted_mass = baryons.m_particle * n_accrete
                 accreted_momentum = cp.sum(baryons.velocities[accrete_mask] * baryons.m_particle, axis=0)
 
-                # Update sink
+
                 new_mass = sink_mass + accreted_mass
                 self.velocities[sink_idx] = (sink_mass * sink_vel + accreted_momentum) / new_mass
                 self.masses[sink_idx] = new_mass
@@ -387,7 +404,7 @@ def check_and_create_sinks(simulation, sink_tracker, density_threshold,
     # Compute baryonic density only (exclude ULDM and existing sinks)
     shape = (simulation.N,) * simulation.dim
     baryonic_density = cp.zeros(shape, dtype=cp.float64)
-    print("d")
+
 
     regular_baryons = []
     for baryons in simulation.baryonic_matter:

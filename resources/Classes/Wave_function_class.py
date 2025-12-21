@@ -70,6 +70,7 @@ class Wave_function():  # Streamlined and unified evolution logic
                     print(self.scaling_lambda)
                     print("above is lambda")
                     self.psi = self._rescale_psi_to_new_scale_based_on_mass()
+                self._dealias_initial_psi(frac=2/3)
             except Exception as e:
                 print(f"Warning: Could not rescale mass for packet {self.packet_type}. Using raw packet. Error: {e}")
 
@@ -162,3 +163,44 @@ class Wave_function():  # Streamlined and unified evolution logic
         psi_k *= kinetic_propagator
         self.psi = cp.fft.ifftn(psi_k)
 
+    def _dealias_initial_psi(self, frac=2/3):
+        """
+        Low-pass filter psi in k-space to remove Nyquist/aliasing artifacts (e.g. axis cross at t=0).
+        Keeps total mass (∫|psi|^2 dV) unchanged by renormalizing.
+        Works with both numpy and cupy arrays.
+        """
+        psi = self.psi
+        use_cupy = hasattr(cp, "ndarray") and isinstance(psi, cp.ndarray)
+
+        xp = cp if use_cupy else np
+        fftn = xp.fft.fftn
+        ifftn = xp.fft.ifftn
+        fftfreq = xp.fft.fftfreq
+
+        # Save mass before filtering
+        dV = float(np.prod(self.dx))
+        mass0 = xp.sum(xp.abs(psi)**2) * dV
+
+        # Build k-grid (use the same dx, N, periodic convention as your solver)
+        k_components = [2 * np.pi * fftfreq(self.N, d=float(self.dx[i])) for i in range(self.dim)]
+        k_mesh = xp.meshgrid(*k_components, indexing="ij")
+        k2 = xp.zeros_like(k_mesh[0], dtype=xp.float64)
+        for ki in k_mesh:
+            k2 = k2 + ki.astype(xp.float64)**2
+        k = xp.sqrt(k2)
+
+        dx_min = float(min(self.dx))
+        k_ny = np.pi / dx_min
+        k_cut = frac * k_ny
+
+        # Filter
+        psi_k = fftn(psi)
+        psi_k = psi_k * (k <= k_cut)
+        psi_f = ifftn(psi_k)
+
+        # Renormalize mass
+        mass1 = xp.sum(xp.abs(psi_f)**2) * dV
+        if float(mass1) > 0:
+            psi_f = psi_f * xp.sqrt(mass0 / mass1)
+
+        self.psi = psi_f.astype(psi.dtype, copy=False)

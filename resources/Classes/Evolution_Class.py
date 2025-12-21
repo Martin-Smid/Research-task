@@ -353,6 +353,7 @@ class Evolution_Class:
 
         for wf in wave_functions:
             wf.drift(kinetic_propagator)
+            wf._dealias_initial_psi(frac=2/3)
 
     def _compute_total_density(self, wave_functions):
         """Calculate the total density ρ = Σ|ψᵢ|² from all wave functions."""

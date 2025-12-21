@@ -38,91 +38,93 @@ plot_wave_function_panel(
     show=False
 )
 
+,1.3,1.5,1.65,1.8,2,2.2,2.4,2.57,3,4,5,6,7,8,9,10
+'''
 
 #------------------------------------------BOTH WFS AND BARYONS-----------------------------------------------------------------------
+times = [0,0.1,0.2,0.3,0.4,1]
+for time in times:
+    snapshot_dir = "resources\data\simulation_20251221_224647"   # your snapshot folder
+                                        # choose time (matches filename)
+    wf_idx = 0                                            # which ψ to plot
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import LogNorm
+    import glob
+    import os
 
+    boundaries = [(-50, 50), (-50, 50), (-50, 50)]           # same as used in Simulation_Class
+    wf_index = 0                                             # which ψ field to plot
+    slice_axis = 2                                           # 0=x,1=y,2=z
+    time_target = time                                   # pick saved time
+    # ===================
 
-snapshot_dir = "resources/data/simulation_20251123_201336"   # your snapshot folder
-                                     # choose time (matches filename)
-wf_idx = 0                                            # which ψ to plot
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.colors import LogNorm
-import glob
-import os
+    # --- load metadata ---
+    #meta_path = os.path.join(snapshot_dir, "metadata.txt")
+    #with open(meta_path) as f:
+    #    lines = f.readlines()
 
-boundaries = [(-50, 50), (-50, 50), (-50, 50)]           # same as used in Simulation_Class
-wf_index = 0                                             # which ψ field to plot
-slice_axis = 2                                           # 0=x,1=y,2=z
-time_target = 2                                      # pick saved time
-# ===================
+    # find grid size by reading one wf file
+    wf_files = sorted(glob.glob(os.path.join(snapshot_dir, f"wf_{wf_index}_snapshot_at_time_*.npy")))
+    if not wf_files:
+        raise FileNotFoundError("No wavefunction snapshots found in folder")
 
-# --- load metadata ---
-meta_path = os.path.join(snapshot_dir, "metadata.txt")
-with open(meta_path) as f:
-    lines = f.readlines()
+    # pick closest time
+    def extract_time(fname):
+        try:
+            return float(fname.split("at_time_")[1].replace(".npy", ""))
+        except Exception:
+            return np.inf
 
-# find grid size by reading one wf file
-wf_files = sorted(glob.glob(os.path.join(snapshot_dir, f"wf_{wf_index}_snapshot_at_time_*.npy")))
-if not wf_files:
-    raise FileNotFoundError("No wavefunction snapshots found in folder")
+    times = np.array([extract_time(f) for f in wf_files])
+    chosen_i = np.argmin(abs(times - time_target))
+    wf_file = wf_files[chosen_i]
+    actual_time = times[chosen_i]
 
-# pick closest time
-def extract_time(fname):
-    try:
-        return float(fname.split("at_time_")[1].replace(".npy", ""))
-    except Exception:
-        return np.inf
+    # --- load data ---
+    psi = np.load(wf_file)
+    rho_wf = np.abs(psi) ** 2
 
-times = np.array([extract_time(f) for f in wf_files])
-chosen_i = np.argmin(abs(times - time_target))
-wf_file = wf_files[chosen_i]
-actual_time = times[chosen_i]
+    # baryons (if exists)
+    baryon_path = os.path.join(snapshot_dir, f"baryons_snapshot_at_time_{actual_time:.6f}.npy")
+    rho_b = np.load(baryon_path) if os.path.exists(baryon_path) else None
 
-# --- load data ---
-psi = np.load(wf_file)
-rho_wf = np.abs(psi) ** 2
+    # --- build coordinate grid ---
+    N = rho_wf.shape[0]
+    x = np.linspace(boundaries[0][0], boundaries[0][1], N, endpoint=False)
+    y = np.linspace(boundaries[1][0], boundaries[1][1], N, endpoint=False)
+    z = np.linspace(boundaries[2][0], boundaries[2][1], N, endpoint=False)
+    x_mesh_2d, y_mesh_2d = np.meshgrid(x, y)
 
-# baryons (if exists)
-baryon_path = os.path.join(snapshot_dir, f"baryons_snapshot_at_time_{actual_time:.6f}.npy")
-rho_b = np.load(baryon_path) if os.path.exists(baryon_path) else None
+    # --- pick slice ---
+    z_index = N // 2 if slice_axis == 2 else None
+    wf_slice = rho_wf[:, :, z_index]
+    if rho_b is not None:
+        baryon_slice = rho_b[:, :, z_index]
 
-# --- build coordinate grid ---
-N = rho_wf.shape[0]
-x = np.linspace(boundaries[0][0], boundaries[0][1], N, endpoint=False)
-y = np.linspace(boundaries[1][0], boundaries[1][1], N, endpoint=False)
-z = np.linspace(boundaries[2][0], boundaries[2][1], N, endpoint=False)
-x_mesh_2d, y_mesh_2d = np.meshgrid(x, y)
+    # --- prepare contour levels ---
+    pos_vals = wf_slice[wf_slice > 0]
+    levels = np.logspace(np.log10(pos_vals.min()), np.log10(pos_vals.max()), 128)
 
-# --- pick slice ---
-z_index = N // 2 if slice_axis == 2 else None
-wf_slice = rho_wf[:, :, z_index]
-if rho_b is not None:
-    baryon_slice = rho_b[:, :, z_index]
+    # --- plotting ---
+    plt.figure(figsize=(8, 6))
+    plt.contourf(x_mesh_2d, y_mesh_2d, wf_slice.T, origin="lower",
+                levels=levels, cmap="viridis", norm=LogNorm())
 
-# --- prepare contour levels ---
-pos_vals = wf_slice[wf_slice > 0]
-levels = np.logspace(np.log10(pos_vals.min()), np.log10(pos_vals.max()), 128)
+    if rho_b is not None:
+        pos_b = baryon_slice[baryon_slice > 0]
+        if pos_b.size > 0:
+            b_levels = np.logspace(np.log10(pos_b.min()), np.log10(pos_b.max()), 8)
+            plt.contour(x_mesh_2d, y_mesh_2d, baryon_slice.T,
+                        levels=b_levels, colors="cyan", linewidths=0.8)
 
-# --- plotting ---
-plt.figure(figsize=(8, 6))
-plt.contourf(x_mesh_2d, y_mesh_2d, wf_slice.T, origin="lower",
-             levels=levels, cmap="viridis", norm=LogNorm())
-
-if rho_b is not None:
-    pos_b = baryon_slice[baryon_slice > 0]
-    if pos_b.size > 0:
-        b_levels = np.logspace(np.log10(pos_b.min()), np.log10(pos_b.max()), 8)
-        plt.contour(x_mesh_2d, y_mesh_2d, baryon_slice.T,
-                    levels=b_levels, colors="cyan", linewidths=0.8)
-
-plt.colorbar(label="|ψ|²")
-plt.xlabel("x")
-plt.ylabel("y")
-plt.title(f"t = {actual_time:.3f}")
-plt.grid(alpha=0.3)
-plt.tight_layout()
-plt.show()
+    plt.colorbar(label="|ψ|²")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.title(f"t = {actual_time:.3f}")
+    plt.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.show()
 
 '''
 #------------------------------------------JUST BARYONS-------------------------------------------------
@@ -206,3 +208,4 @@ plt.title(f"t = {actual_time:.3f}  (baryons only)")
 plt.grid(alpha=0.3)
 plt.tight_layout(); plt.show()
 
+'''

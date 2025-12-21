@@ -3,41 +3,59 @@ from cupy import asnumpy
 from resources.Classes.Wave_function_class import *
 from resources.Functions.system_fucntions import *
 from resources.Classes.Wave_vector_class import Wave_vector_class
+from resources.Classes.Nbody_classes.Baryonic_N_body import Baryons
 
 # Setup parameters for the domain
 a, b = -5, 5  # Domain boundaries
 N = 128 # Number of spatial points
 
 # Initialize the Wave_function instance
-def my_hardcoded_potential(sim_obj):
-    # V = 0.5 * m * w^2 * x^2
-    return 0.5 * 1.0 * (1.0**2) * sim_obj.grids[0]**2
-
 sim = Simulation_Class(
-    dim=1,                             # 2D simulation
-    boundaries=[(-10, 10)], # Spatial boundaries
-    N=128,                             # Grid resolution
-    total_time=2.0,                   # Total simulation time
-    h=0.01,                            # Time step
-    use_gravity=False,  # Enable gravitational effects
-    static_potential=my_hardcoded_potential,
-    use_units=False,
+
+    dim=3, # 2D simulation
+    boundaries=[(-50, 50),(-50, 50),(-50, 50)], # Spatial boundaries
+    N=128, # Grid resolution
+    total_time=10, # Total simulation time
+    h=3.681169e-04, # Time step
     order_of_evolution=2,
-    self_int=False
+    use_gravity=True, # Enable gravitational effects
+    static_potential=None,
+    save_max_vals=True,
+
+
+
 )
 
-vlna = Wave_function(
-    packet_type="LHO",
-    means=[0],
-    st_deviations=[1],
+baryons = Baryons(
+    simulation=sim,
+    N_particles=int(1e6),
+    total_mass=0,
+    init_profile="from_file",
+    file_path="resources\solitons\Test100_S0_Nbody.bin",
+
+    dist_factor=1000.0,
+    apply_center_offset=True,
+    center=(-50,-50,-50)
+
+)
+
+wave_vector = Wave_vector_class(
+
+    packet_type="resources/solitons/GroundState(1).dat",
+    means=[0, 0, 0],
+    st_deviations=[0.5, 0.5, 0.5],
     simulation=sim,
     mass=1,
     omega=1,
-    momenta=[0],
+    momenta=[0, 0.0, 0],
+    spin=0,
+    desired_soliton_mass=53090068
+
+
 )
 
-sim.add_wave_vector([vlna])
-#sim.add_wave_function(vlna2)
+sim.add_baryons(baryons)
+sim.add_wave_vector(wave_vector)
 
 
 sim.evolve(save_every=50)

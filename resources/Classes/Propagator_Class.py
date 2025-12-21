@@ -114,7 +114,7 @@ class Propagator_Class:
             return self.simulation.sponge_potential
         return cp.zeros_like(self.grids[0], dtype=cp.complex128)
 
-    def compute_total_potential(self, psi, density, include_static=False):
+    def compute_total_potential(self, psi, density, include_static=False,extra_potential=None):
         """
         Combine all dynamic potentials into one.
         Static potential is handled separately via pre-computed propagators.

@@ -7,7 +7,8 @@ import numpy as np
 simulation_dirs = [
 
 
-"resources/data/simulation_20251222_182338",
+"resources/data/simulation_20251222_223038",
+"resources/data/simulation_20251222_223612"
 
 
 
@@ -18,7 +19,7 @@ simulation_dirs = [
 def plot_energy_ratio(paths):
     plt.figure(figsize=(8, 4))
     for path in paths:
-        energy_file = os.path.join(path, "energy.txt")
+        energy_file = os.path.join(path, "energy.csv")
         if not os.path.isfile(energy_file):
             print(f"[!] Skipping: 'energy.txt' not found in {path}")
             continue
@@ -45,7 +46,7 @@ def plot_energy_ratio(paths):
 def plot_total_energy(paths):
     plt.figure(figsize=(8, 4))
     for path in paths:
-        energy_file = os.path.join(path, "energy.txt")
+        energy_file = os.path.join(path, "energy.csv")
         if not os.path.isfile(energy_file):
             print(f"[!] Skipping: 'energy.txt' not found in {path}")
             continue
@@ -53,7 +54,7 @@ def plot_total_energy(paths):
         try:
             df = pd.read_csv(energy_file)
             time = df["time"]
-            energy = df["E_total"]
+            energy = df["E_tot_cons"]
         except Exception as e:
             print(f"[!] Failed to read {energy_file}: {e}")
             continue
@@ -89,7 +90,7 @@ def plot_kinetic_energy_components(paths):
     plt.figure(figsize=(9, 5))
 
     for path in paths:
-        energy_file = os.path.join(path, "energy.txt")
+        energy_file = os.path.join(path, "energy.csv")
         if not os.path.isfile(energy_file):
             print(f"[!] Skipping: 'energy.txt' not found in {path}")
             continue
@@ -139,7 +140,7 @@ def plot_virial_check(paths):
     plt.figure(figsize=(9, 5))
 
     for path in paths:
-        energy_file = os.path.join(path, "energy.txt")
+        energy_file = os.path.join(path, "energy.csv")
         if not os.path.isfile(energy_file):
             print(f"[!] Skipping: 'energy.txt' not found in {path}")
             continue
@@ -194,7 +195,7 @@ def plot_kinetic_energy_components_1(paths):
     plt.figure(figsize=(9, 5))
 
     for path in paths:
-        energy_file = os.path.join(path, "energy.txt")
+        energy_file = os.path.join(path, "energy.csv")
         if not os.path.isfile(energy_file):
             print(f"[!] Skipping: 'energy.txt' not found in {path}")
             continue

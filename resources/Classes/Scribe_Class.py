@@ -43,7 +43,7 @@ class Scribe:
 
         self.max_vals_filename = "resources/data/max_values.csv"
 
-        self.energy_path = os.path.join(self.snapshot_directory, "energy.txt")
+        self.energy_path = os.path.join(self.snapshot_directory, "energy.csv")
 
         header = "time,K_total,W,E_total,K_flow,U_quantum,K_baryons,W_self,W_static,W_over_E,E_diss,E_tot_cons\n"
         with open(self.energy_path, "w") as f:

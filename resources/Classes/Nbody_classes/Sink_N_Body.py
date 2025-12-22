@@ -16,7 +16,7 @@ class SinkNBody(NBody):
 
     def __init__(self, simulation, N_sinks, initial_masses,
                  initial_positions, initial_velocities,
-                 capture_radius=None, softening_length=None,
+                 capture_radius=None, softening_bh=None, softening_cusp=None,softening_length=None,
                  reservoir_tau=10):
         """
         Initialize sink particle system.
@@ -51,6 +51,10 @@ class SinkNBody(NBody):
         min_dx = min(simulation.dx)
         self.capture_radius = capture_radius if capture_radius is not None else 2.5 * min_dx
         self.softening_length = softening_length if softening_length is not None else 1.5 * min_dx
+
+
+        self.softening_bh = softening_bh if softening_bh is not None else self.softening_length
+        self.softening_cusp = softening_cusp if softening_cusp is not None else self.capture_radius
 
         self.mass_bh = cp.asarray(initial_masses, dtype=cp.float64)          # gravitating BH mass component
         self.mass_res = cp.zeros_like(self.mass_bh)                          # unresolved reservoir mass

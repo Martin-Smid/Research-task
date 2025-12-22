@@ -448,32 +448,45 @@ class Evolution_Class:
         return K_total, W_total, K_flow, U_quantum, K_baryons, W_self, W_static
 
     def _compute_potential_energy(self, wave_functions, total_density, current_time):
+
         """
         Compute potential energy:
-
-        - W_self  = self-gravity from Poisson solver (whatever is in total_density)
+        - W_self = self-gravity from Poisson solver (whatever is in total_density)
         - W_static = coupling of the same density to the external static potential
         - W_total = W_self + W_static
+
         """
+
         dx = np.prod(self.simulation.dx)
 
         rho = total_density
 
-        #self-gravity from Poisson (no static here on purpose)
-        phi_self = self.propagator.compute_gravity_potential(rho)          # from rho (no sinks)
-        phi_sink = self._compute_sink_potential_analytic_kspace()          # analytic sinks
-        W_self = 0.5 * cp.sum(rho * phi_self) * self.simulation.dV + cp.sum(rho * phi_sink) * self.simulation.dV
 
+        phi_self = self.propagator.compute_gravity_potential(rho)  # from rho (no sinks)
+        phi_sink = self._compute_sink_potential_analytic_kspace()  # analytic sinks
 
+        W_self = 0.5 * cp.sum(rho * phi_self) * self.simulation.dV
+
+        rho_sinks = cp.zeros_like(rho)
+
+        if hasattr(self.simulation, 'baryonic_matter'):
+            for sys in self.simulation.baryonic_matter:
+                if self._is_sink_system(sys):
+                    rho_sinks += sys.deposit_to_grid()
+
+        # 0.5 * integral( rho_sink * phi_sink ) to account for Sink Self-Energy
+        W_sink_self = 0.5 * cp.sum(rho_sinks * phi_sink) * dx
+
+        W_self += W_sink_self
         # external static potential energy: ∫ ρ Φ_static dV
         W_static = 0.0
+
         if self.simulation.static_potential is not None:
             phi_static = self.simulation.static_potential(self.simulation)
-            W_static = cp.sum(rho * cp.real(phi_static)) * dx
+            rho_total = rho + rho_sinks
+            W_static = cp.sum(rho_total * cp.real(phi_static)) * dx
 
         W_total = cp.real(W_self + W_static)
-
-
         self.W_self = cp.real(W_self)
         self.W_static = cp.real(W_static)
 
@@ -845,20 +858,28 @@ class Evolution_Class:
         phi_k_total = cp.zeros_like(k2, dtype=cp.complex128)
 
         for sink_sys in sink_systems:
-            # choose softening length; if you store per-sink, you can vary it per sink too
-            eps = float(getattr(sink_sys, "softening_length", min(self.simulation.dx)))
+            eps_bh = float(getattr(sink_sys, "softening_bh", min(self.simulation.dx)))
+            eps_cusp = float(
+                getattr(sink_sys, "softening_cusp", getattr(sink_sys, "capture_radius", 3.0 * min(self.simulation.dx))))
 
-            # k-space softening filter
-            soft = cp.exp(-0.5 * (k * eps)**2)
+            soft_bh = cp.exp(-0.5 * (k * eps_bh) ** 2)
+            soft_cusp = cp.exp(-0.5 * (k * eps_cusp) ** 2)
 
-            # IMPORTANT: iterating over cupy arrays yields host scalars; fine if sinks are few
-            for m, pos in zip(cp.asnumpy(sink_sys.masses), cp.asnumpy(sink_sys.positions)):
+            for mbh, mres, pos in zip(cp.asnumpy(sink_sys.mass_bh),
+                                      cp.asnumpy(sink_sys.mass_res),
+                                      cp.asnumpy(sink_sys.positions)):
                 xs, ys, zs = float(pos[0]), float(pos[1]), float(pos[2])
+                phase = cp.exp(-1j * (kx * xs + ky * ys + kz * zs))
 
-                phase = cp.exp(-1j * (kx*xs + ky*ys + kz*zs))
-                rho_k = (m / dV) * phase * soft
+                # BH component
+                if mbh != 0.0:
+                    rho_k_bh = (mbh / dV) * phase * soft_bh
+                    phi_k_total += (-4.0 * cp.pi * self.propagator.G) * rho_k_bh / k2
 
-                phi_k_total += (-4.0 * cp.pi * self.propagator.G) * rho_k / k2
+                # Cusp/reservoir component (extended)
+                if mres != 0.0:
+                    rho_k_cusp = (mres / dV) * phase * soft_cusp
+                    phi_k_total += (-4.0 * cp.pi * self.propagator.G) * rho_k_cusp / k2
 
         phi_k_total[mask0] = 0.0 + 0.0j
         phi_sink = cp.fft.ifftn(phi_k_total).real.astype(cp.float64)

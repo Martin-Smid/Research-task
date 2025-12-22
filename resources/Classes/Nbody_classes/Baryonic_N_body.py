@@ -510,6 +510,7 @@ class Baryons(NBody):
 
         # 1. Extract Particle Mass
         self.m_particle = float(raw_data[0])
+        print(f"  -> Particle Mass: {self.m_particle} Msun/h")
 
         # 2. Extract Data Arrays
         data = raw_data[1:]

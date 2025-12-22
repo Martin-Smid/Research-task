@@ -12,14 +12,13 @@ sim = Simulation_Class(
     boundaries=[(-20, 20),(-20, 20),(-20, 20)], # Spatial boundaries
     N=128,                             # Grid resolution
     total_time=4,                   # Total simulation time
-    h=1e-4,                            # Time step
+    h=1e-3,                            # Time step
     order_of_evolution=2,
     use_gravity=True , # Enable gravitational effects
     static_potential=None,
     save_max_vals=False,
     self_int=False,
     use_sponge=False,
-    baryonic_model=None,
     sink_formation=dict(
         density_threshold=1e8,
         consecutive_steps=5,
@@ -32,12 +31,12 @@ sim = Simulation_Class(
 
 wave_vector = Wave_vector_class(
     packet_type="resources/solitons/GroundState(1).dat",
-    means=[5, 0, 0],
+    means=[0, 0, 0],
     st_deviations=[0.5, 0.5, 0.5],
     simulation=sim,
     mass=1,
     omega=1,
-    momenta=[0, 0.9485253978117353, 0],
+    momenta=[0, 0, 0],
     spin=0,
     desired_soliton_mass=53090068
 
@@ -61,7 +60,7 @@ sim.add_baryons(bulge)
 
 
 
-#sim.add_wave_vector(wave_vector)
+sim.add_wave_vector(wave_vector)
 
 #TODO: make it so that baryons are added tp simulations similarly to wave vectors
 #TODO: plot both the wfs and baryons
@@ -71,7 +70,7 @@ sim.add_baryons(bulge)
 #sim.add_wave_function(vlna3)
 
 
-sim.evolve(save_every=10 )
+sim.evolve(save_every=50 )
 
 '''1D
 plt.figure()

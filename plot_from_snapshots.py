@@ -38,7 +38,9 @@ plot_wave_function_panel(
     show=False
 )
 
-,1.3,1.5,1.65,1.8,2,2.2,2.4,2.57,3,4,5,6,7,8,9,10
+
+'''
+
 '''
 
 #------------------------------------------BOTH WFS AND BARYONS-----------------------------------------------------------------------
@@ -125,6 +127,7 @@ for time in times:
     plt.grid(alpha=0.3)
     plt.tight_layout()
     plt.show()
+'''
 
 '''
 #------------------------------------------JUST BARYONS-------------------------------------------------
@@ -209,3 +212,45 @@ plt.grid(alpha=0.3)
 plt.tight_layout(); plt.show()
 
 '''
+
+# -----------------------------------------------------total dansity-------------------------------
+
+snapshot_dir = r"resources\data\simulation_20251222_163337"  
+times_to_plot = [0, 0.001, 0.002, 0.003, 0.004, 0.009,1.5,2,2.5,3,3.5,4,4.5,5]                 
+L = 50                                                       
+
+
+files = sorted(glob.glob(os.path.join(snapshot_dir, "total_density_snapshot_at_time_*.npy")))
+available_times = [float(f.split("at_time_")[-1].replace(".npy", "")) for f in files]
+
+for t in times_to_plot:
+    # Find closest file
+    idx = np.argmin(np.abs(np.array(available_times) - t))
+    actual_time = available_times[idx]
+    
+    # Load data
+    rho = np.load(files[idx])
+    
+    # Automatic Slicing: Find indices of global max density
+    mx, my, mz = np.unravel_index(np.argmax(rho), rho.shape)
+    data_slice = rho[:, :, mz] # Slice XY plane at the Z-height of the max density
+    
+    # Setup coordinates
+    N = rho.shape[0]
+    extent = [-L, L, -L, L]
+    x = np.linspace(-L, L, N)
+    y = np.linspace(-L, L, N)
+    X, Y = np.meshgrid(x, y)
+
+    # Plot
+    plt.figure(figsize=(6, 5))
+    plt.contourf(X, Y, data_slice.T, 
+                 levels=np.logspace(np.log10(max(data_slice.max()*1e-5, 1e-10)), np.log10(data_slice.max()), 100),
+                 cmap="viridis", norm=LogNorm())
+    
+    plt.colorbar(label=r"$\rho_{tot}$")
+    plt.title(f"Time: {actual_time:.3f} | Max at Z-index: {mz}")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.tight_layout()
+    plt.show()

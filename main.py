@@ -15,8 +15,8 @@ sim = Simulation_Class(
     dim=3, # 2D simulation
     boundaries=[(-50, 50),(-50, 50),(-50, 50)], # Spatial boundaries
     N=128, # Grid resolution
-    total_time=10, # Total simulation time
-    h=3.681169e-04, # Time step
+    total_time=0.5, # Total simulation time
+    h=3.681169e-03, # Time step
     order_of_evolution=2,
     use_gravity=True, # Enable gravitational effects
     static_potential=None,
@@ -54,7 +54,7 @@ wave_vector = Wave_vector_class(
 
 )
 
-sim.add_baryons(baryons)
+#sim.add_baryons(baryons)
 sim.add_wave_vector(wave_vector)
 
 

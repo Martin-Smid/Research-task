@@ -16,7 +16,8 @@ class SinkNBody(NBody):
 
     def __init__(self, simulation, N_sinks, initial_masses,
                  initial_positions, initial_velocities,
-                 capture_radius=None, softening_length=None):
+                 capture_radius=None, softening_length=None,
+                 reservoir_tau=10):
         """
         Initialize sink particle system.
 
@@ -43,7 +44,6 @@ class SinkNBody(NBody):
         super().__init__(simulation, N_sinks, total_mass=1.0)
 
         # Override particle mass with individual tracking
-        self.masses = cp.asarray(initial_masses, dtype=cp.float64)
         self.positions = cp.asarray(initial_positions, dtype=cp.float64)
         self.velocities = cp.asarray(initial_velocities, dtype=cp.float64)
 
@@ -52,9 +52,18 @@ class SinkNBody(NBody):
         self.capture_radius = capture_radius if capture_radius is not None else 2.5 * min_dx
         self.softening_length = softening_length if softening_length is not None else 1.5 * min_dx
 
+        self.mass_bh = cp.asarray(initial_masses, dtype=cp.float64)          # gravitating BH mass component
+        self.mass_res = cp.zeros_like(self.mass_bh)                          # unresolved reservoir mass
+        self.masses = self.mass_bh + self.mass_res    
+
+        self.reservoir_tau = float(reservoir_tau) if reservoir_tau is not None else 10.0 * simulation.h
+
         # Accretion tracking
         self.total_accreted_mass = 0.0
         self.accretion_history = []
+
+        self.E_diss_kin_total = 0.0
+        self.E_diss_kin_last = 0.0
 
     def deposit_to_grid(self):
         """
@@ -136,7 +145,10 @@ class SinkNBody(NBody):
 
     def accrete_from_baryons(self, baryon_systems):
         """
-        Accrete particles from baryonic systems based on escape velocity criterion.
+        Capture particles from baryonic systems based on escape velocity and angular momentum criteria.
+
+        Captured mass is added to a subgrid reservoir (mass_res) and does NOT instantly increase BH mass (mass_bh).
+        Total gravitating mass (masses = mass_bh + mass_res) is conserved, and sink momentum is updated.
 
         Parameters
         ----------
@@ -145,11 +157,11 @@ class SinkNBody(NBody):
 
         Returns
         -------
-        int : Total number of particles accreted
+        int : Total number of particles captured
         """
         total_accreted = 0
-
-        total_accreted = 0
+        dE_diss_call = cp.asarray(0.0, dtype=cp.float64)
+        self.E_diss_kin_last = 0.0
 
         for baryons in baryon_systems:
             # Skip if it's a sink system or has no particles
@@ -160,64 +172,79 @@ class SinkNBody(NBody):
             for sink_idx in range(self.N):
                 sink_pos = self.positions[sink_idx]
                 sink_vel = self.velocities[sink_idx]
-                sink_mass = self.masses[sink_idx]
+                sink_mass_total = self.masses[sink_idx]   # total gravitating mass = BH + reservoir
 
-                # 1. Compute distances (periodic)
-                # 'dx' here represents the position vector r relative to the sink
+                # 1) Compute distances (periodic)
                 dx = baryons.positions - sink_pos[None, :]
                 for d in range(3):
                     low, high = self.simulation.boundaries[d]
                     L = high - low
                     dx[:, d] = dx[:, d] - cp.copysign(L, dx[:, d]) * (cp.abs(dx[:, d]) > L / 2)
 
-                dist = cp.sqrt(cp.sum(dx ** 2, axis=1))
+                dist = cp.sqrt(cp.sum(dx**2, axis=1))
 
                 # Find particles within capture radius
                 capture_mask = dist < self.capture_radius
-
                 if not cp.any(capture_mask):
                     continue
 
-                # escape velocity criterion  v_esc = sqrt(2 * G * M_sink / r_soft)
+                # Escape velocity criterion: v_esc = sqrt(2 * G * M / r_soft)
                 G = self.simulation.G
                 rel_vel = baryons.velocities - sink_vel[None, :]
-                v_rel_mag = cp.sqrt(cp.sum(rel_vel ** 2, axis=1))
+                v_rel_mag = cp.sqrt(cp.sum(rel_vel**2, axis=1))
 
                 r_soft = cp.maximum(dist, self.softening_length)
-                v_esc = cp.sqrt(2 * G * sink_mass / r_soft)
+                v_esc = cp.sqrt(2 * G * sink_mass_total / r_soft)
 
-                # angular momentum criterion (L = r x v) cross product maybe use cp.cross later
-                
+                # Angular momentum criterion
                 Lx = dx[:, 1] * rel_vel[:, 2] - dx[:, 2] * rel_vel[:, 1]
                 Ly = dx[:, 2] * rel_vel[:, 0] - dx[:, 0] * rel_vel[:, 2]
                 Lz = dx[:, 0] * rel_vel[:, 1] - dx[:, 1] * rel_vel[:, 0]
-                
-               
                 L_sq = Lx**2 + Ly**2 + Lz**2
-                
-                # max allowed L is circular orbit at the capture radius L_max = R * v_circ = R * sqrt(G*M/R) = sqrt(G*M*R),  L_max^2 = G * M * R
-                L_max_sq = G * sink_mass * self.capture_radius
-                
-                # check inequality, if particle can run away
+
+                # Max allowed L for circular orbit at R=capture_radius:
+                # L_max^2 = G * M * R
+                L_max_sq = G * sink_mass_total * self.capture_radius
                 ang_mom_condition = L_sq < L_max_sq
 
-                # Must be close enough AND bound (v < v_esc) AND low enough angular momentum
+                # Must be close enough AND bound AND low enough angular momentum
                 accrete_mask = capture_mask & (v_rel_mag < v_esc) & ang_mom_condition
 
                 n_accrete = int(cp.sum(accrete_mask))
                 if n_accrete == 0:
                     continue
 
-                # Momentum conservation
+                # ---- Capture bookkeeping (mass -> reservoir, momentum conserved) ----
                 accreted_mass = baryons.m_particle * n_accrete
                 accreted_momentum = cp.sum(baryons.velocities[accrete_mask] * baryons.m_particle, axis=0)
 
+                # Momentum conservation for the sink's bulk motion
+                M_old = sink_mass_total
+                P_old = M_old * sink_vel
+                M_new = M_old + accreted_mass
+                P_new = P_old + accreted_momentum
 
-                new_mass = sink_mass + accreted_mass
-                self.velocities[sink_idx] = (sink_mass * sink_vel + accreted_momentum) / new_mass
-                self.masses[sink_idx] = new_mass
 
-                # Remove accreted particles (keep non-accreted)
+                V_old = sink_vel.copy()
+                v_acc = baryons.velocities[accrete_mask]
+                m_p = float(baryons.m_particle)
+
+                K_before = 0.5 * M_old * cp.sum(V_old * V_old) + 0.5 * m_p * cp.sum(v_acc * v_acc)
+                V_new = P_new / M_new
+                K_after  = 0.5 * M_new * cp.sum(V_new * V_new)
+
+                dE_diss_call += (K_before - K_after)
+
+                # Captured mass goes to reservoir (BH mass stays unchanged here)
+                self.mass_res[sink_idx] += accreted_mass
+
+                # Update total gravitating mass (keep old interface)
+                self.masses[sink_idx] = self.mass_bh[sink_idx] + self.mass_res[sink_idx]
+
+                # Update sink velocity
+                self.velocities[sink_idx] = P_new / M_new
+
+                # Remove captured particles (keep non-captured)
                 keep_mask = ~accrete_mask
                 baryons.positions = baryons.positions[keep_mask]
                 baryons.velocities = baryons.velocities[keep_mask]
@@ -225,8 +252,13 @@ class SinkNBody(NBody):
 
                 total_accreted += n_accrete
                 self.total_accreted_mass += accreted_mass
+                self.accretion_history.append((int(sink_idx), float(accreted_mass)))
+
+                self.E_diss_kin_last = float(dE_diss_call.get())
+                self.E_diss_kin_total += self.E_diss_kin_last
 
         return total_accreted
+
 
     def add_new_sink(self, mass, position, velocity):
         """
@@ -246,6 +278,10 @@ class SinkNBody(NBody):
         self.positions = cp.vstack([self.positions, position[None, :]])
         self.velocities = cp.vstack([self.velocities, velocity[None, :]])
         self.N += 1
+        self.mass_bh = cp.concatenate([self.mass_bh, cp.asarray([mass], dtype=cp.float64)])
+        self.mass_res = cp.concatenate([self.mass_res, cp.asarray([0.0], dtype=cp.float64)])
+        self.masses = self.mass_bh + self.mass_res
+
 
     @staticmethod
     def merge_or_create(existing_sink_system, new_sinks_data, simulation):
@@ -300,6 +336,29 @@ class SinkNBody(NBody):
         v2 = (self.velocities ** 2).sum(axis=1)  # |v|^2 per sink
         return 0.5 * (self.masses * v2).sum()
 
+    def drain_reservoir(self, dt):
+        """
+        Move mass from reservoir -> BH smoothly.
+        This changes BH mass but does NOT change total gravitating mass (BH+res stays constant).
+        """
+        if self.N == 0:
+            return
+
+        tau = self.reservoir_tau
+        if tau <= 0:
+            # instant drain
+            dM = self.mass_res.copy()
+        else:
+            # exponential drain fraction per step: dM = M_res * (1 - exp(-dt/tau))
+            frac = 1.0 - cp.exp(-float(dt) / float(tau))
+            dM = self.mass_res * frac
+
+        # transfer mass internally
+        self.mass_res -= dM
+        self.mass_bh += dM
+        print(f"Drained reservoir: {dM.sum()} from reservoir")
+        # keep old interface consistent
+        self.masses = self.mass_bh + self.mass_res
 
 class SinkFormationTracker:
     """
@@ -348,7 +407,7 @@ class SinkFormationTracker:
         self.threshold_counter = cp.where(exceeds,
                                           self.threshold_counter + 1,
                                           0)
-        print(self.threshold_counter.max())
+
         # Find cells that have exceeded threshold for required consecutive steps
         # AND don't already have a sink
         ready_for_sink = (self.threshold_counter >= self.consecutive_steps_required) & (~self.has_sink)
@@ -362,6 +421,9 @@ class SinkFormationTracker:
         # Return indices
         indices = cp.argwhere(ready_for_sink)
         return indices
+    
+    
+
 
     def mark_sink_region(self, position, radius):
         """

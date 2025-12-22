@@ -1,7 +1,7 @@
 import cupy as cp
 import numpy as np
 from resources.Functions.system_fucntions import plot_max_values_on_N
-from resources.Classes.Nbody_classes import Sink_N_Body
+from resources.Classes.Nbody_classes.Sink_N_Body import SinkNBody
 from resources.Classes.Scribe_Class import Scribe
 import os
 from tqdm import tqdm
@@ -148,21 +148,50 @@ class Evolution_Class:
                 save_step = True
 
             #checking if BH appeared
-            self._check_and_form_sinks(step)
+            new_sink = self._check_and_form_sinks(step)
             self._perform_sink_accretion()
+            if new_sink:
+                print("New sink formed at step", step)
+                total_density = self._compute_total_density(wave_functions)
 
             # Perform evolution step
             wave_functions = self._perform_evolution_step(wave_functions, total_density, step, save_step)
 
-
+            total_density = self._compute_total_density(wave_functions)
             current_time = (step + 1) * self.h
             self.compute_total_energy(wave_functions, total_density, current_time)
 
             # Save snapshots and profiles
-            if step % save_every == 0 :
+            if step % save_every == 0:
                 if self.simulation.dim == 3:
                     self._compute_and_save_radial_profile(total_density, current_time, ix, iy, iz)
-                self.scribe.save_snapshots(wave_functions, step, self.h)
+                                
+                baryon_density_to_save = None
+                total_density_to_save = total_density 
+
+                if hasattr(self.simulation, 'baryonic_matter') and self.simulation.baryonic_matter:
+                    shape = (self.simulation.N,) * self.simulation.dim
+                    rho_baryons_all = cp.zeros(shape, dtype=cp.float64)
+                    rho_sinks_only = cp.zeros(shape, dtype=cp.float64)
+
+                    for sys in self.simulation.baryonic_matter:
+                        dens = sys.deposit_to_grid()
+                        rho_baryons_all += dens
+                        
+                        if self._is_sink_system(sys):
+                            rho_sinks_only += dens
+                    
+                    baryon_density_to_save = rho_baryons_all
+                    total_density_to_save = total_density + rho_sinks_only
+
+                self.scribe.save_snapshots(
+                    wave_functions, 
+                    step, 
+                    self.h, 
+                    total_density=total_density_to_save,
+                    baryon_density=baryon_density_to_save
+                )
+                
                 self.scribe.flush_trajectory_buffer()
 
             # Memory cleanup
@@ -225,15 +254,26 @@ class Evolution_Class:
                     total_density_baryons += baryon_sys.deposit_to_grid()
 
             phi_sink = self._compute_sink_potential_analytic_kspace()
-            potential_grid = self.propagator.compute_gravity_potential(total_density) + phi_sink
+            phi_environment = self.propagator.compute_gravity_potential(total_density)
+            phi_total = phi_environment + phi_sink
 
             for baryons in self.simulation.baryonic_matter:
-                baryons.drift(
-                    dt = self.h * 1.0,
-                    potential_grid = potential_grid,
-                    first_step = is_first,
-                    last_step = is_last
-                )
+                if isinstance(baryons, SinkNBody):
+                    # Sinks feel only ULDM + otherbaryons not themselves
+                    baryons.drift(
+                        dt=self.h * 1.0,
+                        potential_grid=phi_environment,  
+                        first_step=is_first,
+                        last_step=is_last
+                    )
+                else:
+                    #baryons feel sinks
+                    baryons.drift(
+                        dt=self.h * 1.0,
+                        potential_grid=phi_total,        
+                        first_step=is_first,
+                        last_step=is_last
+                    )
 
         # Drift step (for wave functions if present)
         if wave_functions:
@@ -353,7 +393,7 @@ class Evolution_Class:
 
         for wf in wave_functions:
             wf.drift(kinetic_propagator)
-            wf._dealias_initial_psi(frac=2/3)
+            #wf._dealias_initial_psi(frac=2/3)
 
     def _compute_total_density(self, wave_functions):
         """Calculate the total density ρ = Σ|ψᵢ|² from all wave functions."""
@@ -384,7 +424,14 @@ class Evolution_Class:
             wave_functions, total_density, current_time
         )
 
-        # --- Log everything through Scribe ---
+        E_diss_total = 0.0
+        if hasattr(self.simulation, 'baryonic_matter') and self.simulation.baryonic_matter:
+            for sys in self.simulation.baryonic_matter:
+                if self._is_sink_system(sys):
+                    E_diss_total += getattr(sys, 'E_diss_kin_total', 0.0)
+
+
+        # Pass energies to scribe for logging
         self.scribe.log_energy_detailed(
             current_time,
             K_total=float(K_total),
@@ -394,6 +441,7 @@ class Evolution_Class:
             K_baryons=float(K_baryons),
             W_self=float(W_self),
             W_static=float(W_static),
+            E_diss=float(E_diss_total) # <--- NEW ARGUMENT
         )
 
         return K_total, W_total, K_flow, U_quantum, K_baryons, W_self, W_static
@@ -722,7 +770,7 @@ class Evolution_Class:
             density_threshold=self.sink_density_threshold,
             aggregation_radius=None  # Will use default
         )
-
+        new_sink = False
         if new_sinks_data is not None:
             # Merge with existing or create new
             self.sink_system = SinkNBody.merge_or_create(
@@ -734,8 +782,10 @@ class Evolution_Class:
             # Add to simulation's baryonic_matter if not already there
             if self.sink_system not in self.simulation.baryonic_matter:
                 self.simulation.baryonic_matter.append(self.sink_system)
+            new_sink = True
 
             print(f"  Total sinks now: {self.sink_system.N}")
+            return new_sink
 
     def _perform_sink_accretion(self):
         """
@@ -754,7 +804,13 @@ class Evolution_Class:
         if len(regular_baryons) > 0:
             n_accreted = self.sink_system.accrete_from_baryons(regular_baryons)
             if n_accreted > 0:
-                print(f"  Sinks accreted {n_accreted} particles")
+                print(
+                        f"  Sinks accreted {n_accreted} particles | "
+                        f"ΔE_diss,kin={self.sink_system.E_diss_kin_last:.6e} | "
+                        f"E_diss,kin_total={self.sink_system.E_diss_kin_total:.6e}"
+                    )
+
+            self.sink_system.drain_reservoir(self.h)
 
     def _is_sink_system(self, sys):
         return sys.__class__.__name__.lower().startswith("sink")

@@ -22,6 +22,7 @@ class Scribe:
         self.snapshot_directory = None
         self.max_locations_path = None
         self.trajectory_path = None
+        self.total_density = None
 
         # Data storage
         self.wave_values = []
@@ -44,7 +45,7 @@ class Scribe:
 
         self.energy_path = os.path.join(self.snapshot_directory, "energy.txt")
 
-        header = "time,K_total,W,E_total,K_flow,U_quantum,K_baryons,W_self,W_static,W_over_E\n"
+        header = "time,K_total,W,E_total,K_flow,U_quantum,K_baryons,W_self,W_static,W_over_E,E_diss,E_tot_cons\n"
         with open(self.energy_path, "w") as f:
             f.write(header)
 
@@ -61,6 +62,7 @@ class Scribe:
         with open(self.max_locations_path, "w") as f:
             f.write("# time, ix, iy, iz, x, y, z\n")
 
+
         return save_dir
 
     def save_initial_states(self, wave_functions):
@@ -75,11 +77,17 @@ class Scribe:
             np.save(initial_path, cp.asnumpy(wf.psi))
             self.wave_values[wf_idx].append(initial_path)
 
-    def save_snapshots(self, wave_functions, step, h):
+    def save_snapshots(self, wave_functions, step, h, total_density=None, baryon_density=None):
         """
-        Save wave function snapshots at current step.
+        Save wave function snapshots, baryon density, and total density at current step.
+
+        Parameters:
+            wave_functions: List of wave function objects
+            step: Current simulation step
+            h: Time step size
+            total_density: (Optional) Total density grid (Waves + Baryons + Sinks)
+            baryon_density: (Optional) Total baryon density grid (Gas + Sinks)
         """
-        rho_baryons = cp.zeros_like(self.simulation.grids[0])
         current_time = step * h
 
         # Save Wave Functions
@@ -88,16 +96,21 @@ class Scribe:
             np.save(snapshot_path, cp.asnumpy(wf.psi))
             self.wave_values[wf_idx].append(snapshot_path)
 
-
-        if hasattr(self.simulation, "baryonic_matter") and self.simulation.baryonic_matter:
-            for baryons in self.simulation.baryonic_matter:
-                rho_baryons += baryons.deposit_to_grid()
-
+        # Save Baryon Density 
+        if baryon_density is not None:
             try:
                 baryon_path = f"{self.snapshot_directory}/baryons_snapshot_at_time_{current_time:.6f}.npy"
-                np.save(baryon_path, cp.asnumpy(rho_baryons))
+                np.save(baryon_path, cp.asnumpy(baryon_density))
             except Exception as e:
                 print(f"[Scribe] Warning: could not save baryon snapshot at time {current_time:.6f}: {e}")
+
+        # Save Total Density 
+        if total_density is not None:
+            try:
+                total_path = f"{self.snapshot_directory}/total_density_snapshot_at_time_{current_time:.6f}.npy"
+                np.save(total_path, cp.asnumpy(total_density))
+            except Exception as e:
+                print(f"[Scribe] Warning: could not save total density snapshot at time {current_time:.6f}: {e}")
 
         self.accessible_times.append(current_time)
 
@@ -169,7 +182,7 @@ class Scribe:
             f.write(f"{time_value:.9e}, {ix:d}, {iy:d}, {iz:d}, {x:.9e}, {y:.9e}, {z:.9e}\n")
 
     def log_energy_detailed(self, time, K_total, W, K_flow, U_quantum,
-                            K_baryons, W_self, W_static):
+                            K_baryons, W_self, W_static,E_diss=0.0):
         """
         Log energy values at a given time.
 
@@ -192,32 +205,38 @@ class Scribe:
         W_static : float
             Energy in external static potential.
         """
-        E = K_total + W
+        E_current = K_total + W
 
-        if E != 0:
-            W_over_E = W / abs(E)
+        # Conserved Energy = Current Energy + Energy that was lost (Dissipated)
+        E_conserved = E_current + E_diss
+
+        if E_current != 0:
+            W_over_E = W / abs(E_current)
         else:
             W_over_E = np.nan
 
+        # Update internal log (optional, but good for consistency)
         self.energy_log.append({
             "time": float(time),
             "K_total": float(K_total),
             "W": float(W),
-            "E_total": float(E),
+            "E_total": float(E_current),
             "K_flow": float(K_flow),
             "U_quantum": float(U_quantum),
             "K_baryons": float(K_baryons),
             "W_self": float(W_self) if W_self is not None else float("nan"),
             "W_static": float(W_static) if W_static is not None else float("nan"),
             "W/|E|": float(W_over_E),
+            "E_diss": float(E_diss),          # NEW
+            "E_tot_cons": float(E_conserved)  # NEW
         })
 
-        line = (f"{float(time):.15e},{float(K_total):.15e},{float(W):.15e},{float(E):.15e},"
+
+        line = (f"{float(time):.15e},{float(K_total):.15e},{float(W):.15e},{float(E_current):.15e},"
                 f"{float(K_flow):.15e},{float(U_quantum):.15e},{float(K_baryons):.15e},"
-                f"{float(W_self):.15e},{float(W_static):.15e},{float(W_over_E):.15e}\n")
+                f"{float(W_self):.15e},{float(W_static):.15e},{float(W_over_E):.15e},"
+                f"{float(E_diss):.15e},{float(E_conserved):.15e}\n")
 
-
-        # Open in 'a' (append) mode
         try:
             with open(self.energy_path, "a") as f:
                 f.write(line)

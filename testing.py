@@ -53,7 +53,7 @@ bulge = Baryons(
     truncation_radius=10, # kpc
     center=(0.0, 0.0, 0.0),
     velocity=(0.0, 0, 0.0),
-    vel_sigma=0 # km/s → ~20 kpc/Gyr if you keep units implicit
+    vel_sigma=20 # km/s → ~20 kpc/Gyr if you keep units implicit
 
 )
 

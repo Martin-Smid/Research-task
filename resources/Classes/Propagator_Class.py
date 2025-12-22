@@ -46,13 +46,12 @@ class Propagator_Class:
             cp.ndarray: The kinetic propagator in k-space
         """
         # Calculate k_squared_sum for the Laplacian operator
-        k_squared_sum = cp.zeros_like(self.k_space[0], dtype=cp.float32)
+        k_squared_sum = cp.zeros_like(self.k_space[0], dtype=cp.float64)
         for k in self.k_space:
             k_squared_sum += k ** 2
 
-        dt_half = (self.h * time_factor) / 2.0
-        exponent = -1j * dt_half * k_squared_sum * self.h_bar_tilde
-        self.kinetic_propagator = cp.exp(exponent, dtype=cp.complex128)
+
+        self.kinetic_propagator = cp.exp(((-1j * ((self.h*time_factor) / 2) * k_squared_sum )*(self.h_bar_tilde)), dtype=cp.complex128)
 
         return self.kinetic_propagator
 
@@ -96,14 +95,14 @@ class Propagator_Class:
     def compute_gravity_potential(self, density):
         """Compute gravitational potential only (no propagator)."""
         if not self.simulation.use_gravity:
-            return cp.zeros_like(density, dtype=cp.float32)
+            return cp.zeros_like(density, dtype=cp.float64)
 
         return self.solve_poisson(density)
 
     def compute_self_interaction_potential(self, density, psi):
         """Compute self-interaction potential only."""
         if not self.simulation.use_self_int:
-            return cp.zeros_like(psi, dtype=cp.float32)
+            return cp.zeros_like(psi, dtype=cp.float64)
 
         a_s = (self.simulation.a_s * units.cm).to(f"{self.simulation.dUnits}").value
         return self.get_self_int_potential(density, psi, a_s)
@@ -135,7 +134,7 @@ class Propagator_Class:
         if psi is not None:
             V_self_int = self.compute_self_interaction_potential(density, psi)
         else:
-            V_self_int = cp.zeros_like(V_grav, dtype=cp.float32)
+            V_self_int = cp.zeros_like(V_grav, dtype=cp.float64)
 
         V_sponge = self.compute_sponge_potential()
         V_total = V_grav + V_self_int + V_sponge

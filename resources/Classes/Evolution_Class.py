@@ -370,7 +370,7 @@ class Evolution_Class:
         for wf in wave_functions:
             # Compute total dynamic propagator (gravity + self-int + sponge)
             dynamic_propagator = self.propagator.compute_total_propagator(
-                total_density, psi=wf.psi,
+                density=total_density, psi=wf.psi,
                 first_step=is_first_step,
                 last_step=is_last_step,
                 time_factor=time_factor
@@ -405,6 +405,7 @@ class Evolution_Class:
             total_density += density_i
 
         if hasattr(self.simulation, 'baryonic_matter') and self.simulation.baryonic_matter:
+
             for baryon_sys in self.simulation.baryonic_matter:
                 if self._is_sink_system(baryon_sys):
                  continue  # sinks handled analytically

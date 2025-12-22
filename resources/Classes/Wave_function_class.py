@@ -102,7 +102,7 @@ class Wave_function():  # Streamlined and unified evolution logic
 
     def calculate_density(self):
 
-        return cp.abs(self.multiplicity*self.psi).astype(cp.float32) ** 2
+        return cp.abs(self.multiplicity*self.psi).astype(cp.float64) ** 2
 
     def rescale_psi_to_phys_units(self):
         # Convert wave function: ψ_sol = ψ̂_sol * (ħ/√G)

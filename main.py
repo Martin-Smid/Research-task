@@ -22,11 +22,6 @@ sim = Simulation_Class(
     static_potential=None,
     save_max_vals=True,
     m_s=2.5e-24,
-    sink_formation=dict(
-        density_threshold=1e7,
-        consecutive_steps=10,
-        check_interval=1,
-    ),
 
 
 

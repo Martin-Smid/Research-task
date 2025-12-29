@@ -426,10 +426,12 @@ class Evolution_Class:
         )
 
         E_diss_total = 0.0
-        if hasattr(self.simulation, 'baryonic_matter') and self.simulation.baryonic_matter:
+        if hasattr(self.simulation, 'baryonic_matter'):
             for sys in self.simulation.baryonic_matter:
                 if self._is_sink_system(sys):
+                    # Sum BOTH accretion dissipation AND formation dissipation
                     E_diss_total += getattr(sys, 'E_diss_kin_total', 0.0)
+                    E_diss_total += getattr(sys, 'E_diss_formation_total', 0.0)
 
 
         # Pass energies to scribe for logging
@@ -862,8 +864,10 @@ class Evolution_Class:
             eps_cusp = float(
                 getattr(sink_sys, "softening_cusp", getattr(sink_sys, "capture_radius", 3.0 * min(self.simulation.dx))))
 
-            soft_bh = cp.exp(-0.5 * (k * eps_bh) ** 2)
-            soft_cusp = cp.exp(-0.5 * (k * eps_cusp) ** 2)
+            soft_bh = 1
+            soft_cusp = 1
+            #soft_bh = cp.exp(-0.5 * (k * eps_bh) ** 2)
+            #soft_cusp = cp.exp(-0.5 * (k * eps_cusp) ** 2)
 
             for mbh, mres, pos in zip(cp.asnumpy(sink_sys.mass_bh),
                                       cp.asnumpy(sink_sys.mass_res),

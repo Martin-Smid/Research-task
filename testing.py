@@ -20,7 +20,7 @@ sim = Simulation_Class(
     self_int=False,
     use_sponge=False,
     sink_formation=dict(
-        density_threshold=1e8,
+        density_threshold=1e4,
         consecutive_steps=5,
         check_interval=1,
     ),

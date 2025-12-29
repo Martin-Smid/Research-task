@@ -70,7 +70,7 @@ class Wave_function():  # Streamlined and unified evolution logic
                     print(self.scaling_lambda)
                     print("above is lambda")
                     self.psi = self._rescale_psi_to_new_scale_based_on_mass()
-                self._dealias_initial_psi(frac=2/3)
+                #self._dealias_initial_psi(frac=2/3)
             except Exception as e:
                 print(f"Warning: Could not rescale mass for packet {self.packet_type}. Using raw packet. Error: {e}")
 

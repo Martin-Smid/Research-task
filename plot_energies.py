@@ -7,8 +7,8 @@ import numpy as np
 simulation_dirs = [
 
 
-"resources/data/simulation_20251222_223038",
-"resources/data/simulation_20251222_223612"
+
+"resources/data/simulation_20251229_155952"
 
 
 

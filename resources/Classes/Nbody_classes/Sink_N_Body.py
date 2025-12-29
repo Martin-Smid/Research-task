@@ -62,6 +62,8 @@ class SinkNBody(NBody):
 
         self.reservoir_tau = float(reservoir_tau) if reservoir_tau is not None else 10.0 * simulation.h
 
+        self.E_diss_formation_total = 0.0
+
         # Accretion tracking
         self.total_accreted_mass = 0.0
         self.accretion_history = []
@@ -307,24 +309,36 @@ class SinkNBody(NBody):
             Updated or new sink system
         """
         print("got to merge or create")
+
+        # if no data, just return what we have
         if new_sinks_data is None:
             return existing_sink_system
 
-        n_new = len(new_sinks_data['masses'])
-        if n_new == 0:
-            return existing_sink_system
+        # formation energy (default to 0.0)
+        formation_energy = new_sinks_data.get('E_diss_formation', 0.0)
 
+        n_new = len(new_sinks_data['masses'])
+
+        #creating new system
         if existing_sink_system is None:
-            # Create new system
-            return SinkNBody(
+            # Create the instance
+            new_sys = SinkNBody(
                 simulation=simulation,
                 N_sinks=n_new,
                 initial_masses=new_sinks_data['masses'],
                 initial_positions=new_sinks_data['positions'],
                 initial_velocities=new_sinks_data['velocities']
             )
+            # Initialize the energy tracker
+            new_sys.E_diss_formation_total = formation_energy
+            return new_sys
+
+        #  adding to an EXISTING system
         else:
-            # Add to existing system
+            # Add the energy to the existing total
+            existing_sink_system.E_diss_formation_total += formation_energy
+
+            # Add the particles
             for i in range(n_new):
                 existing_sink_system.add_new_sink(
                     mass=new_sinks_data['masses'][i],
@@ -497,55 +511,73 @@ def check_and_create_sinks(simulation, sink_tracker, density_threshold,
     new_positions = []
     new_velocities = []
 
+    # Global accumulator for this specific timestep
+    total_dissipated_energy_this_step = 0.0
+
     for cell_idx in ready_indices:
         ix, iy, iz = int(cell_idx[0]), int(cell_idx[1]), int(cell_idx[2])
 
-        # Cell center position
         cell_pos = cp.array([
             grids[0][ix, iy, iz],
             grids[1][ix, iy, iz],
             grids[2][ix, iy, iz]
         ], dtype=cp.float64)
 
-        # Aggregate mass and momentum from nearby particles
         total_mass = 0.0
         total_momentum = cp.zeros(3, dtype=cp.float64)
 
-        for baryons in regular_baryons:
-            if baryons.N == 0:
-                continue
+        # Accumulator for the gas kinetic energy BEFORE merger
+        KE_gas_before = 0.0
 
-            # Distance to cell center (periodic)
+        for baryons in regular_baryons:
+            if baryons.N == 0: continue
+
+            # ... [Distance calc remains the same] ...
             dx_vec = baryons.positions - cell_pos[None, :]
             for d in range(3):
                 low, high = simulation.boundaries[d]
                 L = high - low
                 dx_vec[:, d] = dx_vec[:, d] - cp.copysign(L, dx_vec[:, d]) * (cp.abs(dx_vec[:, d]) > L / 2)
-
             dist = cp.sqrt(cp.sum(dx_vec ** 2, axis=1))
 
-            # Particles within aggregation radius
             nearby_mask = dist < aggregation_radius
             n_nearby = int(cp.sum(nearby_mask))
 
             if n_nearby > 0:
-                mass_nearby = baryons.m_particle * n_nearby
-                momentum_nearby = cp.sum(baryons.velocities[nearby_mask] * baryons.m_particle, axis=0)
+                # 1. Capture Gas Properties
+                v_gas = baryons.velocities[nearby_mask]
+                m_gas = baryons.m_particle
+
+                # 2. Add to Gas KE Sum (BEFORE REMOVAL)
+                KE_gas_before += 0.5 * m_gas * cp.sum(v_gas ** 2)
+
+                # 3. Add to Mass/Momentum Sums
+                mass_nearby = m_gas * n_nearby
+                momentum_nearby = cp.sum(v_gas * m_gas, axis=0)
 
                 total_mass += mass_nearby
                 total_momentum += momentum_nearby
 
-                # Remove aggregated particles
+                # 4. Remove particles
                 keep_mask = ~nearby_mask
                 baryons.positions = baryons.positions[keep_mask]
                 baryons.velocities = baryons.velocities[keep_mask]
                 baryons.N = int(cp.sum(keep_mask))
 
-        # Only create sink if we aggregated some mass
+        # --- OUTSIDE the baryons loop, but INSIDE the cell loop ---
         if total_mass > 0:
+            # 1. Calculate final Sink Physics
+            v_sink = total_momentum / total_mass
+            KE_sink_after = 0.5 * total_mass * cp.sum(v_sink ** 2)
+
+            # 2. Calculate Dissipation (Heat)
+            dissipation_this_sink = KE_gas_before - KE_sink_after
+            total_dissipated_energy_this_step += dissipation_this_sink
+
+            # 3. Store Data
             new_masses.append(total_mass)
             new_positions.append(cell_pos)
-            new_velocities.append(total_momentum / total_mass)
+            new_velocities.append(v_sink)
 
     if len(new_masses) == 0:
         return None
@@ -553,7 +585,8 @@ def check_and_create_sinks(simulation, sink_tracker, density_threshold,
     return {
         'masses': cp.array(new_masses, dtype=cp.float64),
         'positions': cp.stack(new_positions, axis=0),
-        'velocities': cp.stack(new_velocities, axis=0)
+        'velocities': cp.stack(new_velocities, axis=0),
+        'E_diss_formation': float(total_dissipated_energy_this_step)
     }
 
 

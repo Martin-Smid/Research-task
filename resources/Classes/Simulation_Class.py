@@ -5,12 +5,14 @@ from resources.Classes.Propagator_Class import Propagator_Class
 from resources.Classes.Evolution_Class import Evolution_Class
 #from resources.Classes.Baryonic_liquid_Class import BaryonicMatter_Class
 from resources.Classes.Nbody_classes.Baryonic_N_body import Baryons
+from resources.Classes.Nbody_classes.NBodyGas import NBodyGas
 import functools
 import sys
 import inspect
 from itertools import chain
 import numpy as np
 from astropy import units, constants
+
 np.random.seed(1)
 
 def parameter_check(*types):
@@ -504,6 +506,8 @@ class Simulation_Class:
                 self.add_baryons(baryon_sys)  # Recursive call for each
             return
 
+        if not isinstance(baryonic_system, (Baryons, NBodyGas)):
+            raise TypeError(f"Expected Baryons or NBodyGas instance, got {type(baryonic_system)}")
 
         if baryonic_system.simulation is not self:
             raise ValueError(

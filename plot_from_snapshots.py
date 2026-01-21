@@ -129,10 +129,10 @@ for time in times:
     plt.show()
 '''
 
-'''
-#------------------------------------------JUST BARYONS-------------------------------------------------
 
-snapshot_dir = "resources/data/simulation_20251218_162149"  # your snapshot folder
+#------------------------------------------JUST BARYONS-------------------------------------------------
+'''
+snapshot_dir = "resources/data/simulation_20260121_112709"  # your snapshot folder
 boundaries = [(-50, 50), (-50, 50), (-50, 50)]              # same as in Simulation_Class
 slice_axis = 2                                              # 0=x,1=y,2=z
 time_target = 0.1                                       # pick saved time
@@ -215,8 +215,8 @@ plt.tight_layout(); plt.show()
 
 # -----------------------------------------------------total dansity-------------------------------
 
-snapshot_dir = r"resources/data/simulation_20251229_155952"
-times_to_plot = [0, 0.018, 0.036, 0.055, 0.073, 0.15,0.2,0.25,0.3,0.35,0.4,0.45,0.5]
+snapshot_dir = r"resources/data/simulation_20260121_123327"
+times_to_plot = [0, 0.05, 0.1, 0.15, 0.2, 0.25,0.3,0.35,0.4,0.45,0.5,0.55,0.6,0.7,0.8,0.9]
 L = 50                                                       
 
 
@@ -254,3 +254,4 @@ for t in times_to_plot:
     plt.ylabel("y")
     plt.tight_layout()
     plt.show()
+

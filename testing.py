@@ -6,6 +6,7 @@ from matplotlib.colors import LogNorm
 from resources.Classes.Simulation_Class import Simulation_Class
 from resources.Classes.Wave_vector_class import Wave_vector_class
 from resources.Classes.Nbody_classes.Baryonic_N_body import Baryons
+from resources.Classes.Nbody_classes.NBodyGas import NBodyGas
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
@@ -27,7 +28,7 @@ sim = Simulation_Class(
 
 wave_vector = Wave_vector_class(
     packet_type="resources/solitons/GroundState(1).dat",
-    means=[0, 0, 0],
+    means=[10, 10, 0],
     st_deviations=[0.5, 0.5, 0.5],
     simulation=sim,
     mass=1,
@@ -52,11 +53,25 @@ bulge = Baryons(
 
 )
 
-sim.add_baryons(bulge)
+#sim.add_baryons(bulge)
 
 
+N = sim.N
+x, y, z = sim.grids  # your coordinate grids
+x = np.array(x); y = np.array(y); z = np.array(z)
 
-sim.add_wave_vector(wave_vector)
+rho0 = 1.0 / (sim.dV * (N**sim.dim))  # if you want total mass ~1 in box, adjust if needed
+A = 200.0 * rho0
+sigma = 5.0 * min(sim.dx)
+
+r2 = x**2 + y**2 + z**2
+rho = rho0 + A*np.exp(-0.5*r2/sigma**2)
+rho = np.maximum(rho, 1e-12)
+
+gas = NBodyGas(simulation=sim, rho=rho, cs=0.05, cfl=0.1, max_substeps=20)
+sim.add_baryons(gas)
+
+
 
 #TODO: make it so that baryons are added tp simulations similarly to wave vectors
 #TODO: plot both the wfs and baryons

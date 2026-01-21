@@ -69,6 +69,7 @@ class Evolution_Class:
         if (hasattr(self.simulation, 'baryonic_matter') and
                 self.simulation.baryonic_matter and
                 len(self.simulation.baryonic_matter) == 1 and
+                hasattr(self.simulation.baryonic_matter[0], "N") and
                 self.simulation.baryonic_matter[0].N == 1):
             self.track_particle = True
             print("Single particle detected: Trajectory tracking enabled.")
@@ -95,10 +96,16 @@ class Evolution_Class:
 
         current_time = 0
         if self.simulation.dim == 3:
-            ix, iy, iz = cp.asnumpy(cp.argwhere(total_density == total_density.max())[0])
+            # Check if density has any non-zero values
+            max_indices = cp.argwhere(total_density == total_density.max())
+            if max_indices.size > 0:
+                ix, iy, iz = cp.asnumpy(max_indices[0])
+                self.scribe.record_max_location(int(ix), int(iy), int(iz), float(current_time))
+                self._compute_and_save_radial_profile(total_density, current_time, ix, iy, iz)
+            else:
+                print("Warning: No maximum density location found (density may be zero everywhere)")
+                ix, iy, iz = self.simulation.N // 2, self.simulation.N // 2, self.simulation.N // 2
 
-            self.scribe.record_max_location(int(ix), int(iy), int(iz), float(current_time))
-            self._compute_and_save_radial_profile(total_density, current_time, ix, iy, iz)
         self.compute_total_energy(wave_functions, total_density, current_time)
 
         # Check mass conservation
@@ -141,8 +148,13 @@ class Evolution_Class:
 
             # Track max location
             if self.simulation.dim == 3:
-                ix, iy, iz = cp.asnumpy(cp.argwhere(total_density == total_density.max())[0])
-                self.scribe.record_max_location(int(ix), int(iy), int(iz), float(current_time))
+                max_indices = cp.argwhere(total_density == total_density.max())
+                if max_indices.size > 0:
+                    ix, iy, iz = cp.asnumpy(max_indices[0])
+                    self.scribe.record_max_location(int(ix), int(iy), int(iz), float(current_time))
+                else:
+                    # Use center of grid as fallback
+                    ix, iy, iz = self.simulation.N // 2, self.simulation.N // 2, self.simulation.N // 2
 
             if step % save_every == 0 and step > 0:
                 save_step = True
@@ -167,12 +179,14 @@ class Evolution_Class:
                     self._compute_and_save_radial_profile(total_density, current_time, ix, iy, iz)
                                 
                 baryon_density_to_save = None
+                gas_density_to_save = None
                 total_density_to_save = total_density 
 
                 if hasattr(self.simulation, 'baryonic_matter') and self.simulation.baryonic_matter:
                     shape = (self.simulation.N,) * self.simulation.dim
                     rho_baryons_all = cp.zeros(shape, dtype=cp.float64)
                     rho_sinks_only = cp.zeros(shape, dtype=cp.float64)
+                    rho_gas_only = cp.zeros(shape, dtype=cp.float64)
 
                     for sys in self.simulation.baryonic_matter:
                         dens = sys.deposit_to_grid()
@@ -180,19 +194,25 @@ class Evolution_Class:
                         
                         if self._is_sink_system(sys):
                             rho_sinks_only += dens
-                    
+
+                        if self._is_gas_system(sys):
+                            rho_gas_only += dens
+
+
                     baryon_density_to_save = rho_baryons_all
-                    total_density_to_save = total_density + rho_sinks_only
+                    total_density_to_save = total_density + rho_sinks_only + rho_gas_only
 
                 self.scribe.save_snapshots(
                     wave_functions, 
                     step, 
                     self.h, 
                     total_density=total_density_to_save,
-                    baryon_density=baryon_density_to_save
+                    baryon_density=baryon_density_to_save,
+                    gas_density=gas_density_to_save
                 )
                 
                 self.scribe.flush_trajectory_buffer()
+
 
             # Memory cleanup
             cp.get_default_memory_pool().free_all_blocks()
@@ -454,7 +474,7 @@ class Evolution_Class:
         W_self, W_static, W_total = self._compute_potential_energy(
             wave_functions, total_density, current_time
         )
-
+        U_iso_total = 0.0
         E_diss_total = 0.0
         if hasattr(self.simulation, 'baryonic_matter'):
             for sys in self.simulation.baryonic_matter:
@@ -463,18 +483,30 @@ class Evolution_Class:
                     E_diss_total += getattr(sys, 'E_diss_kin_total', 0.0)
                     E_diss_total += getattr(sys, 'E_diss_formation_total', 0.0)
 
+                if hasattr(sys, "rho") and hasattr(sys, "cs"):
+                    rho = sys.rho
+                    rho_floor = getattr(sys, "rho_floor", 1e-12)
+                    rho_clamped = cp.maximum(rho, rho_floor)
+
+                    rho_ref = getattr(sys, "rho_ref", None)
+                    if rho_ref is None:
+                        rho_ref = float(cp.mean(rho_clamped))
+
+                    U_iso_total += float((sys.cs ** 2) * cp.sum(rho_clamped * cp.log(rho_clamped / rho_ref)) * self.simulation.dV)
+
 
         # Pass energies to scribe for logging
         self.scribe.log_energy_detailed(
             current_time,
             K_total=float(K_total),
             W=float(W_total),
+            U_iso=float(U_iso_total),
             K_flow=float(K_flow),
             U_quantum=float(U_quantum),
             K_baryons=float(K_baryons),
             W_self=float(W_self),
             W_static=float(W_static),
-            E_diss=float(E_diss_total) # <--- NEW ARGUMENT
+            E_diss=float(E_diss_total)
         )
 
         return K_total, W_total, K_flow, U_quantum, K_baryons, W_self, W_static
@@ -566,10 +598,10 @@ class Evolution_Class:
 
         # --- baryons: ½ m v² summed over ALL particles in ALL systems ---
         K_baryons = 0.0
-        if hasattr(self.simulation, 'baryonic_matter') and self.simulation.baryonic_matter:
+        if getattr(self.simulation, 'baryonic_matter', None):
             for baryons in self.simulation.baryonic_matter:
-                v2 = cp.sum(baryons.velocities ** 2)
-                K_baryons += baryons.kinetic_energy()
+                if hasattr(baryons, "kinetic_energy"):
+                    K_baryons += baryons.kinetic_energy()
 
 
         # Store for possible simple logging
@@ -918,3 +950,7 @@ class Evolution_Class:
         phi_k_total[mask0] = 0.0 + 0.0j
         phi_sink = cp.fft.ifftn(phi_k_total).real.astype(cp.float64)
         return phi_sink
+
+    def _is_gas_system(self, sys):
+        """Check if a baryonic system is a gas system."""
+        return sys.__class__.__name__.lower() == "nbodygas"

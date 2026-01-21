@@ -227,9 +227,9 @@ class Simulation_Class:
         dx_values = []
         grids = []
 
-        self.dV = int(self.boundaries[0][1] - self.boundaries[0][0]) / self.N
+
         self.dx = [(b - a) / self.N for (a, b) in self.boundaries]
-        self.cell_volume = np.prod(self.dx)
+        self.dV = np.prod(self.dx)
 
         for i, (a, b) in enumerate(self.boundaries):
             if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
@@ -504,11 +504,6 @@ class Simulation_Class:
                 self.add_baryons(baryon_sys)  # Recursive call for each
             return
 
-        # Validate single system
-        if not isinstance(baryonic_system, Baryons):
-            raise TypeError(
-                f"add_baryons expected NBodyBaryons instance or list, got {type(baryonic_system)}"
-            )
 
         if baryonic_system.simulation is not self:
             raise ValueError(

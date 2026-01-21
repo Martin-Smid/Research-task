@@ -29,83 +29,7 @@ class NBody:
         self.positions = cp.zeros((N_particles, 3), dtype=cp.float64)
         self.velocities = cp.zeros((N_particles, 3), dtype=cp.float64)
 
-    # ----------------------------
-    # Generic grid-coupling methods
-    # ----------------------------
 
-    '''def deposit_to_grid(self):
-        """
-        Deposit particle masses to grid using Cloud-In-Cell (CIC) (GPU: CuPy).
-        Uses sim.dx directly to ensure consistency with the fixed boundary logic.
-        """
-        sim = self.simulation
-
-        # 1. Initialize density grid on GPU
-        shape = (sim.N,) * sim.dim
-        rho_grid = cp.zeros(shape, dtype=cp.float64)
-
-        # 2. Get Grid Spacing & Boundaries directly from Simulation
-        dx, dy, dz = sim.dx
-
-        (x_min, x_max) = sim.boundaries[0]
-        (y_min, y_max) = sim.boundaries[1]
-        (z_min, z_max) = sim.boundaries[2]
-
-        Lx = x_max - x_min
-        Ly = y_max - y_min
-        Lz = z_max - z_min
-
-        # 3. Periodic Wrap of Positions (GPU)
-        px = x_min + cp.mod(self.positions[:, 0] - x_min, Lx)
-        py = y_min + cp.mod(self.positions[:, 1] - y_min, Ly)
-        pz = z_min + cp.mod(self.positions[:, 2] - z_min, Lz)
-
-        # 4. Convert to Fractional Grid Indices (GPU)
-        fx = (px - x_min) / dx
-        fy = (py - y_min) / dy
-        fz = (pz - z_min) / dz
-
-        # 5. Cloud-In-Cell (CIC) Interpolation Weights (GPU)
-        i0 = cp.floor(fx).astype(cp.int32)
-        j0 = cp.floor(fy).astype(cp.int32)
-        k0 = cp.floor(fz).astype(cp.int32)
-
-        tx = fx - i0
-        ty = fy - j0
-        tz = fz - k0
-
-        wx0, wx1 = 1.0 - tx, tx
-        wy0, wy1 = 1.0 - ty, ty
-        wz0, wz1 = 1.0 - tz, tz
-
-        # 6. Handle Periodic Wrapping for Indices (GPU)
-        N = sim.N
-        i1 = (i0 + 1) % N
-        j1 = (j0 + 1) % N
-        k1 = (k0 + 1) % N
-        i0 = i0 % N
-        j0 = j0 % N
-        k0 = k0 % N
-
-        # 7. Mass Deposit
-        cell_volume = dx * dy * dz
-        mass_val = self.m_particle / cell_volume
-
-        corners_weights = [
-            (wx0 * wy0 * wz0, i0, j0, k0), (wx1 * wy0 * wz0, i1, j0, k0),
-            (wx0 * wy1 * wz0, i0, j1, k0), (wx1 * wy1 * wz0, i1, j1, k0),
-            (wx0 * wy0 * wz1, i0, j0, k1), (wx1 * wy0 * wz1, i1, j0, k1),
-            (wx0 * wy1 * wz1, i0, j1, k1), (wx1 * wy1 * wz1, i1, j1, k1)
-        ]
-
-        N_sq = N * N
-
-        for w, ii, jj, kk in corners_weights:
-            flat_indices = ii * N_sq + jj * N + kk
-            contribution = mass_val * w
-            cp.add.at(rho_grid.ravel(), flat_indices, contribution)
-
-        return rho_grid'''
 
     def interpolate_force_from_grid(self, potential_grid):
         """
@@ -179,6 +103,15 @@ class NBody:
         else:
             total_dt_window = dt
 
+        if isinstance(potential_grid, (tuple, list)) and len(potential_grid) == 3:
+            Fx_grid, Fy_grid, Fz_grid = potential_grid
+
+            def force_computer():
+                return self._interpolate_force_trilinear(Fx_grid, Fy_grid, Fz_grid)
+        else:
+            def force_computer():
+                return self.interpolate_force_from_grid(potential_grid)
+
         # --- 3. velocity-based criterion ---
         v_sq = cp.sum(self.velocities ** 2, axis=1)
         v_max = float(cp.sqrt(cp.max(v_sq)))
@@ -191,7 +124,7 @@ class NBody:
         dt_vel = f_v * (min_dx / v_max)
 
         # --- 4. acceleration-based criterion ---
-        forces = self.interpolate_force_from_grid(potential_grid)
+        forces = force_computer()
         a_sq = cp.sum(forces ** 2, axis=1)
         a_max = float(cp.sqrt(cp.max(a_sq)))
 
@@ -223,7 +156,7 @@ class NBody:
                     self.positions[:, dim] = ((self.positions[:, dim] - low) % width) + low
 
             # C. Full kick with forces at current position
-            forces = self.interpolate_force_from_grid(potential_grid)
+            forces = force_computer()
             self.velocities += forces * dt_sub
 
             # D. Full drift (except last substep does half-drift)
@@ -335,7 +268,7 @@ class NBody:
         k0 = k0 % N
 
         # 5. Mass per volume
-        cell_volume = sim.cell_volume
+        cell_volume = sim.dV
         mass_val = self.m_particle / cell_volume
 
         # 6. 8 corners and their weights

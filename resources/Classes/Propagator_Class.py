@@ -179,3 +179,16 @@ class Propagator_Class:
 
         potential = cp.fft.ifftn(potential_k).real.astype(cp.float64)
         return potential
+
+    def compute_force_grids_from_potential(self, potential):
+        """
+        Compute acceleration grids a = -∇Phi on the simulation grid.
+        Returns (Fx, Fy, Fz) as cp.float64 grids.
+        """
+        Phi_k = cp.fft.fftn(potential.astype(cp.complex128))
+
+        Fx = cp.fft.ifftn((-1j) * self.k_space[0] * Phi_k).real.astype(cp.float64)
+        Fy = cp.fft.ifftn((-1j) * self.k_space[1] * Phi_k).real.astype(cp.float64)
+        Fz = cp.fft.ifftn((-1j) * self.k_space[2] * Phi_k).real.astype(cp.float64)
+
+        return Fx, Fy, Fz

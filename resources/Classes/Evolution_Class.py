@@ -88,7 +88,7 @@ class Evolution_Class:
         # Initial diagnostics
         total_density = self._compute_total_density(wave_functions)
 
-        mass_total = cp.sum(total_density) * self.simulation.cell_volume
+        mass_total = cp.sum(total_density) * self.simulation.dV
         print("Mass:", mass_total)
         print("Deviation [%]:", 100 * (mass_total / 1e8 - 1))
 
@@ -257,23 +257,25 @@ class Evolution_Class:
             phi_environment = self.propagator.compute_gravity_potential(total_density)
             phi_total = phi_environment + phi_sink
 
+            forces_environment = self.propagator.compute_force_grids_from_potential(phi_environment)
+            forces_total = self.propagator.compute_force_grids_from_potential(phi_total)
+
             for baryons in self.simulation.baryonic_matter:
                 if isinstance(baryons, SinkNBody):
-                    # Sinks feel only ULDM + otherbaryons not themselves
                     baryons.drift(
                         dt=self.h * 1.0,
-                        potential_grid=phi_environment,  
+                        potential_grid=forces_environment,
                         first_step=is_first,
                         last_step=is_last
                     )
                 else:
-                    #baryons feel sinks
                     baryons.drift(
                         dt=self.h * 1.0,
-                        potential_grid=phi_total,        
+                        potential_grid=forces_total,
                         first_step=is_first,
                         last_step=is_last
                     )
+
 
         # Drift step (for wave functions if present)
         if wave_functions:
@@ -307,15 +309,29 @@ class Evolution_Class:
                 # Evolve baryons at appropriate kick steps
                 if self.simulation.baryonic_matter:
                     phi_sink = self._compute_sink_potential_analytic_kspace()
-                    potential_grid = self.propagator.compute_gravity_potential(total_density) + phi_sink
                     time_factor = self.coefficients[coeff_key]
+
+                    phi_environment = self.propagator.compute_gravity_potential(total_density)
+                    phi_total = phi_environment + phi_sink
+
+                    forces_environment = self.propagator.compute_force_grids_from_potential(phi_environment)
+                    forces_total = self.propagator.compute_force_grids_from_potential(phi_total)
+
                     for baryons in self.simulation.baryonic_matter:
-                        baryons.drift(
-                            dt = self.h * time_factor,
-                            potential_grid = potential_grid,
-                            first_step = first_op,
-                            last_step = last_op
-                        )
+                        if isinstance(baryons, SinkNBody):
+                            baryons.drift(
+                                dt = self.h * time_factor,
+                                potential_grid=forces_environment,
+                                first_step = first_op,
+                                last_step = last_op
+                            )
+                        else:
+                            baryons.drift(
+                                dt = self.h * time_factor,
+                                potential_grid=forces_total,
+                                first_step = first_op,
+                                last_step = last_op
+                            )
             else:  # drift
                 if wave_functions:
                     self._drift_all_wave_functions(wave_functions, time_factor_key=coeff_key)
@@ -345,15 +361,29 @@ class Evolution_Class:
                 # Evolve baryons at appropriate kick steps
                 if self.simulation.baryonic_matter:
                     phi_sink = self._compute_sink_potential_analytic_kspace()
-                    potential_grid = self.propagator.compute_gravity_potential(total_density) + phi_sink
                     time_factor = self.coefficients[coeff_key]
+
+                    phi_environment = self.propagator.compute_gravity_potential(total_density)
+                    phi_total = phi_environment + phi_sink
+
+                    forces_environment = self.propagator.compute_force_grids_from_potential(phi_environment)
+                    forces_total = self.propagator.compute_force_grids_from_potential(phi_total)
+
                     for baryons in self.simulation.baryonic_matter:
-                        baryons.drift(
-                            dt = self.h * time_factor,
-                            potential_grid = potential_grid,
-                            first_step = first_op,
-                            last_step = last_op
-                        )
+                        if isinstance(baryons, SinkNBody):
+                            baryons.drift(
+                                dt=self.h * time_factor,
+                                potential_grid=forces_environment,
+                                first_step=first_op,
+                                last_step=last_op
+                            )
+                        else:
+                            baryons.drift(
+                                dt=self.h * time_factor,
+                                potential_grid=forces_total,
+                                first_step=first_op,
+                                last_step=last_op
+                            )
             else:  # drift
                 if wave_functions:
                     self._drift_all_wave_functions(wave_functions, time_factor_key=coeff_key)
@@ -855,7 +885,7 @@ class Evolution_Class:
         mask0 = (k2 == 0)
 
         # cell volume for scaling: your density grid integrates with sum(rho)*dV
-        dV = float(np.prod(self.simulation.dx))
+        #dV = float(np.prod(self.simulation.dx))
 
         phi_k_total = cp.zeros_like(k2, dtype=cp.complex128)
 
@@ -877,12 +907,12 @@ class Evolution_Class:
 
                 # BH component
                 if mbh != 0.0:
-                    rho_k_bh = (mbh / dV) * phase * soft_bh
+                    rho_k_bh = (mbh / self.simulation.dV) * phase * soft_bh
                     phi_k_total += (-4.0 * cp.pi * self.propagator.G) * rho_k_bh / k2
 
                 # Cusp/reservoir component (extended)
                 if mres != 0.0:
-                    rho_k_cusp = (mres / dV) * phase * soft_cusp
+                    rho_k_cusp = (mres / self.simulation.dV) * phase * soft_cusp
                     phi_k_total += (-4.0 * cp.pi * self.propagator.G) * rho_k_cusp / k2
 
         phi_k_total[mask0] = 0.0 + 0.0j

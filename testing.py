@@ -11,7 +11,7 @@ sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-20, 20),(-20, 20),(-20, 20)], # Spatial boundaries
     N=128,                             # Grid resolution
-    total_time=4,                   # Total simulation time
+    total_time=1,                   # Total simulation time
     h=1e-3,                            # Time step
     order_of_evolution=2,
     use_gravity=True , # Enable gravitational effects
@@ -19,11 +19,7 @@ sim = Simulation_Class(
     save_max_vals=False,
     self_int=False,
     use_sponge=False,
-    sink_formation=dict(
-        density_threshold=1e4,
-        consecutive_steps=5,
-        check_interval=1,
-    ),
+
 
 )
 

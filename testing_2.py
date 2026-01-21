@@ -13,8 +13,8 @@ import numpy as np
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-20, 20),(-20,20),(-20,20)], # Spatial boundaries
-    N=256,                             # Grid resolution
-    total_time=0.5,              # Total simulation time
+    N=128,                             # Grid resolution
+    total_time=1,              # Total simulation time
     h=0.001,                            # Time step
     order_of_evolution=2,
     use_gravity=True ,
@@ -66,7 +66,7 @@ for i in range(1):
 
 
 
-sim.evolve(save_every=50)
+sim.evolve(save_every=100)
 
 
 

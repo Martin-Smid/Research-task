@@ -20,6 +20,18 @@ sim = Simulation_Class(
     save_max_vals=False,
     self_int=False,
     use_sponge=False,
+    sink_formation={
+
+        "enable_gas_sinks": True,
+        "gas_mode": "truelove",
+        "gas_NJ": 4,
+        "gas_cs_floor": 0.01,
+        "gas_consecutive_steps": 5,
+        "gas_check_interval": 5,
+        "gas_r_acc_cells": 3,
+
+        "density_threshold": None,
+    }
 
 
 )
@@ -49,7 +61,8 @@ bulge = Baryons(
     truncation_radius=10, # kpc
     center=(0.0, 0.0, 0.0),
     velocity=(0.0, 0, 0.0),
-    vel_sigma=20 # km/s → ~20 kpc/Gyr if you keep units implicit
+    vel_sigma=20, # km/s → ~20 kpc/Gyr if you keep units implicit
+
 
 )
 
@@ -68,14 +81,20 @@ r2 = x**2 + y**2 + z**2
 rho = rho0 + A*np.exp(-0.5*r2/sigma**2)
 rho = np.maximum(rho, 1e-12)
 
-gas = NBodyGas(simulation=sim,
-               total_mass=1.0,
-               cs=1.0,
-               gamma=5/3,
-               tcool=None,      # Gyr
-               e_floor=0.0,
-               cfl=0.4,
-               max_substeps=50)
+Mgas_target = 1e8
+M_current = rho.sum() * sim.dV
+rho *= (Mgas_target / M_current)
+
+gas = NBodyGas(
+    simulation=sim,
+    rho=rho,
+    cs=0.05,
+    gamma=5/3,
+    tcool=0.05,
+    e_floor=0.0,
+    cfl=0.4,
+    max_substeps=200
+)
 
 sim.add_baryons(gas)
 

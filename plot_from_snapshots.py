@@ -215,7 +215,7 @@ plt.tight_layout(); plt.show()
 
 # -----------------------------------------------------total dansity-------------------------------
 
-snapshot_dir = r"resources/data/simulation_20260121_162320"
+snapshot_dir = r"resources/data/simulation_20260122_104145"
 times_to_plot = [0, 0.05, 0.1, 0.15, 0.2, 0.25,0.3,0.35,0.4,0.45,0.5,0.55,0.6,0.7,0.8,0.9]
 L = 50                                                       
 

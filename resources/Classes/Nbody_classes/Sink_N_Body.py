@@ -171,7 +171,15 @@ class SinkNBody(NBody):
 
         for baryons in baryon_systems:
             # Skip if it's a sink system or has no particles
-            if isinstance(baryons, SinkNBody) or baryons.N == 0:
+            if isinstance(baryons, SinkNBody):
+                continue
+            
+            # Check if it's a particle-based system (has N attribute)
+            if hasattr(baryons, 'N') and baryons.N == 0:
+                continue
+            
+            # Skip gas systems (NBodyGas) - they can't be accreted particle by particle
+            if not hasattr(baryons, 'N'):
                 continue
 
             # Check each sink
@@ -418,6 +426,8 @@ class SinkFormationTracker:
         cp.ndarray or None
             Indices of cells ready for sink formation, or None
         """
+        if threshold is None:
+            return None
         # Check which cells exceed threshold
         exceeds = baryonic_density > threshold
 
@@ -488,7 +498,17 @@ def check_and_create_sinks(simulation, sink_tracker, density_threshold,
 
     regular_baryons = []
     for baryons in simulation.baryonic_matter:
-        if not isinstance(baryons, SinkNBody) and baryons.N > 0:
+        # Skip sink systems
+        if isinstance(baryons, SinkNBody):
+            continue
+        
+        # Check if it's a particle-based system (has N attribute)
+        if hasattr(baryons, 'N'):
+            if baryons.N > 0:
+                baryonic_density += baryons.deposit_to_grid()
+                regular_baryons.append(baryons)
+        else:
+            # For grid-based systems like NBodyGas, always include them
             baryonic_density += baryons.deposit_to_grid()
             regular_baryons.append(baryons)
 
@@ -530,7 +550,12 @@ def check_and_create_sinks(simulation, sink_tracker, density_threshold,
         KE_gas_before = 0.0
 
         for baryons in regular_baryons:
-            if baryons.N == 0: continue
+            # Only process particle-based systems (with N attribute)
+            if not hasattr(baryons, 'N'):
+                continue
+                
+            if baryons.N == 0:
+                continue
 
             # ... [Distance calc remains the same] ...
             dx_vec = baryons.positions - cell_pos[None, :]
@@ -589,4 +614,101 @@ def check_and_create_sinks(simulation, sink_tracker, density_threshold,
         'E_diss_formation': float(total_dissipated_energy_this_step)
     }
 
+def check_and_create_gas_sinks(simulation, sink_tracker, gas_system, density_threshold,
+                               r_acc=None):
+    N = simulation.N
+    dx = min(simulation.dx)
+    if r_acc is None:
+        r_acc = 2.5 * dx
+    r_cells = int(np.ceil(r_acc / dx))
 
+    rho = gas_system.rho
+    ready_indices = sink_tracker.update_and_check(rho, density_threshold)
+    if ready_indices is None:
+        return None
+
+    new_masses = []
+    new_positions = []
+    new_velocities = []
+    total_diss = 0.0  # dissipated kinetic from merging inflow
+
+    # offset list inside a sphere (precompute once per call; small)
+    offsets = []
+    for i in range(-r_cells, r_cells + 1):
+        for j in range(-r_cells, r_cells + 1):
+            for k in range(-r_cells, r_cells + 1):
+                if (i * i + j * j + k * k) <= r_cells * r_cells:
+                    offsets.append((i, j, k))
+
+    grids = simulation.grids  # meshgrids
+    cellV = simulation.dV
+
+    for cell_idx in ready_indices:
+        ix, iy, iz = map(int, cell_idx)
+
+        dM = 0.0
+        dPx = 0.0
+        dPy = 0.0
+        dPz = 0.0
+        Kin_in = 0.0
+
+        # remove "excess" mass in neighborhood
+        for oi, oj, ok in offsets:
+            i = (ix + oi) % N
+            j = (iy + oj) % N
+            k = (iz + ok) % N
+
+            rho_cell = rho[i, j, k]
+            if rho_cell <= density_threshold:
+                continue
+
+            rho_excess = rho_cell - density_threshold
+            dm = rho_excess * cellV
+
+            vx = gas_system.vx[i, j, k]
+            vy = gas_system.vy[i, j, k]
+            vz = gas_system.vz[i, j, k]
+
+            dM += dm
+            dPx += dm * vx
+            dPy += dm * vy
+            dPz += dm * vz
+            Kin_in += 0.5 * dm * (vx * vx + vy * vy + vz * vz)
+
+            # apply removal (keep velocity unchanged; momentum scales with rho)
+            gas_system.rho[i, j, k] = density_threshold
+
+            # if you have energy E: remove proportional energy as well OR clamp to floor
+            if hasattr(gas_system, "E"):
+                # scale energy by same fraction -> keep specific energy
+                # simplest: set E so that eint doesn't go negative
+                pass
+
+        if dM <= 0:
+            continue
+
+        # sink velocity from momentum conservation
+        Vx = dPx / dM
+        Vy = dPy / dM
+        Vz = dPz / dM
+        Kin_after = 0.5 * dM * (Vx * Vx + Vy * Vy + Vz * Vz)
+        diss = Kin_in - Kin_after
+        total_diss += float(diss)
+
+        # position at cell center
+        pos = cp.array([grids[0][ix, iy, iz], grids[1][ix, iy, iz], grids[2][ix, iy, iz]], dtype=cp.float64)
+        vel = cp.array([Vx, Vy, Vz], dtype=cp.float64)
+
+        new_masses.append(cp.asarray(dM, dtype=cp.float64))
+        new_positions.append(pos)
+        new_velocities.append(vel)
+
+    if len(new_masses) == 0:
+        return None
+
+    return {
+        "masses": cp.asarray(new_masses, dtype=cp.float64),
+        "positions": cp.vstack(new_positions),
+        "velocities": cp.vstack(new_velocities),
+        "E_diss_formation": float(total_diss),
+    }

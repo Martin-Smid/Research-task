@@ -6,7 +6,7 @@ import numpy as np
 # 🔧 MANUALLY SET YOUR DIRECTORIES HERE
 simulation_dirs = [
 
-"resources/data/simulation_20260121_162320"
+"resources/data/simulation_20260122_104145"
 
 
 

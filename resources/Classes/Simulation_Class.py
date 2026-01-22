@@ -525,8 +525,24 @@ class Simulation_Class:
         self.overwrite_density = True
 
     def enable_sink_particle_formation(self, **cfg):
-        self._sink_cfg = dict(cfg)
+        """
+        Store sink formation config and (if Evolution already exists) apply immediately.
+
+        This should NOT instantiate any trackers here (needs grid_shape etc.),
+        trackers are created inside Evolution_Class.enable_sink_particle_formation().
+        """
+        if getattr(self, "_sink_cfg", None) is None:
+            self._sink_cfg = dict(cfg)
+        else:
+            self._sink_cfg.update(cfg)
 
         # if evolution already exists, apply immediately too
         if getattr(self, "evolution", None) is not None:
-            self.evolution.enable_sink_particle_formation(**self._sink_cfg)
+            try:
+                self.evolution.enable_sink_particle_formation(**self._sink_cfg)
+            except TypeError as e:
+                raise TypeError(
+                    f"Invalid sink_formation config keys/values: {self._sink_cfg}. "
+                    f"Update Evolution_Class.enable_sink_particle_formation signature accordingly."
+                ) from e
+

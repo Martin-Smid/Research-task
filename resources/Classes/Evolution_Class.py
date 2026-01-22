@@ -1,7 +1,7 @@
 import cupy as cp
 import numpy as np
 from resources.Functions.system_fucntions import plot_max_values_on_N
-from resources.Classes.Nbody_classes.Sink_N_Body import SinkNBody
+from resources.Classes.Nbody_classes.Sink_N_Body import check_and_create_gas_sinks, SinkNBody
 from resources.Classes.Scribe_Class import Scribe
 import os
 from tqdm import tqdm
@@ -51,6 +51,10 @@ class Evolution_Class:
         self.sink_tracker = None
         self.sink_system = None
         self.sink_check_interval = 1
+
+        #values for checking conservations within gas
+        self._ref_mass = None
+        self._ref_mom = None
 
     def evolve(self, wave_functions, save_every=1):
         """
@@ -218,6 +222,25 @@ class Evolution_Class:
                 
                 self.scribe.flush_trajectory_buffer()
 
+                #checking for conservation params
+                gas_systems = [s for s in self.simulation.baryonic_matter if
+                               s.__class__.__name__.lower().endswith("gas")]
+                if gas_systems:
+                    gas = gas_systems[0]
+                    M = gas.total_mass()
+                    P = gas.total_momentum()
+
+                    if self._ref_mass is None:
+                        self._ref_mass = M
+                        self._ref_mom = P
+
+                    dM = (M - self._ref_mass) / (self._ref_mass + 1e-30)
+                    dPx = (P[0] - self._ref_mom[0]) / (abs(self._ref_mom[0]) + 1e-30)
+                    dPy = (P[1] - self._ref_mom[1]) / (abs(self._ref_mom[1]) + 1e-30)
+                    dPz = (P[2] - self._ref_mom[2]) / (abs(self._ref_mom[2]) + 1e-30)
+
+                    if step % 50 == 0:
+                        print(f"[Gas invariants] t={current_time:.4f}  dM={dM:.12e}  dP=({dPx:.12e},{dPy:.12e},{dPz:.12e})")
 
             # Memory cleanup
             cp.get_default_memory_pool().free_all_blocks()
@@ -795,8 +818,18 @@ class Evolution_Class:
 
         return V
 
-    def enable_sink_particle_formation(self, density_threshold, consecutive_steps=5,
-                                       check_interval=1):
+    def enable_sink_particle_formation(self,
+                                       density_threshold=None,
+                                       consecutive_steps=5,
+                                       check_interval=1,
+                                       enable_gas_sinks=False,
+                                       gas_mode="truelove",
+                                       gas_density_threshold=None,
+                                       gas_NJ=4,
+                                       gas_cs_floor=None,
+                                       gas_consecutive_steps=5,
+                                       gas_check_interval=1,
+                                       gas_r_acc_cells=3):
         """
         Enable dynamic sink particle formation during evolution.
 
@@ -810,14 +843,16 @@ class Evolution_Class:
             Check for sink formation every N steps (default: 1)
         """
         from resources.Classes.Nbody_classes.Sink_N_Body import SinkFormationTracker
+        grid_shape = (self.simulation.N,) * self.simulation.dim
 
+        self.sink_tracker = SinkFormationTracker(grid_shape, consecutive_steps_required=consecutive_steps)
         self.enable_sink_formation = True
         self.sink_density_threshold = density_threshold
         self.sink_consecutive_steps = consecutive_steps
         self.sink_check_interval = check_interval
 
         # Initialize tracker
-        grid_shape = (self.simulation.N,) * self.simulation.dim
+
         self.sink_tracker = SinkFormationTracker(
             grid_shape=grid_shape,
             consecutive_steps_required=consecutive_steps
@@ -852,13 +887,31 @@ class Evolution_Class:
         )
 
         # Check for new sinks
-        new_sinks_data = check_and_create_sinks(
-            simulation=self.simulation,
-            sink_tracker=self.sink_tracker,
-            density_threshold=self.sink_density_threshold,
-            aggregation_radius=None  # Will use default
-        )
-        new_sink = False
+        thr = self.simulation._sink_cfg.get("density_threshold", None)
+        if thr is None:
+            new_sinks_data = check_and_create_sinks(
+                simulation=self.simulation,
+                sink_tracker=self.sink_tracker,
+                density_threshold=self.sink_density_threshold,
+                aggregation_radius=None  # Will use default
+            )
+            new_sink = False
+
+        gas_systems = [s for s in self.simulation.baryonic_matter if s.__class__.__name__.lower().endswith("gas")]
+        if gas_systems and getattr(self, "enable_gas_sink_formation", False):
+            gas = gas_systems[0]
+            new_gas_sinks = check_and_create_gas_sinks(
+                simulation=self.simulation,
+                sink_tracker=self.gas_sink_tracker,
+                gas_system=gas,
+                density_threshold=self.gas_sink_density_threshold,
+                r_acc=None
+            )
+            if new_gas_sinks is not None:
+                self.sink_system = SinkNBody.merge_or_create(self.sink_system, new_gas_sinks, self.simulation)
+                if self.sink_system not in self.simulation.baryonic_matter:
+                    self.simulation.baryonic_matter.append(self.sink_system)
+
         if new_sinks_data is not None:
             # Merge with existing or create new
             self.sink_system = SinkNBody.merge_or_create(
@@ -866,6 +919,7 @@ class Evolution_Class:
                 new_sinks_data=new_sinks_data,
                 simulation=self.simulation
             )
+
 
             # Add to simulation's baryonic_matter if not already there
             if self.sink_system not in self.simulation.baryonic_matter:

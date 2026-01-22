@@ -175,6 +175,8 @@ class Evolution_Class:
 
             # Save snapshots and profiles
             if step % save_every == 0:
+
+
                 if self.simulation.dim == 3:
                     self._compute_and_save_radial_profile(total_density, current_time, ix, iy, iz)
                                 
@@ -197,6 +199,9 @@ class Evolution_Class:
 
                         if self._is_gas_system(sys):
                             rho_gas_only += dens
+                            U = sys.internal_energy()
+                            Er = sys.E_radiated
+                            print(step, self.h*step, U, Er, U + Er)
 
 
                     baryon_density_to_save = rho_baryons_all
@@ -466,34 +471,39 @@ class Evolution_Class:
 
     def compute_total_energy(self, wave_functions, total_density, current_time):
         """Compute all energy components (waves + baryons) and log them."""
-        # --- Kinetic: waves (flow + quantum) + baryons ---
         K_flow, U_quantum, K_baryons = self._compute_kinetic_energy(wave_functions)
         K_total = K_flow + U_quantum + K_baryons
 
-        # --- Potential: self-gravity + external static potential ---
         W_self, W_static, W_total = self._compute_potential_energy(
             wave_functions, total_density, current_time
         )
+
         U_iso_total = 0.0
         E_diss_total = 0.0
-        if hasattr(self.simulation, 'baryonic_matter'):
+        #E_rad_total = 0.0   might need later
+
+        if hasattr(self.simulation, 'baryonic_matter') and self.simulation.baryonic_matter:
             for sys in self.simulation.baryonic_matter:
                 if self._is_sink_system(sys):
-                    # Sum BOTH accretion dissipation AND formation dissipation
-                    E_diss_total += getattr(sys, 'E_diss_kin_total', 0.0)
-                    E_diss_total += getattr(sys, 'E_diss_formation_total', 0.0)
+                    # assume these are cumulative totals
+                    E_diss_total += float(getattr(sys, 'E_diss_kin_total', 0.0))
+                    E_diss_total += float(getattr(sys, 'E_diss_formation_total', 0.0))
 
-                if hasattr(sys, "rho") and hasattr(sys, "cs"):
+                # **If you still use isothermal U_iso**
+                if hasattr(sys, "rho") and hasattr(sys, "cs") and hasattr(sys, "rho_ref"):
                     rho = sys.rho
                     rho_floor = getattr(sys, "rho_floor", 1e-12)
                     rho_clamped = cp.maximum(rho, rho_floor)
 
-                    rho_ref = getattr(sys, "rho_ref", None)
-                    if rho_ref is None:
-                        rho_ref = float(cp.mean(rho_clamped))
+                    # **use constant rho_ref, do NOT recompute from current rho**
+                    rho_ref = float(sys.rho_ref)
+                    U_iso_total += float((sys.cs ** 2) *
+                                         cp.sum(rho_clamped * cp.log(rho_clamped / rho_ref)) *
+                                         self.simulation.dV)
 
-                    U_iso_total += float((sys.cs ** 2) * cp.sum(rho_clamped * cp.log(rho_clamped / rho_ref)) * self.simulation.dV)
-
+                # **Optional: if you already track radiated energy on gas**
+                #if hasattr(sys, "E_radiated"):
+                #    E_rad_total += float(sys.E_radiated)
 
         # Pass energies to scribe for logging
         self.scribe.log_energy_detailed(
@@ -506,7 +516,7 @@ class Evolution_Class:
             K_baryons=float(K_baryons),
             W_self=float(W_self),
             W_static=float(W_static),
-            E_diss=float(E_diss_total)
+            E_diss=float(E_diss_total )  # add + E_rad_total
         )
 
         return K_total, W_total, K_flow, U_quantum, K_baryons, W_self, W_static

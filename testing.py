@@ -60,7 +60,7 @@ N = sim.N
 x, y, z = sim.grids  # your coordinate grids
 x = np.array(x); y = np.array(y); z = np.array(z)
 
-rho0 = 1.0 / (sim.dV * (N**sim.dim))  # if you want total mass ~1 in box, adjust if needed
+rho0 = 1.0 / (sim.dV * (N**sim.dim))
 A = 200.0 * rho0
 sigma = 5.0 * min(sim.dx)
 
@@ -68,7 +68,15 @@ r2 = x**2 + y**2 + z**2
 rho = rho0 + A*np.exp(-0.5*r2/sigma**2)
 rho = np.maximum(rho, 1e-12)
 
-gas = NBodyGas(simulation=sim, rho=rho, cs=0.05, cfl=0.1, max_substeps=20)
+gas = NBodyGas(simulation=sim,
+               total_mass=1.0,
+               cs=1.0,
+               gamma=5/3,
+               tcool=None,      # Gyr
+               e_floor=0.0,
+               cfl=0.4,
+               max_substeps=50)
+
 sim.add_baryons(gas)
 
 
@@ -81,7 +89,7 @@ sim.add_baryons(gas)
 #sim.add_wave_function(vlna3)
 
 
-sim.evolve(save_every=50 )
+sim.evolve(save_every=10 )
 
 '''1D
 plt.figure()

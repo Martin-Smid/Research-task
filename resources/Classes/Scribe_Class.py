@@ -236,8 +236,8 @@ class Scribe:
             "W_self": float(W_self) if W_self is not None else float("nan"),
             "W_static": float(W_static) if W_static is not None else float("nan"),
             "W/|E|": float(W_over_E),
-            "E_diss": float(E_diss),          # NEW
-            "E_tot_cons": float(E_conserved)  # NEW
+            "E_diss": float(E_diss),
+            "E_tot_cons": float(E_conserved)
         })
 
         line = (f"{float(time):.15e},{float(K_total):.15e},{float(W):.15e},{float(U_iso):.15e},{float(E_current):.15e},"

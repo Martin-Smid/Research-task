@@ -21,17 +21,18 @@ sim = Simulation_Class(
     self_int=False,
     use_sponge=False,
     sink_formation={
+    "source": "gas",
+    "consecutive_steps": 5,
+    "check_interval": 5,
 
-        "enable_gas_sinks": True,
-        "gas_mode": "truelove",
-        "gas_NJ": 4,
-        "gas_cs_floor": 0.01,
-        "gas_consecutive_steps": 5,
-        "gas_check_interval": 5,
-        "gas_r_acc_cells": 3,
-
-        "density_threshold": None,
-    }
+    "enable_gas_sinks": True,
+    "gas_mode": "truelove",
+    "gas_NJ": 4,
+    "gas_cs_floor": 0.01,
+    "gas_consecutive_steps": 5,
+    "gas_check_interval": 5,
+    "gas_r_acc_cells": 3,
+}
 
 
 )
@@ -81,7 +82,7 @@ r2 = x**2 + y**2 + z**2
 rho = rho0 + A*np.exp(-0.5*r2/sigma**2)
 rho = np.maximum(rho, 1e-12)
 
-Mgas_target = 1e8
+Mgas_target = 5e5
 M_current = rho.sum() * sim.dV
 rho *= (Mgas_target / M_current)
 
@@ -216,3 +217,4 @@ for time in sim.accessible_times:
     plot_wave_slice(sim, time=time, axis="x")
 '''
 #TODO make it so that you can create different dim wave from the simulation, maybe make dim a wave_function class attribute and if not given take it from sim
+

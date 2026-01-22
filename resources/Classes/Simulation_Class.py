@@ -12,6 +12,7 @@ import inspect
 from itertools import chain
 import numpy as np
 from astropy import units, constants
+import math
 
 np.random.seed(1)
 
@@ -232,6 +233,7 @@ class Simulation_Class:
 
         self.dx = [(b - a) / self.N for (a, b) in self.boundaries]
         self.dV = np.prod(self.dx)
+        self.cell_volume = self.dV  # Add this line to fix the AttributeError
 
         for i, (a, b) in enumerate(self.boundaries):
             if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
@@ -340,6 +342,8 @@ class Simulation_Class:
         self.evolution = Evolution_Class(self, self.propagator, order=self.order_of_evolution)
         if self._sink_cfg is not None:
             try:
+                # --- NEW: resolve auto-thresholds before passing to Evolution
+                self._sink_cfg = self._resolve_sink_thresholds(dict(self._sink_cfg))
                 self.evolution.enable_sink_particle_formation(**self._sink_cfg)
             except TypeError as e:
                 raise TypeError(
@@ -526,23 +530,132 @@ class Simulation_Class:
 
     def enable_sink_particle_formation(self, **cfg):
         """
-        Store sink formation config and (if Evolution already exists) apply immediately.
+        Store sink formation config and apply immediately if Evolution exists.
 
-        This should NOT instantiate any trackers here (needs grid_shape etc.),
-        trackers are created inside Evolution_Class.enable_sink_particle_formation().
+        use 'source' parameter for flexible sink creation.
+
+        Parameters
+        ----------
+        **cfg : dict
+            Configuration parameters including:
+            - density_threshold : float
+            - consecutive_steps : int
+            - check_interval : int
+            - source : str ('baryons', 'gas', or 'both')
+
+        Example
+        -------
+         sim.enable_sink_particle_formation(
+            density_threshold=1e5,
+             consecutive_steps=5,
+             source='baryons'  # Only create sinks from baryonic particles
+         )
         """
         if getattr(self, "_sink_cfg", None) is None:
             self._sink_cfg = dict(cfg)
         else:
             self._sink_cfg.update(cfg)
 
-        # if evolution already exists, apply immediately too
+        self._sink_cfg = self._resolve_sink_thresholds(dict(self._sink_cfg))
+
+
         if getattr(self, "evolution", None) is not None:
             try:
                 self.evolution.enable_sink_particle_formation(**self._sink_cfg)
             except TypeError as e:
                 raise TypeError(
                     f"Invalid sink_formation config keys/values: {self._sink_cfg}. "
+                    f"Expected keys: density_threshold, consecutive_steps, check_interval, source. "
                     f"Update Evolution_Class.enable_sink_particle_formation signature accordingly."
                 ) from e
 
+    def _min_dx(self) -> float:
+        return float(min(self.dx))
+
+    def _truelove_rho_threshold(self, cs_eff: float, NJ: int) -> float:
+        dx = self._min_dx()
+        G = float(self.G)
+        return math.pi * (cs_eff ** 2) / (G * (NJ * dx) ** 2)
+
+    def _get_first_gas_system(self):
+        for b in self.baryonic_matter:
+            # Evolution používá endswith("gas"); držím stejné pravidlo.
+            if b.__class__.__name__.lower().endswith("gas"):
+                return b
+        return None
+
+    def _estimate_gas_cs_eff(self, gas, cs_floor=None) -> float:
+        # gas.cs může být scalar nebo pole; fallback na floor.
+        cs = getattr(gas, "cs", None)
+        cs_eff = None
+        if cs is not None:
+            try:
+                cs_eff = float(cs)
+            except TypeError:
+                # pole -> vezmeme průměr (první rozumný default)
+                cs_eff = float(cp.asnumpy(cp.mean(cs)))
+
+        if cs_floor is not None:
+            cs_eff = float(cs_eff) if cs_eff is not None else float(cs_floor)
+            cs_eff = max(cs_eff, float(cs_floor))
+
+        if cs_eff is None:
+            raise ValueError("Cannot infer gas sound speed: gas.cs is missing and gas_cs_floor is None.")
+        return cs_eff
+
+    def _estimate_baryon_sigma_1d(self):
+        # vezmeme všechny particle baryon systémy, co mají velocities
+        systems = []
+        for b in self.baryonic_matter:
+            if b.__class__.__name__.lower().endswith("sink"):
+                continue
+            if hasattr(b, "N") and getattr(b, "N", 0) > 0 and hasattr(b, "velocities"):
+                systems.append(b)
+
+        if not systems:
+            return None
+
+        v = cp.concatenate([s.velocities for s in systems], axis=0)  # (Ntot,3)
+        v_mean = cp.mean(v, axis=0)
+        dv = v - v_mean[None, :]
+        dv2 = cp.mean(cp.sum(dv * dv, axis=1))
+        sigma_1d = cp.sqrt(dv2 / 3.0)
+        return float(cp.asnumpy(sigma_1d))
+
+    def _resolve_sink_thresholds(self, cfg: dict) -> dict:
+        """
+        Fill missing density thresholds from physics-based criteria.
+        Gas:
+          - if enable_gas_sinks and gas_density_threshold is None and gas_mode=='truelove':
+              rho_thr = pi cs_eff^2 / [G (NJ dx)^2]
+        Baryon particles:
+          - if density_threshold is None and source includes baryons:
+              use sigma_1d as cs_eff (pressure support ~ velocity dispersion)
+              rho_thr = pi sigma_1d^2 / [G (NJ dx)^2]
+        """
+        source = cfg.get("source", "both")
+
+        # --- GAS AUTO THRESHOLD
+        if cfg.get("enable_gas_sinks", False):
+            if cfg.get("gas_density_threshold", None) is None and cfg.get("gas_mode", "truelove") == "truelove":
+                gas = self._get_first_gas_system()
+                if gas is None:
+                    pass
+                else:
+                    NJ = int(cfg.get("gas_NJ", 4))
+                    cs_floor = cfg.get("gas_cs_floor", None)
+                    cs_eff = self._estimate_gas_cs_eff(gas, cs_floor=cs_floor)
+                    cfg["gas_density_threshold"] = self._truelove_rho_threshold(cs_eff, NJ)
+
+
+        if cfg.get("density_threshold", None) is None and source in ("baryons", "both"):
+            sigma_1d = self._estimate_baryon_sigma_1d()
+            if sigma_1d is None:
+                pass
+            else:
+                NJ_b = int(cfg.get("baryon_NJ", cfg.get("gas_NJ", 4)))
+                sigma_floor = cfg.get("baryon_sigma_floor", None)
+                if sigma_floor is not None:
+                    cfg["density_threshold"] = self._truelove_rho_threshold(float(sigma_1d), NJ_b)
+
+        return cfg

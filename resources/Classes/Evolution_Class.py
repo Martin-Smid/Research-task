@@ -51,6 +51,7 @@ class Evolution_Class:
         self.sink_tracker = None
         self.sink_system = None
         self.sink_check_interval = 1
+        self.sink_source = 'both'  #  'baryons', 'gas', or 'both'
 
         #values for checking conservations within gas
         self._ref_mass = None
@@ -545,46 +546,44 @@ class Evolution_Class:
         return K_total, W_total, K_flow, U_quantum, K_baryons, W_self, W_static
 
     def _compute_potential_energy(self, wave_functions, total_density, current_time):
-
         """
-        Compute potential energy:
-        - W_self = self-gravity from Poisson solver (whatever is in total_density)
-        - W_static = coupling of the same density to the external static potential
-        - W_total = W_self + W_static
+        Compute potential energy including wave self-gravity, sink analytic potential,
+        and the missing cross-terms (wave <-> sink).
 
+        W = 1/2 ∫ rho_w * phi_w dV
+          + 1/2 ∫ rho_s * phi_s dV
+          +     ∫ rho_w * phi_s dV
+          +     ∫ rho_s * phi_w dV
+          +     ∫ (rho_w + rho_s) * phi_static dV  (if any)
         """
+        dV = float(self.simulation.dV)
 
-        dx = np.prod(self.simulation.dx)
+        rho_w = total_density
+        phi_w = self.propagator.compute_gravity_potential(rho_w)  # from wave density only
+        phi_s = self._compute_sink_potential_analytic_kspace()  # analytic sinks (all sinks)
 
-        rho = total_density
-
-
-        phi_self = self.propagator.compute_gravity_potential(rho)  # from rho (no sinks)
-        phi_sink = self._compute_sink_potential_analytic_kspace()  # analytic sinks
-
-        W_self = 0.5 * cp.sum(rho * phi_self) * self.simulation.dV
-
-        rho_sinks = cp.zeros_like(rho)
-
-        if hasattr(self.simulation, 'baryonic_matter'):
+        # sinks deposited on grid (for energy integrals)
+        rho_s = cp.zeros_like(rho_w)
+        if getattr(self.simulation, "baryonic_matter", None):
             for sys in self.simulation.baryonic_matter:
                 if self._is_sink_system(sys):
-                    rho_sinks += sys.deposit_to_grid()
+                    rho_s += sys.deposit_to_grid()
 
-        # 0.5 * integral( rho_sink * phi_sink ) to account for Sink Self-Energy
-        W_sink_self = 0.5 * cp.sum(rho_sinks * phi_sink) * dx
+        # self terms
+        W_w_self = 0.5 * cp.sum(rho_w * phi_w) * dV
+        W_s_self = 0.5 * cp.sum(rho_s * phi_s) * dV
 
-        W_self += W_sink_self
-        # external static potential energy: ∫ ρ Φ_static dV
+        # cross terms (MISSING in your current version)
+        W_cross = (cp.sum(rho_w * phi_s) + cp.sum(rho_s * phi_w)) * dV
+
         W_static = 0.0
-
         if self.simulation.static_potential is not None:
             phi_static = self.simulation.static_potential(self.simulation)
-            rho_total = rho + rho_sinks
-            W_static = cp.sum(rho_total * cp.real(phi_static)) * dx
+            W_static = cp.sum((rho_w + rho_s) * cp.real(phi_static)) * dV
 
-        W_total = cp.real(W_self + W_static)
-        self.W_self = cp.real(W_self)
+        W_total = cp.real(W_w_self + W_s_self + W_cross + W_static)
+
+        self.W_self = cp.real(W_w_self + W_s_self + W_cross)  # pokud chceš mít "self" jako všechno bez static
         self.W_static = cp.real(W_static)
 
         return self.W_self, self.W_static, W_total
@@ -818,141 +817,308 @@ class Evolution_Class:
 
         return V
 
-    def enable_sink_particle_formation(self,
-                                       density_threshold=None,
-                                       consecutive_steps=5,
-                                       check_interval=1,
-                                       enable_gas_sinks=False,
-                                       gas_mode="truelove",
-                                       gas_density_threshold=None,
-                                       gas_NJ=4,
-                                       gas_cs_floor=None,
-                                       gas_consecutive_steps=5,
-                                       gas_check_interval=1,
-                                       gas_r_acc_cells=3):
+    def enable_sink_particle_formation(
+            self,
+            density_threshold=None,
+            consecutive_steps=1,
+            check_interval=10,
+            source="baryons",
+            enable_gas_sinks=False,
+            gas_density_threshold=None,
+            gas_consecutive_steps=1,
+            gas_check_interval=10,
+            gas_r_acc_cells=3,
+            **kwargs
+    ):
         """
         Enable dynamic sink particle formation during evolution.
 
-        Parameters
-        ----------
-        density_threshold : float
-            Critical baryonic density for sink formation
-        consecutive_steps : int
-            Number of consecutive steps density must exceed threshold
-        check_interval : int
-            Check for sink formation every N steps (default: 1)
+        NOTE:
+        - This method expects that Simulation_Class already resolved any "AUTO" logic and passed
+          numeric thresholds in density_threshold / gas_density_threshold.
+        - If a threshold is None, that branch will simply never create sinks (SinkFormationTracker returns None).
         """
         from resources.Classes.Nbody_classes.Sink_N_Body import SinkFormationTracker
+
         grid_shape = (self.simulation.N,) * self.simulation.dim
 
+        # Validate source parameter
+        if source not in ["baryons", "gas", "both"]:
+            raise ValueError(f"source must be 'baryons', 'gas', or 'both', got '{source}'")
+
+        # --- PARTICLE/BARYON SINKS (via check_and_create_sinks) ---
+        self.sink_density_threshold = density_threshold
         self.sink_tracker = SinkFormationTracker(grid_shape, consecutive_steps_required=consecutive_steps)
         self.enable_sink_formation = True
-        self.sink_density_threshold = density_threshold
         self.sink_consecutive_steps = consecutive_steps
         self.sink_check_interval = check_interval
+        self.sink_source = source
 
-        # Initialize tracker
+        # --- GAS SINKS (via check_and_create_gas_sinks) ---
+        self.enable_gas_sink_formation = bool(enable_gas_sinks)
+        if self.enable_gas_sink_formation:
+            self.gas_sink_tracker = SinkFormationTracker(grid_shape, consecutive_steps_required=gas_consecutive_steps)
+            self.gas_sink_density_threshold = gas_density_threshold
+            self.gas_sink_consecutive_steps = gas_consecutive_steps
+            self.gas_sink_check_interval = gas_check_interval
+            self.gas_r_acc_cells = gas_r_acc_cells
 
-        self.sink_tracker = SinkFormationTracker(
-            grid_shape=grid_shape,
-            consecutive_steps_required=consecutive_steps
-        )
-
-        print(f"Sink formation enabled:")
-        print(f"  - Density threshold: {density_threshold}")
+        print("Sink formation enabled:")
+        print(f"  - Source: {source}")
+        print(f"  - Density threshold (baryons/particles): {density_threshold}")
         print(f"  - Consecutive steps required: {consecutive_steps}")
         print(f"  - Check interval: {check_interval} steps")
+        if self.enable_gas_sink_formation:
+            print(f"  - Gas sinks enabled with threshold: {gas_density_threshold}")
+            print(f"  - Gas consecutive steps required: {gas_consecutive_steps}")
+            print(f"  - Gas check interval: {gas_check_interval} steps")
+            print(f"  - Gas accretion radius: {gas_r_acc_cells} cells")
 
     def _check_and_form_sinks(self, step):
         """
         Check for sink formation conditions and create sinks if needed.
-        Called during evolution loop.
 
-        Parameters
-        ----------
-        step : int
-            Current evolution step
+        Logic:
+        - Particle (baryon N-body) sinks use check_and_create_sinks(... source='baryons')
+        - Gas sinks use check_and_create_gas_sinks(...), with r_acc = gas_r_acc_cells * dx
+        - Both branches merge created sinks into a single SinkNBody system via SinkNBody.merge_or_create(...)
         """
-        #self.enable_sink_formation = True
-        if not self.enable_sink_formation:
-            return
+        if not getattr(self, "enable_sink_formation", False):
+            return False
 
-        # Only check at specified intervals
-        if step % self.sink_check_interval != 0:
-            return
+        # Global cadence for particle sinks (and the function as a whole)
+        if step % getattr(self, "sink_check_interval", 1) != 0:
+            return False
 
         from resources.Classes.Nbody_classes.Sink_N_Body import (
             check_and_create_sinks,
-            SinkNBody
+            check_and_create_gas_sinks,
+            SinkNBody,
         )
 
-        # Check for new sinks
-        thr = self.simulation._sink_cfg.get("density_threshold", None)
-        if thr is None:
+        new_sink_created = False
+
+        # ---------------------------
+        # (A) PARTICLE/BARYON SINKS
+        # ---------------------------
+        do_particles = self.sink_source in ("baryons", "both")
+        if do_particles:
+            # IMPORTANT: if gas sinks are enabled, we avoid double-counting gas here by forcing source='baryons'
+            effective_source = "baryons" if getattr(self, "enable_gas_sink_formation", False) else self.sink_source
+
             new_sinks_data = check_and_create_sinks(
                 simulation=self.simulation,
                 sink_tracker=self.sink_tracker,
                 density_threshold=self.sink_density_threshold,
-                aggregation_radius=None  # Will use default
+                aggregation_radius=None,
+                source=effective_source,  # 'baryons' or 'both' (if gas sinks disabled)
             )
-            new_sink = False
 
-        gas_systems = [s for s in self.simulation.baryonic_matter if s.__class__.__name__.lower().endswith("gas")]
-        if gas_systems and getattr(self, "enable_gas_sink_formation", False):
-            gas = gas_systems[0]
-            new_gas_sinks = check_and_create_gas_sinks(
-                simulation=self.simulation,
-                sink_tracker=self.gas_sink_tracker,
-                gas_system=gas,
-                density_threshold=self.gas_sink_density_threshold,
-                r_acc=None
-            )
-            if new_gas_sinks is not None:
-                self.sink_system = SinkNBody.merge_or_create(self.sink_system, new_gas_sinks, self.simulation)
+            if new_sinks_data is not None:
+                self.sink_system = SinkNBody.merge_or_create(
+                    existing_sink_system=getattr(self, "sink_system", None),
+                    new_sinks_data=new_sinks_data,
+                    simulation=self.simulation,
+                )
                 if self.sink_system not in self.simulation.baryonic_matter:
                     self.simulation.baryonic_matter.append(self.sink_system)
 
-        if new_sinks_data is not None:
-            # Merge with existing or create new
-            self.sink_system = SinkNBody.merge_or_create(
-                existing_sink_system=self.sink_system,
-                new_sinks_data=new_sinks_data,
-                simulation=self.simulation
-            )
+                new_sink_created = True
+                print(f"  Total sinks now: {self.sink_system.N}")
 
+        # ---------------------------
+        # (B) GAS SINKS
+        # ---------------------------
+        gas_systems = [b for b in self.simulation.baryonic_matter
+                       if b.__class__.__name__.lower().endswith("gas")]
 
-            # Add to simulation's baryonic_matter if not already there
-            if self.sink_system not in self.simulation.baryonic_matter:
-                self.simulation.baryonic_matter.append(self.sink_system)
-            new_sink = True
+        if gas_systems and getattr(self, "enable_gas_sink_formation", False) and self.sink_source in ("gas", "both"):
+            gas = gas_systems[0]
 
-            print(f"  Total sinks now: {self.sink_system.N}")
-            return new_sink
+            if step % getattr(self, "gas_sink_check_interval", 1) == 0:
+                dx = float(min(self.simulation.dx))
+                r_acc = float(getattr(self, "gas_r_acc_cells", 3)) * dx
+
+                new_gas_sinks = check_and_create_gas_sinks(
+                    simulation=self.simulation,
+                    sink_tracker=self.gas_sink_tracker,
+                    gas_system=gas,
+                    density_threshold=self.gas_sink_density_threshold,
+                    r_acc=r_acc
+                )
+
+                if new_gas_sinks is not None:
+                    self.sink_system = SinkNBody.merge_or_create(
+                        existing_sink_system=getattr(self, "sink_system", None),
+                        new_sinks_data=new_gas_sinks,
+                        simulation=self.simulation
+                    )
+                    if self.sink_system not in self.simulation.baryonic_matter:
+                        self.simulation.baryonic_matter.append(self.sink_system)
+
+                    new_sink_created = True
+                    print(f"  Total sinks now: {self.sink_system.N}")
+
+        return new_sink_created
 
     def _perform_sink_accretion(self):
         """
         Perform sink accretion on all baryonic systems.
-        Called during evolution loop.
+        CHANGE: Added detailed logging for both baryon and gas accretion.
         """
         if self.sink_system is None or self.sink_system.N == 0:
             return
 
-        # Get non-sink baryonic systems
-        regular_baryons = [
-            b for b in self.simulation.baryonic_matter
-            if not isinstance(b, type(self.sink_system))
-        ]
+        # Separate baryonic and gas systems
+        baryon_systems = []
+        gas_systems = []
 
-        if len(regular_baryons) > 0:
-            n_accreted = self.sink_system.accrete_from_baryons(regular_baryons)
+        for b in self.simulation.baryonic_matter:
+            if isinstance(b, type(self.sink_system)):  # Skip sinks
+                continue
+            if self._is_gas_system(b):
+                gas_systems.append(b)
+            elif hasattr(b, 'N'):  # Particle-based baryons
+                baryon_systems.append(b)
+
+        # === ACCRETE FROM BARYONS ===
+        if baryon_systems:
+            # Track initial state
+            initial_baryon_count = sum(b.N for b in baryon_systems)
+            initial_baryon_mass = sum(b.N * b.m_particle for b in baryon_systems)
+
+            n_accreted = self.sink_system.accrete_from_baryons(baryon_systems)
+
             if n_accreted > 0:
-                print(
-                        f"  Sinks accreted {n_accreted} particles | "
-                        f"ΔE_diss,kin={self.sink_system.E_diss_kin_last:.6e} | "
-                        f"E_diss,kin_total={self.sink_system.E_diss_kin_total:.6e}"
-                    )
+                final_baryon_count = sum(b.N for b in baryon_systems)
+                final_baryon_mass = sum(b.N * b.m_particle for b in baryon_systems)
 
-            self.sink_system.drain_reservoir(self.h)
+                mass_accreted = initial_baryon_mass - final_baryon_mass
+
+                print(f"  [BARYON ACCRETION]")
+                print(f"    Particles accreted: {n_accreted}")
+                print(f"    Mass accreted: {mass_accreted:.6e} Msun")
+                print(f"    ΔE_diss,kin: {self.sink_system.E_diss_kin_last:.6e}")
+                print(f"    E_diss,kin_total: {self.sink_system.E_diss_kin_total:.6e}")
+                print(f"    Remaining baryons: {final_baryon_count}")
+
+        # === ACCRETE FROM GAS ===
+        if gas_systems:
+            for gas in gas_systems:
+                # Track initial state
+                initial_gas_mass = float(cp.sum(gas.rho) * self.simulation.dV)
+                initial_gas_momentum = gas.total_momentum()
+
+                # Perform gas accretion
+                mass_accreted_gas = self._accrete_gas_to_sinks(gas)
+
+                if mass_accreted_gas > 0:
+                    final_gas_mass = float(cp.sum(gas.rho) * self.simulation.dV)
+                    final_gas_momentum = gas.total_momentum()
+
+                    delta_mass = initial_gas_mass - final_gas_mass
+                    delta_momentum = tuple(i - f for i, f in zip(initial_gas_momentum, final_gas_momentum))
+
+                    print(f"  [GAS ACCRETION]")
+                    print(f"    Mass accreted: {delta_mass:.6e} Msun")
+                    print(
+                        f"    Δ Momentum: ({delta_momentum[0]:.3e}, {delta_momentum[1]:.3e}, {delta_momentum[2]:.3e})")
+                    print(f"    Remaining gas mass: {final_gas_mass:.6e} Msun")
+
+        # Drain reservoir (common for all sources)
+        self.sink_system.drain_reservoir(self.h)
+
+    def _accrete_gas_to_sinks(self, gas_system):
+        """
+        Accrete gas from grid to sink particles.
+
+        Returns
+        -------
+        float : Total mass accreted
+        """
+        if self.sink_system is None or self.sink_system.N == 0:
+            return 0.0
+
+        N = self.simulation.N
+        dx = min(self.simulation.dx)
+        r_acc = self.sink_system.capture_radius
+        r_cells = int(np.ceil(r_acc / dx))
+
+        # Precompute sphere offsets
+        offsets = []
+        for i in range(-r_cells, r_cells + 1):
+            for j in range(-r_cells, r_cells + 1):
+                for k in range(-r_cells, r_cells + 1):
+                    if (i * i + j * j + k * k) <= r_cells * r_cells:
+                        offsets.append((i, j, k))
+
+        grids = [cp.asarray(g) for g in self.simulation.grids]
+        cellV = self.simulation.dV
+        total_mass_accreted = 0.0
+
+        # For each sink
+        for sink_idx in range(self.sink_system.N):
+            sink_pos = self.sink_system.positions[sink_idx]
+
+            # Find grid cell containing sink
+            ix = int(cp.argmin(cp.abs(grids[0][:, 0, 0] - sink_pos[0])))
+            iy = int(cp.argmin(cp.abs(grids[1][0, :, 0] - sink_pos[1])))
+            iz = int(cp.argmin(cp.abs(grids[2][0, 0, :] - sink_pos[2])))
+
+            sink_mass_gain = 0.0
+            sink_momentum_gain = cp.zeros(3, dtype=cp.float64)
+
+            # Accrete from neighborhood
+            for oi, oj, ok in offsets:
+                i = (ix + oi) % N
+                j = (iy + oj) % N
+                k = (iz + ok) % N
+
+                rho_cell = gas_system.rho[i, j, k]
+                if rho_cell < gas_system.rho_floor * 2:  # Only accrete above 2x floor
+                    continue
+
+                # Accrete fraction of cell mass
+                accretion_fraction = 0.1 * self.h / self.sink_system.reservoir_tau  # Gentle accretion
+                dm = rho_cell * cellV * accretion_fraction
+
+                vx = gas_system.vx[i, j, k]
+                vy = gas_system.vy[i, j, k]
+                vz = gas_system.vz[i, j, k]
+
+                sink_mass_gain += dm
+                sink_momentum_gain += cp.array([dm * vx, dm * vy, dm * vz])
+
+                # Remove mass from gas (preserve specific energy)
+                gas_system.rho[i, j, k] -= dm / cellV
+                gas_system.rho[i, j, k] = max(gas_system.rho[i, j, k], gas_system.rho_floor)
+
+                # Update energy proportionally
+                if hasattr(gas_system, 'E'):
+                    v2 = vx ** 2 + vy ** 2 + vz ** 2
+                    e_total_old = gas_system.E[i, j, k]
+                    rho_new = gas_system.rho[i, j, k]
+
+                    # Specific internal energy (conserved during accretion)
+                    e_int_specific = (e_total_old - 0.5 * rho_cell * v2) / rho_cell
+                    gas_system.E[i, j, k] = rho_new * e_int_specific + 0.5 * rho_new * v2
+
+            if sink_mass_gain > 0:
+                # Update sink (add to reservoir)
+                self.sink_system.mass_res[sink_idx] += sink_mass_gain
+                self.sink_system.masses[sink_idx] = self.sink_system.mass_bh[sink_idx] + self.sink_system.mass_res[
+                    sink_idx]
+
+                # Momentum conservation
+                M_old = self.sink_system.masses[sink_idx] - sink_mass_gain
+                V_old = self.sink_system.velocities[sink_idx]
+                P_old = M_old * V_old
+                P_new = P_old + sink_momentum_gain
+                self.sink_system.velocities[sink_idx] = P_new / self.sink_system.masses[sink_idx]
+
+                total_mass_accreted += float(sink_mass_gain)
+
+        return total_mass_accreted
 
     def _is_sink_system(self, sys):
         return sys.__class__.__name__.lower().startswith("sink")

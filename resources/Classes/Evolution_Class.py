@@ -926,6 +926,19 @@ class Evolution_Class:
                 new_sink_created = True
                 print(f"  Total sinks now: {self.sink_system.N}")
 
+                # Merge close sinks after accretion (optional)
+                merge_cells = self.simulation._sink_cfg.get("merge_r_cells", 2)
+                merge_interval = self.simulation._sink_cfg.get("merge_interval", 10)
+
+                if (step % merge_interval) == 0 and self.sink_system is not None and self.sink_system.N > 1:
+                    n_merge, dE = self.sink_system.merge_close_sinks(
+                        r_merge_cells=merge_cells,
+                        bound_check=True,
+                        v_factor=1.0
+                    )
+                    if n_merge > 0:
+                        print(f"  [SINK MERGE] merged {n_merge} pairs, dE_diss={dE:.3e}")
+
         # ---------------------------
         # (B) GAS SINKS
         # ---------------------------
@@ -958,6 +971,19 @@ class Evolution_Class:
 
                     new_sink_created = True
                     print(f"  Total sinks now: {self.sink_system.N}")
+
+                    merge_cells = self.simulation._sink_cfg.get("merge_r_cells", 2)
+                    merge_interval = self.simulation._sink_cfg.get("merge_interval", 10)
+
+                    if (step % merge_interval) == 0 and getattr(self, "sink_system",
+                                                                None) is not None and self.sink_system.N > 1:
+                        n_merge, dE = self.sink_system.merge_close_sinks(
+                            r_merge_cells=merge_cells,
+                            bound_check=True,
+                            v_factor=1.0
+                        )
+                        if n_merge > 0:
+                            print(f"  [SINK MERGE] merged {n_merge} pairs, dE_diss={dE:.3e}")
 
         return new_sink_created
 
@@ -1001,6 +1027,8 @@ class Evolution_Class:
                 print(f"    ΔE_diss,kin: {self.sink_system.E_diss_kin_last:.6e}")
                 print(f"    E_diss,kin_total: {self.sink_system.E_diss_kin_total:.6e}")
                 print(f"    Remaining baryons: {final_baryon_count}")
+
+
 
         # === ACCRETE FROM GAS ===
         if gas_systems:

@@ -32,6 +32,8 @@ sim = Simulation_Class(
     "gas_consecutive_steps": 5,
     "gas_check_interval": 5,
     "gas_r_acc_cells": 3,
+    "merge_r_cells": 2,
+    "merge_interval": 10,
 }
 
 

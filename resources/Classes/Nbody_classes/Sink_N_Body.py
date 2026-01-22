@@ -309,6 +309,162 @@ class SinkNBody(NBody):
         self.mass_bh += dM
         self.masses = self.mass_bh + self.mass_res
 
+    def merge_close_sinks(
+            self,
+            r_merge=None,
+            r_merge_cells=None,
+            bound_check=True,
+            v_factor=1.0,
+            max_merges_per_call=None,
+    ):
+        """
+        Merge sink particles that are closer than r_merge (periodic minimum-image),
+        optionally only if they are gravitationally bound.
+
+        Parameters
+        ----------
+        r_merge : float or None
+            Physical merge radius. If None, uses r_merge_cells*dx or capture_radius.
+        r_merge_cells : int or None
+            Merge radius in grid cells. Used if r_merge is None.
+        bound_check : bool
+            If True, require v_rel^2 < v_factor * v_esc^2 to merge.
+        v_factor : float
+            Safety factor on escape velocity criterion (1.0 = strict bound).
+        max_merges_per_call : int or None
+            Limit merges per call (useful if you want gradual behavior).
+
+        Returns
+        -------
+        n_merged : int
+        dE_diss : float
+            Dissipated kinetic energy from inelastic merging (COM frame).
+        """
+        if self.N < 2:
+            return 0, 0.0
+
+        sim = self.simulation
+        G = float(getattr(sim, "G", 0.0))
+        dx = float(min(sim.dx))
+
+        if r_merge is None:
+            if r_merge_cells is not None:
+                r_merge = float(r_merge_cells) * dx
+            else:
+                r_merge = float(getattr(self, "capture_radius", 2.5 * dx))
+
+        # periodic box lengths (assumes periodic boundaries like your CIC deposit does)
+        L = np.array([sim.boundaries[0][1] - sim.boundaries[0][0],
+                      sim.boundaries[1][1] - sim.boundaries[1][0],
+                      sim.boundaries[2][1] - sim.boundaries[2][0]], dtype=np.float64)
+
+        # work on CPU numpy (N_sinks is usually small; this is fine and simpler)
+        pos = cp.asnumpy(self.positions).astype(np.float64, copy=True)
+        vel = cp.asnumpy(self.velocities).astype(np.float64, copy=True)
+        mbh = cp.asnumpy(self.mass_bh).astype(np.float64, copy=True)
+        mres = cp.asnumpy(self.mass_res).astype(np.float64, copy=True)
+
+        # bookkeeping for energy
+        if not hasattr(self, "E_diss_merge_total"):
+            self.E_diss_merge_total = 0.0
+
+        n_merged = 0
+        dE_diss_total = 0.0
+
+        # helper: minimum-image displacement
+        def min_image(d):
+            # d shape (...,3)
+            # avoid divide by zero if some L=0 (shouldn't happen)
+            out = d.copy()
+            for k in range(3):
+                if L[k] > 0:
+                    out[..., k] -= L[k] * np.round(out[..., k] / L[k])
+            return out
+
+        while True:
+            N = mbh.size
+            if N < 2:
+                break
+
+            # pairwise displacement / distance
+            d = pos[:, None, :] - pos[None, :, :]
+            d = min_image(d)
+            dist = np.sqrt(np.sum(d * d, axis=-1))
+
+            # ignore self-pairs
+            np.fill_diagonal(dist, np.inf)
+
+            # candidate mask: within radius
+            cand = dist < r_merge
+
+            if not np.any(cand):
+                break
+
+            if bound_check:
+                # v_rel^2
+                dv = vel[:, None, :] - vel[None, :, :]
+                v2 = np.sum(dv * dv, axis=-1)
+
+                mtot = (mbh + mres)
+                # v_esc^2 = 2 G (m_i+m_j) / r
+                # avoid division by inf/0
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    vesc2 = 2.0 * G * (mtot[:, None] + mtot[None, :]) / dist
+                bound = v2 < (v_factor * vesc2)
+                cand &= bound
+
+                if not np.any(cand):
+                    break
+
+            # choose closest candidate pair (i,j)
+            dist_c = np.where(cand, dist, np.inf)
+            i, j = np.unravel_index(np.argmin(dist_c), dist_c.shape)
+            if not np.isfinite(dist_c[i, j]):
+                break
+
+            # choose to keep the more massive sink as i
+            mtot = mbh + mres
+            if mtot[j] > mtot[i]:
+                i, j = j, i
+
+            m1 = mtot[i]
+            m2 = mtot[j]
+            mnew = m1 + m2
+
+            # dissipated kinetic energy (inelastic merge, COM frame)
+            vrel = vel[i] - vel[j]
+            mu = (m1 * m2) / mnew
+            dE = 0.5 * mu * float(np.dot(vrel, vrel))
+            dE_diss_total += dE
+
+            # merge state (mass + momentum conserved)
+            pos[i] = (m1 * pos[i] + m2 * pos[j]) / mnew
+            vel[i] = (m1 * vel[i] + m2 * vel[j]) / mnew
+            mbh[i] = mbh[i] + mbh[j]
+            mres[i] = mres[i] + mres[j]
+
+            # delete j
+            pos = np.delete(pos, j, axis=0)
+            vel = np.delete(vel, j, axis=0)
+            mbh = np.delete(mbh, j)
+            mres = np.delete(mres, j)
+
+            n_merged += 1
+            if (max_merges_per_call is not None) and (n_merged >= int(max_merges_per_call)):
+                break
+
+        # write back to GPU
+        self.positions = cp.asarray(pos, dtype=cp.float64)
+        self.velocities = cp.asarray(vel, dtype=cp.float64)
+        self.mass_bh = cp.asarray(mbh, dtype=cp.float64)
+        self.mass_res = cp.asarray(mres, dtype=cp.float64)
+        self.masses = self.mass_bh + self.mass_res
+        self.N = int(self.masses.size)
+
+        self.E_diss_merge_total += float(dE_diss_total)
+
+        return n_merged, float(dE_diss_total)
+
 
 class SinkFormationTracker:
     """Tracks density threshold violations for sink formation."""

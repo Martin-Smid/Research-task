@@ -236,6 +236,7 @@ class SinkNBody(NBody):
             mass_error = abs(mass_transferred - sink_mass_gained)
             rel_error = mass_error / (initial_baryon_mass + 1e-30)
 
+            '''
             if rel_error > 1e-10:
                 print(f"WARNING: Mass conservation violation in accretion!")
                 print(f"  Mass removed from baryons: {mass_transferred:.12e}")
@@ -244,11 +245,263 @@ class SinkNBody(NBody):
                 print(f"  Relative error: {rel_error:.12e}")
             else:
                 print(f"✓ Mass conserved in accretion (error: {rel_error:.3e})")
+                '''
 
         self.E_diss_kin_last = dE_diss_total
         self.E_diss_kin_total += dE_diss_total
 
         return total_accreted
+
+    def accrete_from_gas(
+            self,
+            gas_system,
+            dt,
+            sound_speed=None,
+            lam=None,
+            rho_min_factor=2.0,
+            conserve_momentum=True,
+            use_reservoir=True,
+    ):
+        """
+        Jaxion-like Bondi accretion of *grid* gas onto sink particles.
+
+        particles_accrete_gas from Jaxion:
+        - Use CIC to sample surrounding cell densities.
+        - Bondi rate per sink: dM_fac = dt * 4*pi*lambda*(G*M)^2 / c_s^3
+        - Accrete from the 2^dim CIC corner cells: dm_corner = w_corner * dM_fac * rho_corner
+        - Remove dm_corner from gas density (and optionally momentum/energy).
+       Parameters
+        ----------
+        gas_system : NBodyGas-like
+            Must provide `rho` and (optionally) `vx,vy,vz` and `rho_floor`.
+        dt : float
+            Accretion timestep.
+        sound_speed : float or None
+            If None, uses `gas_system.cs` if present, otherwise estimates from
+            adiabatic EOS (requires `E` and `gamma`).
+        lam : float or None
+            Dimensionless Bondi lambda. If None, uses exp(1.5)/4 ~ 1.12 (Jaxion).
+        rho_min_factor : float
+            Only accrete if CIC-interpolated rho > rho_min_factor * rho_floor.
+        conserve_momentum : bool
+            If True, transfer gas momentum to sink (recommended).
+        use_reservoir : bool
+            If True, add mass to `mass_res` (then `drain_reservoir` moves it to BH).
+
+        Returns
+        -------
+        float
+            Total mass accreted from gas (added to sinks).
+        """
+        if self.N == 0:
+            return 0.0
+
+        sim = self.simulation
+        dim = int(sim.dim)
+        N = int(sim.N)
+
+        rho = gas_system.rho
+        rho_floor = float(getattr(gas_system, "rho_floor", 0.0))
+        cellV = float(getattr(sim, "dV", getattr(sim, "cell_volume", 1.0)))
+
+        # --- sound speed ---
+        if sound_speed is None:
+            if hasattr(gas_system, "cs"):
+                sound_speed = float(gas_system.cs)
+            else:
+                # adiabatic estimate: cs^2 = gamma * P / rho
+                gamma = float(getattr(gas_system, "gamma", 5.0 / 3.0))
+                if not hasattr(gas_system, "E"):
+                    raise ValueError("sound_speed is None and gas_system has no `cs` and no `E` to estimate it.")
+                E = gas_system.E
+                # conservative global estimate to keep it stable
+                # P = (gamma-1)*(E - 0.5*rho*|v|^2)
+                vx = getattr(gas_system, "vx", 0.0)
+                vy = getattr(gas_system, "vy", 0.0)
+                vz = getattr(gas_system, "vz", 0.0)
+                v2 = 0.0
+                if dim >= 1 and hasattr(gas_system, "vx"):
+                    v2 = v2 + vx * vx
+                if dim >= 2 and hasattr(gas_system, "vy"):
+                    v2 = v2 + vy * vy
+                if dim >= 3 and hasattr(gas_system, "vz"):
+                    v2 = v2 + vz * vz
+                P = (gamma - 1.0) * (E - 0.5 * rho * v2)
+                P = cp.maximum(P, 0.0)
+                cs2 = gamma * P / cp.maximum(rho, rho_floor if rho_floor > 0 else 1e-30)
+                sound_speed = float(cp.sqrt(cp.nanmax(cs2)).get())
+
+        if not np.isfinite(sound_speed) or sound_speed <= 0:
+            return 0.0
+
+        if lam is None:
+            lam = float(np.exp(1.5) / 4.0)  # ~1.12 (Jaxion default)
+
+        G = float(getattr(sim, "G", 0.0))
+        if not np.isfinite(G) or G == 0.0:
+            return 0.0
+
+        # --- periodic wrap positions to box ---
+        lows = [float(sim.boundaries[d][0]) for d in range(dim)]
+        highs = [float(sim.boundaries[d][1]) for d in range(dim)]
+        Ls = [highs[d] - lows[d] for d in range(dim)]
+
+        pos = self.positions[:, :dim]
+        p = []
+        for d in range(dim):
+            p.append(lows[d] + cp.mod(pos[:, d] - lows[d], Ls[d]))
+
+        # --- CIC indices / weights per axis ---
+        idx0 = []
+        idx1 = []
+        w0 = []
+        w1 = []
+        for d in range(dim):
+            r = (p[d] - lows[d]) / Ls[d] * N
+            i0 = cp.floor(r).astype(cp.int32)
+            t = (r - i0).astype(cp.float64)
+            i1 = (i0 + 1) % N
+            i0 = i0 % N
+            idx0.append(i0)
+            idx1.append(i1)
+            w0.append(1.0 - t)
+            w1.append(t)
+
+        # --- Bondi prefactor per sink ---
+        M = self.masses
+        dM_fac = float(dt) * 4.0 * np.pi * float(lam) * (G * M) ** 2 / (float(sound_speed) ** 3)
+
+        # Accumulate per-sink mass and (optionally) momentum gains.
+        dM = cp.zeros(self.N, dtype=cp.float64)
+        dP = cp.zeros((self.N, 3), dtype=cp.float64)
+
+        # Scaling per sink to prevent rho dropping below floor.
+        # Start at 1 and take min over touched corner cells.
+        scale = cp.ones(self.N, dtype=cp.float64)
+
+        # Prepare strides for flattening (C-order).
+        strides = [N ** (dim - 1 - d) for d in range(dim)]
+        rho_flat = rho.ravel()
+
+        import cupyx
+
+        # helper to iterate corners (2^dim)
+        from itertools import product
+        corners = list(product([0, 1], repeat=dim))
+
+        # --- First pass: determine scaling + compute dM and dP with scaling later ---
+        # We compute dm_corner for each corner and update:
+        # - dM += dm_corner
+        # - scale = min(scale, (rho_corner - rho_floor)*cellV / dm_corner)
+        # Then in second pass, apply dm_corner_scaled = dm_corner * scale and scatter subtract.
+        rho_interp = cp.zeros(self.N, dtype=cp.float64)
+
+        for bits in corners:
+            inds = []
+            w = cp.ones(self.N, dtype=cp.float64)
+            for d, b in enumerate(bits):
+                if b == 0:
+                    inds.append(idx0[d])
+                    w = w * w0[d]
+                else:
+                    inds.append(idx1[d])
+                    w = w * w1[d]
+
+            rho_c = rho[tuple(inds)]
+            rho_interp = rho_interp + w * rho_c
+
+            dm = w * dM_fac * rho_c
+            dM = dM + dm
+
+            if rho_floor > 0:
+                max_dm = cp.maximum(rho_c - rho_floor, 0.0) * cellV
+                # Avoid divide by zero
+                s = cp.where(dm > 0, max_dm / dm, 1.0)
+                scale = cp.minimum(scale, s)
+
+        # Apply rho threshold to avoid accreting from near-vacuum
+        if rho_floor > 0:
+            scale = cp.where(rho_interp > (rho_min_factor * rho_floor), scale, 0.0)
+
+        # cap scale to [0,1]
+        scale = cp.clip(scale, 0.0, 1.0)
+
+        # If no accretion, exit
+        if float(cp.sum(scale).get()) == 0.0:
+            return 0.0
+
+        # Reset accumulators with scaling applied
+        dM_scaled = cp.zeros(self.N, dtype=cp.float64)
+        dP_scaled = cp.zeros((self.N, 3), dtype=cp.float64)
+
+        # --- Second pass: apply scaled removal to gas and accumulate momentum gain ---
+        for bits in corners:
+            inds = []
+            w = cp.ones(self.N, dtype=cp.float64)
+            for d, b in enumerate(bits):
+                if b == 0:
+                    inds.append(idx0[d])
+                    w = w * w0[d]
+                else:
+                    inds.append(idx1[d])
+                    w = w * w1[d]
+
+            rho_c = rho[tuple(inds)]
+            dm = w * dM_fac * rho_c
+            dm = dm * scale  # per-sink scaling
+            dM_scaled = dM_scaled + dm
+
+            # Remove density from gas (atomic scatter-add on flattened array)
+            flat = cp.zeros(self.N, dtype=cp.int64)
+            for d in range(dim):
+                flat = flat + inds[d].astype(cp.int64) * int(strides[d])
+
+            drho = -(dm / cellV)
+            cupyx.scatter_add(rho_flat, flat, drho)
+
+            if conserve_momentum:
+                # Sample gas velocity at the same corner cells (up to 3 components).
+                vx = getattr(gas_system, "vx", None)
+                vy = getattr(gas_system, "vy", None)
+                vz = getattr(gas_system, "vz", None)
+
+                if vx is not None:
+                    dP_scaled[:, 0] += dm * vx[tuple(inds)]
+                if vy is not None:
+                    dP_scaled[:, 1] += dm * vy[tuple(inds)]
+                if vz is not None:
+                    dP_scaled[:, 2] += dm * vz[tuple(inds)]
+
+        # Enforce rho floor after all removals
+        if rho_floor > 0:
+            gas_system.rho = cp.maximum(gas_system.rho, rho_floor)
+
+        # --- Update sinks (mass + momentum) ---
+        total_dm = float(cp.sum(dM_scaled).get())
+        if total_dm <= 0.0:
+            return 0.0
+
+        # Store old masses before update for momentum conservation
+        M_old = self.masses.copy()
+        V_old = self.velocities.copy()
+        P_old = M_old[:, None] * V_old
+
+        if use_reservoir:
+            self.mass_res = self.mass_res + dM_scaled
+        else:
+            self.mass_bh = self.mass_bh + dM_scaled
+
+        self.masses = self.mass_bh + self.mass_res
+
+        if conserve_momentum:
+            P_new = P_old + dP_scaled
+            self.velocities = P_new / self.masses[:, None]
+
+        self.total_accreted_mass += total_dm
+        self.accretion_history.append(("gas_bondi", float(dt), total_dm))
+
+        return total_dm
+
 
     def add_new_sink(self, mass, position, velocity):
         """Add a new sink particle to this system."""
@@ -258,6 +511,7 @@ class SinkNBody(NBody):
         self.mass_res = cp.concatenate([self.mass_res, cp.asarray([0.0], dtype=cp.float64)])
         self.masses = self.mass_bh + self.mass_res
         self.N += 1
+
 
     @staticmethod
     def merge_or_create(existing_sink_system, new_sinks_data, simulation):
@@ -288,10 +542,12 @@ class SinkNBody(NBody):
                 )
             return existing_sink_system
 
+
     def kinetic_energy(self):
         """Variable per-sink masses."""
         v2 = (self.velocities ** 2).sum(axis=1)
         return 0.5 * (self.masses * v2).sum()
+
 
     def drain_reservoir(self, dt):
         """Move mass from reservoir -> BH smoothly."""
@@ -308,6 +564,7 @@ class SinkNBody(NBody):
         self.mass_res -= dM
         self.mass_bh += dM
         self.masses = self.mass_bh + self.mass_res
+
 
     def merge_close_sinks(
             self,
@@ -550,6 +807,7 @@ def check_and_create_sinks(simulation, sink_tracker, density_threshold,
 
     n_new_sinks = ready_indices.shape[0]
 
+    '''
     print(f"\n{'=' * 60}")
     print(f"SINK CREATION EVENT")
     print(f"{'=' * 60}")
@@ -557,6 +815,7 @@ def check_and_create_sinks(simulation, sink_tracker, density_threshold,
     print(f"Source: {source}")
     print(f"Available: {n_baryon_particles} baryon particles, {n_gas_cells} gas cells")
     print(f"Initial mass: Baryons={initial_baryon_mass:.6e}, Gas={initial_gas_mass:.6e}")
+    '''
 
     grids = simulation.grids
     min_dx = min(simulation.dx)
@@ -656,7 +915,7 @@ def check_and_create_sinks(simulation, sink_tracker, density_threshold,
     mass_error = abs(created_sink_mass - mass_removed)
     rel_error = mass_error / (initial_total_mass + 1e-30)
 
-    # Detailed report
+    '''
     print(f"\nCONSUMPTION SUMMARY:")
     print(f"  Baryon particles consumed: {baryon_particles_consumed}")
     print(f"  Baryon mass consumed: {baryon_mass_consumed:.6e} Msun")
@@ -675,6 +934,7 @@ def check_and_create_sinks(simulation, sink_tracker, density_threshold,
         print(f"  ✓ Conserved (error: {rel_error:.3e})")
 
     print(f"{'=' * 60}\n")
+    '''
 
     return {
         'masses': cp.array(new_masses, dtype=cp.float64),
@@ -683,10 +943,6 @@ def check_and_create_sinks(simulation, sink_tracker, density_threshold,
         'E_diss_formation': float(total_dissipated_energy)
     }
 
-
-# ============================================================================
-# FILE: Sink_N_Body.py - Enhanced check_and_create_gas_sinks function
-# ============================================================================
 
 def check_and_create_gas_sinks(simulation, sink_tracker, gas_system, density_threshold,
                                r_acc=None):
@@ -712,6 +968,7 @@ def check_and_create_gas_sinks(simulation, sink_tracker, gas_system, density_thr
 
     n_new_sinks = ready_indices.shape[0]
 
+    '''
     print(f"\n{'=' * 60}")
     print(f"GAS SINK CREATION EVENT")
     print(f"{'=' * 60}")
@@ -719,6 +976,7 @@ def check_and_create_gas_sinks(simulation, sink_tracker, gas_system, density_thr
     print(f"Initial gas mass: {initial_gas_mass:.6e} Msun")
     print(f"Density - avg: {initial_avg_density:.3e}, max: {initial_max_density:.3e}")
     print(f"Threshold: {density_threshold:.3e}")
+    '''
 
     new_masses = []
     new_positions = []
@@ -789,8 +1047,8 @@ def check_and_create_gas_sinks(simulation, sink_tracker, gas_system, density_thr
         cells_processed += cells_in_region
         total_gas_removed += float(dM)
 
-        print(
-            f"  Sink {sink_num + 1}: mass={dM:.6e}, cells={cells_in_region}, |v|={cp.sqrt(Vx ** 2 + Vy ** 2 + Vz ** 2):.3e}")
+        #print(
+         #   f"  Sink {sink_num + 1}: mass={dM:.6e}, cells={cells_in_region}, |v|={cp.sqrt(Vx ** 2 + Vy ** 2 + Vz ** 2):.3e}")
 
     if len(new_masses) == 0:
         return None
@@ -802,6 +1060,7 @@ def check_and_create_gas_sinks(simulation, sink_tracker, gas_system, density_thr
     mass_error = abs(created_sink_mass - mass_removed)
     rel_error = mass_error / (initial_gas_mass + 1e-30)
 
+    '''
     print(f"\nGAS CONSUMPTION SUMMARY:")
     print(f"  Cells processed: {cells_processed}")
     print(f"  Gas mass removed: {mass_removed:.6e} Msun")
@@ -825,3 +1084,4 @@ def check_and_create_gas_sinks(simulation, sink_tracker, gas_system, density_thr
         "velocities": cp.vstack(new_velocities),
         "E_diss_formation": float(total_diss),
     }
+    '''

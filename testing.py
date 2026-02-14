@@ -69,7 +69,7 @@ bulge = Baryons(
 
 )
 
-#sim.add_baryons(bulge)
+sim.add_baryons(bulge)
 
 
 N = sim.N
@@ -101,7 +101,7 @@ gas = NBodyGas(
 
 sim.add_baryons(gas)
 
-
+sim.add_wave_vector(wave_vector)
 
 #TODO: make it so that baryons are added tp simulations similarly to wave vectors
 #TODO: plot both the wfs and baryons
@@ -218,5 +218,3 @@ def plot_wave_slice(sim, time, axis="z", index=None):
 for time in sim.accessible_times:
     plot_wave_slice(sim, time=time, axis="x")
 '''
-#TODO make it so that you can create different dim wave from the simulation, maybe make dim a wave_function class attribute and if not given take it from sim
-

@@ -71,6 +71,12 @@ class Evolution_Class:
         save_every = max(1, save_every)
         self.num_wave_functions = len(wave_functions)
 
+        if self.sink_system is None and getattr(self.simulation, "baryonic_matter", None):
+            for sys in self.simulation.baryonic_matter:
+                if self._is_sink_system(sys):
+                    self.sink_system = sys
+                    break
+
         if (hasattr(self.simulation, 'baryonic_matter') and
                 self.simulation.baryonic_matter and
                 len(self.simulation.baryonic_matter) == 1 and
@@ -513,17 +519,12 @@ class Evolution_Class:
                     E_diss_total += float(getattr(sys, 'E_diss_kin_total', 0.0))
                     E_diss_total += float(getattr(sys, 'E_diss_formation_total', 0.0))
 
-                # **If you still use isothermal U_iso**
-                if hasattr(sys, "rho") and hasattr(sys, "cs") and hasattr(sys, "rho_ref"):
-                    rho = sys.rho
-                    rho_floor = getattr(sys, "rho_floor", 1e-12)
-                    rho_clamped = cp.maximum(rho, rho_floor)
 
-                    # **use constant rho_ref, do NOT recompute from current rho**
-                    rho_ref = float(sys.rho_ref)
-                    U_iso_total += float((sys.cs ** 2) *
-                                         cp.sum(rho_clamped * cp.log(rho_clamped / rho_ref)) *
-                                         self.simulation.dV)
+
+                for sys in self.simulation.baryonic_matter:
+                    if sys.__class__.__name__.lower().endswith("gas"):
+                        if hasattr(sys, "internal_energy"):
+                            U_iso_total += float(sys.internal_energy())
 
                 # **Optional: if you already track radiated energy on gas**
                 #if hasattr(sys, "E_radiated"):
@@ -1021,12 +1022,14 @@ class Evolution_Class:
 
                 mass_accreted = initial_baryon_mass - final_baryon_mass
 
+                '''
                 print(f"  [BARYON ACCRETION]")
                 print(f"    Particles accreted: {n_accreted}")
                 print(f"    Mass accreted: {mass_accreted:.6e} Msun")
                 print(f"    ΔE_diss,kin: {self.sink_system.E_diss_kin_last:.6e}")
                 print(f"    E_diss,kin_total: {self.sink_system.E_diss_kin_total:.6e}")
                 print(f"    Remaining baryons: {final_baryon_count}")
+                '''
 
 
 
@@ -1038,7 +1041,9 @@ class Evolution_Class:
                 initial_gas_momentum = gas.total_momentum()
 
                 # Perform gas accretion
-                mass_accreted_gas = self._accrete_gas_to_sinks(gas)
+                mass_accreted_gas = self.sink_system.accrete_from_gas(
+                    gas, dt=self.h, sound_speed=getattr(gas, "cs", None)
+                )
 
                 if mass_accreted_gas > 0:
                     final_gas_mass = float(cp.sum(gas.rho) * self.simulation.dV)
@@ -1047,11 +1052,13 @@ class Evolution_Class:
                     delta_mass = initial_gas_mass - final_gas_mass
                     delta_momentum = tuple(i - f for i, f in zip(initial_gas_momentum, final_gas_momentum))
 
+                    '''
                     print(f"  [GAS ACCRETION]")
                     print(f"    Mass accreted: {delta_mass:.6e} Msun")
                     print(
                         f"    Δ Momentum: ({delta_momentum[0]:.3e}, {delta_momentum[1]:.3e}, {delta_momentum[2]:.3e})")
                     print(f"    Remaining gas mass: {final_gas_mass:.6e} Msun")
+                    '''
 
         # Drain reservoir (common for all sources)
         self.sink_system.drain_reservoir(self.h)

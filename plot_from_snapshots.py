@@ -215,9 +215,9 @@ plt.tight_layout(); plt.show()
 
 # -----------------------------------------------------total dansity-------------------------------
 
-snapshot_dir = r"resources/data/simulation_20260122_115452"
-times_to_plot = [0, 0.05, 0.1, 0.15, 0.2, 0.25,0.3,0.35,0.4,0.45,0.5,0.55,0.6,0.7,0.8,0.9]
-L = 50                                                       
+snapshot_dir = r"resources/data/simulation_20260214_214733"
+times_to_plot = [0, 0.1, 0.2, 0.3, 0.4, 0.5]
+L = 3
 
 
 files = sorted(glob.glob(os.path.join(snapshot_dir, "total_density_snapshot_at_time_*.npy")))
@@ -242,16 +242,16 @@ for t in times_to_plot:
     y = np.linspace(-L, L, N)
     X, Y = np.meshgrid(x, y)
 
-    # Plot
+    Z = np.clip(data_slice, 1e-30, None)
     plt.figure(figsize=(6, 5))
-    plt.contourf(X, Y, data_slice.T, 
-                 levels=np.logspace(np.log10(max(data_slice.max()*1e-5, 1e-10)), np.log10(data_slice.max()), 100),
-                 cmap="viridis", norm=LogNorm())
-    
-    plt.colorbar(label=r"$\rho_{tot}$")
-    plt.title(f"Time: {actual_time:.3f} | Max at Z-index: {mz}")
-    plt.xlabel("x")
+    plt.imshow(np.log10(Z).T, origin="lower",
+               extent=[x.min(), x.max(), y.min(), y.max()],
+               aspect="equal")
+    plt.colorbar(label=r"$\log_{10}\rho$")
+    plt.title(f"t={actual_time:.3f}, z={mz}")
+    plt.xlabel("x");
     plt.ylabel("y")
     plt.tight_layout()
     plt.show()
+
 

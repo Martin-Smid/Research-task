@@ -4,70 +4,67 @@ import numpy as np
 
 class NBodyGas:
     """
-    Euler equations solver for compressible gas on a uniform 3D grid.
-    Uses second-order MUSCL-Hancock scheme with Rusanov flux.
+    Compressible Euler gas on a uniform periodic grid (CuPy).
+
+    Goal
+    ----
+    Make initialization and hydro evolution independent of dimension ``dim`` in the
+    same spirit as the wave-function classes (fields are shaped as ``(N,)*dim``).
+
+    Implementation
+    --------------
+    - Conserved variables: rho, mom[i]=rho*v[i], E (total energy density)
+    - Pressure (adiabatic): P = (gamma-1) * (E - 0.5*rho*|v|^2)
+    - N-D update: dimensionally split MUSCL (piecewise-linear) reconstruction +
+      Rusanov (local Lax-Friedrichs) flux, periodic boundaries via cp.roll.
+
+    Compatibility
+    -------------
+    The rest of the project expects attributes ``rho, vx, vy, vz, E`` and gravity
+    forces as a 3-tuple (Fx,Fy,Fz). We keep vx/vy/vz for backward compatibility:
+    - For dim < 3, missing components are kept as zero arrays.
+    - For dim > 3, extra velocity components exist in ``self.vel`` but only the
+      first three are exposed as vx/vy/vz (and only the first three can be kicked
+      by Evolution's gravity forces unless you provide a longer force tuple).
     """
-    
+
     def __init__(
-            self,
-            simulation,
-            total_mass=None,
-            rho=None,
-            vx=None,
-            vy=None,
-            vz=None,
-            cs=1.0,
-            cfl=0.4,
-            rho_floor=1e-12,
-            max_substeps=100,
-            name="gas",
-            gamma=5.0 / 3.0,
-            tcool=None,
-            e_floor=1e-10,
+        self,
+        simulation,
+        total_mass=None,
+        rho=None,
+        vx=None,
+        vy=None,
+        vz=None,
+        v=None,  # optional: list/tuple of length dim with velocity component arrays
+        cs=1.0,
+        cfl=0.4,
+        rho_floor=1e-12,
+        max_substeps=100,
+        name="gas",
+        gamma=5.0 / 3.0,
+        tcool=None,
+        e_floor=1e-10,
     ):
-        """
-        Initialize gas component.
-        
-        Parameters
-        ----------
-        simulation : Simulation_Class
-            Parent simulation object
-        total_mass : float, optional
-            Total gas mass (used if rho not provided)
-        rho, vx, vy, vz : array-like, optional
-            Initial density and velocity fields
-        cs : float
-            Sound speed (for isothermal EOS) or initial sound speed
-        cfl : float
-            CFL safety factor (typically 0.3-0.5)
-        rho_floor : float
-            Density floor to prevent numerical issues
-        max_substeps : int
-            Maximum subcycles per drift call
-        gamma : float
-            Adiabatic index (5/3 for monoatomic gas)
-        tcool : float, optional
-            Cooling timescale (None = no cooling)
-        e_floor : float
-            Specific internal energy floor
-        """
         self.simulation = simulation
         self.name = name
+        self.dim = int(simulation.dim)
 
-        N = simulation.N
-        shape = (N, N, N) if simulation.dim == 3 else (N, N)
+        N = int(simulation.N)
+        shape = (N,) * self.dim
 
-        # Grid spacing
-        if hasattr(simulation, 'dx') and isinstance(simulation.dx, (list, tuple)):
-            self.dx = float(min(simulation.dx))
+        # Grid spacing (per-axis) and conservative min(dx) for CFL
+        if hasattr(simulation, "dx") and isinstance(simulation.dx, (list, tuple)):
+            self.dx_list = [float(d) for d in simulation.dx]
         else:
-            dx_list = [(b[1] - b[0]) / N for b in simulation.boundaries]
-            self.dx = float(min(dx_list))
+            self.dx_list = [float((b[1] - b[0]) / N) for b in simulation.boundaries]
 
-        if not np.isfinite(self.dx) or self.dx <= 0:
-            raise ValueError(f"Invalid dx={self.dx}")
+        if (len(self.dx_list) != self.dim) or any((not np.isfinite(d) or d <= 0) for d in self.dx_list):
+            raise ValueError(f"Invalid dx_list={self.dx_list}")
 
-        self.cell_volume = self.simulation.dV
+        self.dx = float(min(self.dx_list))  # conservative dx for CFL
+
+        self.cell_volume = float(self.simulation.dV)
         self.cfl = float(cfl)
         self.rho_floor = float(rho_floor)
         self.max_substeps = int(max_substeps)
@@ -75,15 +72,17 @@ class NBodyGas:
         self.cs = float(cs)
         self.tcool = tcool
         self.e_floor = float(e_floor)
-        
+
         # Energy accounting
         self.E_radiated = 0.0
 
-        # Initialize density
+        # -------------------------
+        # Initialize density field
+        # -------------------------
         if rho is None:
             if total_mass is None:
                 raise ValueError("Provide either rho or total_mass")
-            box_volume = self.cell_volume * (simulation.N ** simulation.dim)
+            box_volume = self.cell_volume * (N ** self.dim)
             rho0 = float(total_mass) / box_volume
             self.rho = cp.full(shape, rho0, dtype=cp.float64)
         else:
@@ -91,326 +90,353 @@ class NBodyGas:
             if self.rho.shape != shape:
                 raise ValueError(f"rho shape {self.rho.shape} != {shape}")
 
+        # -------------------------
         # Initialize velocities
+        # -------------------------
+        # Default named components (backward compatibility)
         self.vx = cp.zeros(shape, dtype=cp.float64) if vx is None else cp.asarray(vx, dtype=cp.float64)
         self.vy = cp.zeros(shape, dtype=cp.float64) if vy is None else cp.asarray(vy, dtype=cp.float64)
         self.vz = cp.zeros(shape, dtype=cp.float64) if vz is None else cp.asarray(vz, dtype=cp.float64)
 
-        # Initialize total energy: E = rho*e_int + 0.5*rho*v^2
-        v2 = self.vx**2 + self.vy**2 + self.vz**2
-        e_int_init = (self.cs**2) / (self.gamma * (self.gamma - 1.0))
+        for arr_name in ("vx", "vy", "vz"):
+            arr = getattr(self, arr_name)
+            if arr.shape != shape:
+                raise ValueError(f"{arr_name} shape {arr.shape} != {shape}")
+
+        # Dimension-aware velocity container
+        base_vel = [self.vx, self.vy, self.vz]
+        if self.dim > 3:
+            base_vel.extend([cp.zeros(shape, dtype=cp.float64) for _ in range(self.dim - 3)])
+        self.vel = base_vel[: self.dim]
+
+        # Optional user-supplied full velocity list
+        if v is not None:
+            if not isinstance(v, (list, tuple)) or len(v) != self.dim:
+                raise ValueError(f"`v` must be a list/tuple of length dim={self.dim}")
+            self.vel = [cp.asarray(v_i, dtype=cp.float64) for v_i in v]
+            for i, v_i in enumerate(self.vel):
+                if v_i.shape != shape:
+                    raise ValueError(f"v[{i}] shape {v_i.shape} != {shape}")
+            # sync named
+            self.vx = self.vel[0]
+            self.vy = self.vel[1] if self.dim >= 2 else cp.zeros(shape, dtype=cp.float64)
+            self.vz = self.vel[2] if self.dim >= 3 else cp.zeros(shape, dtype=cp.float64)
+
+        # -------------------------
+        # Initialize total energy density
+        # -------------------------
+        v2 = cp.zeros_like(self.rho)
+        for vv in self.vel:
+            v2 = v2 + vv * vv
+
+        # If you want isothermal later, keep cs as a reference; for now use adiabatic E init
+        e_int_init = (self.cs ** 2) / (self.gamma * (self.gamma - 1.0))
         self.E = self.rho * e_int_init + 0.5 * self.rho * v2
-        
-        # Store reference density for isothermal pressure (if needed)
+
+        # Reference density (optional)
         self.rho_ref = float(cp.mean(self.rho).get())
 
+    # -------------------------------------------------------------------------
+    # Public API used by Evolution / Simulation
+    # -------------------------------------------------------------------------
     def deposit_to_grid(self):
-        """Return density field for gravity calculations."""
         return self.rho
 
     def kinetic_energy(self):
-        """Total kinetic energy of gas."""
-        v2 = self.vx**2 + self.vy**2 + self.vz**2
+        v2 = cp.zeros_like(self.rho)
+        for vv in self.vel:
+            v2 = v2 + vv * vv
         return float(0.5 * cp.sum(self.rho * v2) * self.cell_volume)
 
     def internal_energy(self):
-        """Total internal energy of gas."""
-        v2 = self.vx**2 + self.vy**2 + self.vz**2
+        v2 = cp.zeros_like(self.rho)
+        for vv in self.vel:
+            v2 = v2 + vv * vv
         K = 0.5 * self.rho * v2
         eint = cp.maximum(self.E - K, self.rho * self.e_floor)
         return float(cp.sum(eint) * self.cell_volume)
 
     def drift(self, dt, potential_grid, first_step=False, last_step=False):
         """
-        Evolve gas for time dt (or dt/2 on first/last step).
-        
+        Evolve gas for time dt (or dt/2 on first/last step) with subcycling.
+
         Parameters
         ----------
         dt : float
-            Full timestep
-        potential_grid : array or tuple
-            Either (ax, ay, az) acceleration grids or gravitational potential
-        first_step, last_step : bool
-            Whether this is first/last step (uses dt/2)
+        potential_grid : tuple/list or array
+            Usually (Fx,Fy,Fz) from Evolution. If an array is provided, we interpret
+            it as a potential Phi and compute forces by centered differences.
         """
         dt_window = dt / 2.0 if (first_step or last_step) else dt
         if dt_window <= 0:
             return
 
-        # Get acceleration grids
+        # Get acceleration grids (Fx,Fy,Fz) as provided by Evolution (3-tuple)
         ax, ay, az = self._get_acceleration_grids(potential_grid)
 
-        # CFL-based subcycling
         dt_sub = self._compute_cfl_timestep()
-        nsub = max(1, min(int(np.ceil(dt_window / dt_sub)), self.max_substeps))
+        need = int(np.ceil(dt_window / dt_sub))
+        if need > self.max_substeps:
+            raise FloatingPointError(
+                f"[Gas] CFL requires {need} substeps but max_substeps={self.max_substeps}. "
+                f"Reduce global h or increase max_substeps."
+            )
+        nsub = max(1, need)
         dt_actual = dt_window / nsub
 
-        # Subcycle loop
         for _ in range(nsub):
-            # Strang splitting: gravity kick, hydro, gravity kick
+            # Strang: gravity kick / hydro / (optional) cooling / gravity kick
             self._gravity_kick(ax, ay, az, 0.5 * dt_actual)
             self._hydro_step(dt_actual)
             self._apply_cooling(dt_actual)
             self._gravity_kick(ax, ay, az, 0.5 * dt_actual)
 
+    # -------------------------------------------------------------------------
+    # Core numerics
+    # -------------------------------------------------------------------------
     def _compute_cfl_timestep(self):
-        """Compute CFL-limited timestep."""
-        v2 = self.vx**2 + self.vy**2 + self.vz**2
+        v2 = cp.zeros_like(self.rho)
+        for vv in self.vel:
+            v2 = v2 + vv * vv
         vmax = float(cp.sqrt(cp.max(v2)))
-        
-        # Compute maximum sound speed from pressure
+
+        # maximum sound speed from cell-centered pressure
         P = self._compute_pressure(self.rho, self.E)
         cs_local = cp.sqrt(self.gamma * P / cp.maximum(self.rho, self.rho_floor))
         cs_max = float(cp.max(cs_local))
-        
+
         signal_speed = max(vmax, 1e-12) + cs_max
         return self.cfl * self.dx / signal_speed
 
     def _gravity_kick(self, ax, ay, az, dt):
-        """Update velocities due to gravity."""
-        self.vx += ax * dt
-        self.vy += ay * dt
-        self.vz += az * dt
+        """
+        Update velocities due to gravity.
+
+        Evolution currently provides forces as a 3-tuple (Fx,Fy,Fz).
+        We apply them to the first three velocity components only.
+        """
+        a_list = [ax, ay, az]
+        for i in range(min(self.dim, len(a_list))):
+            self.vel[i] += a_list[i] * dt
+
+        # sync named components
+        self.vx = self.vel[0]
+        self.vy = self.vel[1] if self.dim >= 2 else cp.zeros_like(self.vx)
+        self.vz = self.vel[2] if self.dim >= 3 else cp.zeros_like(self.vx)
 
     def _hydro_step(self, dt):
-        """Single hydro step using MUSCL-Hancock scheme."""
-        dx = self.dx
-        
-        # 1) Compute primitive variables and pressure
-        P = self._compute_pressure(self.rho, self.E)
-        
-        # 2) Compute gradients
-        rho_dx, rho_dy, rho_dz = self._get_gradient(self.rho, dx)
-        vx_dx, vx_dy, vx_dz = self._get_gradient(self.vx, dx)
-        vy_dx, vy_dy, vy_dz = self._get_gradient(self.vy, dx)
-        vz_dx, vz_dy, vz_dz = self._get_gradient(self.vz, dx)
-        E_dx, E_dy, E_dz = self._get_gradient(self.E, dx)
-        P_dx, P_dy, P_dz = self._get_gradient(P, dx)
-        
-        # 3) Apply slope limiter
-        rho_dx, rho_dy, rho_dz = self._slope_limiter(self.rho, dx, rho_dx, rho_dy, rho_dz)
-        vx_dx, vx_dy, vx_dz = self._slope_limiter(self.vx, dx, vx_dx, vx_dy, vx_dz)
-        vy_dx, vy_dy, vy_dz = self._slope_limiter(self.vy, dx, vy_dx, vy_dy, vy_dz)
-        vz_dx, vz_dy, vz_dz = self._slope_limiter(self.vz, dx, vz_dx, vz_dy, vz_dz)
-        E_dx, E_dy, E_dz = self._slope_limiter(self.E, dx, E_dx, E_dy, E_dz)
-        P_dx, P_dy, P_dz = self._slope_limiter(P, dx, P_dx, P_dy, P_dz)
-        
-        # 4) Extrapolate to faces
-        rho_XL, rho_XR, rho_YL, rho_YR, rho_ZL, rho_ZR = self._extrap_to_face(
-            self.rho, rho_dx, rho_dy, rho_dz, dx
-        )
-        vx_XL, vx_XR, vx_YL, vx_YR, vx_ZL, vx_ZR = self._extrap_to_face(
-            self.vx, vx_dx, vx_dy, vx_dz, dx
-        )
-        vy_XL, vy_XR, vy_YL, vy_YR, vy_ZL, vy_ZR = self._extrap_to_face(
-            self.vy, vy_dx, vy_dy, vy_dz, dx
-        )
-        vz_XL, vz_XR, vz_YL, vz_YR, vz_ZL, vz_ZR = self._extrap_to_face(
-            self.vz, vz_dx, vz_dy, vz_dz, dx
-        )
-        E_XL, E_XR, E_YL, E_YR, E_ZL, E_ZR = self._extrap_to_face(
-            self.E, E_dx, E_dy, E_dz, dx
-        )
-        P_XL, P_XR, P_YL, P_YR, P_ZL, P_ZR = self._extrap_to_face(
-            P, P_dx, P_dy, P_dz, dx
-        )
-        
-        # Apply floor
-        rho_XL = cp.maximum(rho_XL, self.rho_floor)
-        rho_XR = cp.maximum(rho_XR, self.rho_floor)
-        rho_YL = cp.maximum(rho_YL, self.rho_floor)
-        rho_YR = cp.maximum(rho_YR, self.rho_floor)
-        rho_ZL = cp.maximum(rho_ZL, self.rho_floor)
-        rho_ZR = cp.maximum(rho_ZR, self.rho_floor)
-        
-        # 5) Compute fluxes at faces
-        flux_Mass_X, flux_Momx_X, flux_Momy_X, flux_Momz_X, flux_E_X = self._get_flux(
-            rho_XL, vx_XL, vy_XL, vz_XL, E_XL, P_XL,
-            rho_XR, vx_XR, vy_XR, vz_XR, E_XR, P_XR
-        )
-        flux_Mass_Y, flux_Momy_Y, flux_Momz_Y, flux_Momx_Y, flux_E_Y = self._get_flux(
-            rho_YL, vy_YL, vz_YL, vx_YL, E_YL, P_YL,
-            rho_YR, vy_YR, vz_YR, vx_YR, E_YR, P_YR
-        )
-        flux_Mass_Z, flux_Momz_Z, flux_Momx_Z, flux_Momy_Z, flux_E_Z = self._get_flux(
-            rho_ZL, vz_ZL, vx_ZL, vy_ZL, E_ZL, P_ZL,
-            rho_ZR, vz_ZR, vx_ZR, vy_ZR, E_ZR, P_ZR
-        )
-        
-        # 6) Convert to conserved variables
-        vol = dx**3
-        Mass = self.rho * vol
-        Momx = self.rho * self.vx * vol
-        Momy = self.rho * self.vy * vol
-        Momz = self.rho * self.vz * vol
-        Etot = self.E * vol
-        
-        # 7) Update conserved variables
-        Mass = self._apply_fluxes(Mass, flux_Mass_X, flux_Mass_Y, flux_Mass_Z, dx, dt)
-        Momx = self._apply_fluxes(Momx, flux_Momx_X, flux_Momx_Y, flux_Momx_Z, dx, dt)
-        Momy = self._apply_fluxes(Momy, flux_Momy_X, flux_Momy_Y, flux_Momy_Z, dx, dt)
-        Momz = self._apply_fluxes(Momz, flux_Momz_X, flux_Momz_Y, flux_Momz_Z, dx, dt)
-        Etot = self._apply_fluxes(Etot, flux_E_X, flux_E_Y, flux_E_Z, dx, dt)
-        
-        # 8) Convert back to primitive variables
-        self.rho = Mass / vol
-        self.rho = cp.maximum(self.rho, self.rho_floor)
-        
-        self.vx = Momx / (self.rho * vol)
-        self.vy = Momy / (self.rho * vol)
-        self.vz = Momz / (self.rho * vol)
-        self.E = Etot / vol
-        
-        # Apply energy floor
-        v2 = self.vx**2 + self.vy**2 + self.vz**2
+        """N-D hydro update via directional splitting."""
+        self._hydro_step_nd(dt)
+
+    # ---- N-D MUSCL + Rusanov ------------------------------------------------
+    @staticmethod
+    def _minmod(a, b):
+        return 0.5 * (cp.sign(a) + cp.sign(b)) * cp.minimum(cp.abs(a), cp.abs(b))
+
+    def _pressure_from_conserved(self, rho, moms, E):
+        rho_safe = cp.maximum(rho, self.rho_floor)
+        v2 = cp.zeros_like(rho_safe)
+        for m in moms:
+            v2 = v2 + (m / rho_safe) ** 2
+        eint = E - 0.5 * rho_safe * v2
+        eint = cp.maximum(eint, rho_safe * self.e_floor)
+        return (self.gamma - 1.0) * eint
+
+    def _hydro_step_nd(self, dt):
+        # Build conserved variables
+        rho = self.rho
+        moms = [rho * v for v in self.vel]
+        E = self.E
+
+        # Dimensionally split update (Lie splitting). For many comparisons (esp. 1D) this is enough.
+        for axis in range(self.dim):
+            rho, moms, E = self._sweep_axis(rho, moms, E, axis, dt / self.dim, self.dx_list[axis])
+
+        # Back to primitive
+        rho = cp.maximum(rho, self.rho_floor)
+        self.rho = rho
+
+        self.vel = [m / rho for m in moms]
+        self.E = E
+
+        # Sync named components (pad with zeros when dim < 3)
+        self.vx = self.vel[0]
+        self.vy = self.vel[1] if self.dim >= 2 else cp.zeros_like(self.vx)
+        self.vz = self.vel[2] if self.dim >= 3 else cp.zeros_like(self.vx)
+
+        # Energy floor
+        v2 = cp.zeros_like(self.rho)
+        for vv in self.vel:
+            v2 = v2 + vv * vv
         eint = self.E - 0.5 * self.rho * v2
         eint = cp.maximum(eint, self.rho * self.e_floor)
         self.E = 0.5 * self.rho * v2 + eint
 
+    def _sweep_axis(self, rho, moms, E, axis, dt, dx):
+        """
+        One directional finite-volume sweep along 'axis' with periodic BC.
+        Arrays are updated in a conservative form.
+        """
+        # Move sweep axis to front for vectorized 1D operations
+        def mv(a):
+            return cp.moveaxis(a, axis, 0)
+
+        def imv(a):
+            return cp.moveaxis(a, 0, axis)
+
+        rho0 = mv(rho)
+        moms0 = [mv(m) for m in moms]
+        E0 = mv(E)
+
+        # Slopes (cell-centered) for each conserved component
+        def slopes(u):
+            du_b = u - cp.roll(u, 1, axis=0)
+            du_f = cp.roll(u, -1, axis=0) - u
+            return self._minmod(du_b, du_f)
+
+        s_rho = slopes(rho0)
+        s_m = [slopes(m) for m in moms0]
+        s_E = slopes(E0)
+
+        # Reconstruct left/right states at interfaces i+1/2
+        rho_L = rho0 + 0.5 * s_rho
+        rho_R = cp.roll(rho0, -1, axis=0) - 0.5 * cp.roll(s_rho, -1, axis=0)
+
+        m_L = [m + 0.5 * sm for m, sm in zip(moms0, s_m)]
+        m_R = [cp.roll(m, -1, axis=0) - 0.5 * cp.roll(sm, -1, axis=0) for m, sm in zip(moms0, s_m)]
+
+        E_L = E0 + 0.5 * s_E
+        E_R = cp.roll(E0, -1, axis=0) - 0.5 * cp.roll(s_E, -1, axis=0)
+
+        # Floors
+        rho_L = cp.maximum(rho_L, self.rho_floor)
+        rho_R = cp.maximum(rho_R, self.rho_floor)
+
+        P_L = self._pressure_from_conserved(rho_L, m_L, E_L)
+        P_R = self._pressure_from_conserved(rho_R, m_R, E_R)
+
+        # Primitive along sweep direction
+        vL_k = m_L[axis] / rho_L
+        vR_k = m_R[axis] / rho_R
+
+        cL = cp.sqrt(self.gamma * P_L / rho_L)
+        cR = cp.sqrt(self.gamma * P_R / rho_R)
+        smax = cp.maximum(cp.abs(vL_k) + cL, cp.abs(vR_k) + cR)
+
+        # Fluxes (Euler)
+        # mass flux
+        FL_rho = m_L[axis]
+        FR_rho = m_R[axis]
+
+        # momentum fluxes
+        FL_m = []
+        FR_m = []
+        for i in range(self.dim):
+            vL_i = m_L[i] / rho_L
+            vR_i = m_R[i] / rho_R
+            FL = m_L[i] * vL_k
+            FR = m_R[i] * vR_k
+            if i == axis:
+                FL = FL + P_L
+                FR = FR + P_R
+            FL_m.append(FL)
+            FR_m.append(FR)
+
+        # energy flux
+        FL_E = (E_L + P_L) * vL_k
+        FR_E = (E_R + P_R) * vR_k
+
+        # Rusanov flux at interfaces
+        flux_rho = 0.5 * (FL_rho + FR_rho) - 0.5 * smax * (rho_R - rho_L)
+        flux_m = [0.5 * (fL + fR) - 0.5 * smax * (mR - mL) for fL, fR, mL, mR in zip(FL_m, FR_m, m_L, m_R)]
+        flux_E = 0.5 * (FL_E + FR_E) - 0.5 * smax * (E_R - E_L)
+
+        # Conservative update: U_i <- U_i - (dt/dx) (F_{i+1/2} - F_{i-1/2})
+        fac = float(dt) / float(dx)
+
+        rho1 = rho0 - fac * (flux_rho - cp.roll(flux_rho, 1, axis=0))
+        m1 = [m - fac * (f - cp.roll(f, 1, axis=0)) for m, f in zip(moms0, flux_m)]
+        E1 = E0 - fac * (flux_E - cp.roll(flux_E, 1, axis=0))
+
+        return imv(rho1), [imv(mi) for mi in m1], imv(E1)
+
+    # -------------------------------------------------------------------------
+    # Thermodynamics / cooling
+    # -------------------------------------------------------------------------
     def _compute_pressure(self, rho, E):
-        """Compute pressure from total energy: P = (γ-1)(E - ½ρv²)."""
-        v2 = self.vx**2 + self.vy**2 + self.vz**2
+        """Cell-centered pressure from current velocity fields."""
+        v2 = cp.zeros_like(rho)
+        for vv in self.vel:
+            v2 = v2 + vv * vv
         eint = E - 0.5 * rho * v2
         eint = cp.maximum(eint, rho * self.e_floor)
         return (self.gamma - 1.0) * eint
 
-    def _get_flux(self, rho_L, vx_L, vy_L, vz_L, E_L, P_L,
-                  rho_R, vx_R, vy_R, vz_R, E_R, P_R):
-        """
-        Compute Rusanov (local Lax-Friedrichs) fluxes.
-        Returns: (flux_mass, flux_momx, flux_momy, flux_momz, flux_energy)
-        """
-        # Left fluxes
-        FL_M = rho_L * vx_L
-        FL_Px = rho_L * vx_L**2 + P_L
-        FL_Py = rho_L * vx_L * vy_L
-        FL_Pz = rho_L * vx_L * vz_L
-        FL_E = (E_L + P_L) * vx_L
-        
-        # Right fluxes
-        FR_M = rho_R * vx_R
-        FR_Px = rho_R * vx_R**2 + P_R
-        FR_Py = rho_R * vx_R * vy_R
-        FR_Pz = rho_R * vx_R * vz_R
-        FR_E = (E_R + P_R) * vx_R
-        
-        # Wave speeds
-        cs_L = cp.sqrt(self.gamma * P_L / cp.maximum(rho_L, self.rho_floor))
-        cs_R = cp.sqrt(self.gamma * P_R / cp.maximum(rho_R, self.rho_floor))
-        C = cp.maximum(cp.abs(vx_L) + cs_L, cp.abs(vx_R) + cs_R)
-        
-        # Rusanov flux
-        flux_M = 0.5 * (FL_M + FR_M - C * (rho_R - rho_L))
-        flux_Px = 0.5 * (FL_Px + FR_Px - C * (rho_R * vx_R - rho_L * vx_L))
-        flux_Py = 0.5 * (FL_Py + FR_Py - C * (rho_R * vy_R - rho_L * vy_L))
-        flux_Pz = 0.5 * (FL_Pz + FR_Pz - C * (rho_R * vz_R - rho_L * vz_L))
-        flux_E = 0.5 * (FL_E + FR_E - C * (E_R - E_L))
-        
-        return flux_M, flux_Px, flux_Py, flux_Pz, flux_E
-
     def _apply_cooling(self, dt):
-        """Apply cooling with relaxation to floor."""
-        if self.tcool is None or self.tcool <= 0:
+        """Optional exponential cooling of internal energy."""
+        if self.tcool is None:
             return
-        
-        v2 = self.vx**2 + self.vy**2 + self.vz**2
+
+        # compute internal energy density, cool it, keep kinetic unchanged
+        v2 = cp.zeros_like(self.rho)
+        for vv in self.vel:
+            v2 = v2 + vv * vv
         K = 0.5 * self.rho * v2
-        eint = self.E - K
-        eint_floor = self.rho * self.e_floor
-        
-        # Exponential relaxation
-        fac = cp.exp(-dt / self.tcool)
-        eint_new = eint_floor + (eint - eint_floor) * fac
-        
-        # Track radiated energy
-        dE = cp.sum(cp.maximum(eint - eint_new, 0.0)) * self.cell_volume
-        self.E_radiated += float(dE)
-        
+        eint = cp.maximum(self.E - K, self.rho * self.e_floor)
+
+        # exponential decay
+        eint_new = eint * cp.exp(-dt / float(self.tcool))
+        self.E_radiated += float(cp.sum(eint - eint_new) * self.cell_volume)
+
         self.E = K + eint_new
 
+    # -------------------------------------------------------------------------
+    # Gravity force grids helper
+    # -------------------------------------------------------------------------
     def _get_acceleration_grids(self, potential_grid):
-        """Extract or compute acceleration grids from potential."""
-        if isinstance(potential_grid, (tuple, list)) and len(potential_grid) == 3:
-            return tuple(cp.asarray(a, dtype=cp.float64) for a in potential_grid)
-        
-        # Compute from potential via FFT
+        """
+        Accept either:
+        - tuple/list: interpreted as (Fx,Fy,Fz) already
+        - array: interpreted as potential Phi; compute centered-diff forces
+        """
+        if isinstance(potential_grid, (tuple, list)):
+            # Evolution provides (Fx,Fy,Fz)
+            Fx = cp.asarray(potential_grid[0], dtype=cp.float64)
+            Fy = cp.asarray(potential_grid[1], dtype=cp.float64) if len(potential_grid) > 1 else cp.zeros_like(Fx)
+            Fz = cp.asarray(potential_grid[2], dtype=cp.float64) if len(potential_grid) > 2 else cp.zeros_like(Fx)
+            return Fx, Fy, Fz
+
         Phi = cp.asarray(potential_grid, dtype=cp.float64)
-        Phi_k = cp.fft.fftn(Phi.astype(cp.complex128))
-        kx, ky, kz = self.simulation.k_space
-        
-        ax = cp.fft.ifftn(-1j * kx * Phi_k).real.astype(cp.float64)
-        ay = cp.fft.ifftn(-1j * ky * Phi_k).real.astype(cp.float64)
-        az = cp.fft.ifftn(-1j * kz * Phi_k).real.astype(cp.float64)
-        return ax, ay, az
+        # centered differences along first 3 axes (if present), periodic BC
+        Fx = -(cp.roll(Phi, -1, axis=0) - cp.roll(Phi, 1, axis=0)) / (2.0 * self.dx_list[0])
+        if self.dim >= 2:
+            Fy = -(cp.roll(Phi, -1, axis=1) - cp.roll(Phi, 1, axis=1)) / (2.0 * self.dx_list[1])
+        else:
+            Fy = cp.zeros_like(Fx)
+        if self.dim >= 3:
+            Fz = -(cp.roll(Phi, -1, axis=2) - cp.roll(Phi, 1, axis=2)) / (2.0 * self.dx_list[2])
+        else:
+            Fz = cp.zeros_like(Fx)
+        return Fx.astype(cp.float64), Fy.astype(cp.float64), Fz.astype(cp.float64)
 
-    @staticmethod
-    def _get_gradient(f, dx):
-        """Central difference gradients."""
-        f_dx = (cp.roll(f, -1, axis=0) - cp.roll(f, 1, axis=0)) / (2.0 * dx)
-        f_dy = (cp.roll(f, -1, axis=1) - cp.roll(f, 1, axis=1)) / (2.0 * dx)
-        f_dz = (cp.roll(f, -1, axis=2) - cp.roll(f, 1, axis=2)) / (2.0 * dx)
-        return f_dx, f_dy, f_dz
-
-    @staticmethod
-    def _extrap_to_face(f, f_dx, f_dy, f_dz, dx):
-        """Linear extrapolation to cell faces."""
-        f_XL = f + 0.5 * f_dx * dx
-        f_XR = cp.roll(f - 0.5 * f_dx * dx, -1, axis=0)
-        
-        f_YL = f + 0.5 * f_dy * dx
-        f_YR = cp.roll(f - 0.5 * f_dy * dx, -1, axis=1)
-        
-        f_ZL = f + 0.5 * f_dz * dx
-        f_ZR = cp.roll(f - 0.5 * f_dz * dx, -1, axis=2)
-        
-        return f_XL, f_XR, f_YL, f_YR, f_ZL, f_ZR
-
-    @staticmethod
-    @staticmethod
-    def _slope_limiter(f, dx, f_dx, f_dy, f_dz):
-        """Minmod slope limiter to prevent oscillations."""
-
-        def minmod_1d(f, df, axis):
-            df_fwd = (cp.roll(f, -1, axis=axis) - f) / dx
-            df_bwd = (f - cp.roll(f, 1, axis=axis)) / dx
-
-            same_sign = (cp.sign(df) == cp.sign(df_fwd)) & (cp.sign(df) == cp.sign(df_bwd))
-            min_abs_val = cp.minimum(cp.abs(df), cp.minimum(cp.abs(df_fwd), cp.abs(df_bwd)))
-
-            limited = cp.where(
-                same_sign,
-                cp.sign(df) * min_abs_val,
-                0.0
-            )
-
-            return limited
-
-        return (minmod_1d(f, f_dx, 0), minmod_1d(f, f_dy, 1), minmod_1d(f, f_dz, 2))
-
-    @staticmethod
-    def _apply_fluxes(F, flux_X, flux_Y, flux_Z, dx, dt):
-        """Apply conservative flux update."""
-        fac = dt / dx
-        F -= fac * flux_X
-        F += fac * cp.roll(flux_X, 1, axis=0)
-        F -= fac * flux_Y
-        F += fac * cp.roll(flux_Y, 1, axis=1)
-        F -= fac * flux_Z
-        F += fac * cp.roll(flux_Z, 1, axis=2)
-        return F
-
+    # -------------------------------------------------------------------------
+    # Diagnostics (Evolution expects 3-momentum tuple)
+    # -------------------------------------------------------------------------
     def total_mass(self):
         return float(cp.sum(self.rho) * self.cell_volume)
 
     def total_momentum(self):
-        Px = cp.sum(self.rho * self.vx) * self.cell_volume
-        Py = cp.sum(self.rho * self.vy) * self.cell_volume
-        Pz = cp.sum(self.rho * self.vz) * self.cell_volume
-        return float(Px), float(Py), float(Pz)
+        # Return 3-tuple for backward compatibility with Evolution_Class
+        moms = [cp.sum(self.rho * self.vel[i]) * self.cell_volume for i in range(self.dim)]
+        Px = float(moms[0]) if self.dim >= 1 else 0.0
+        Py = float(moms[1]) if self.dim >= 2 else 0.0
+        Pz = float(moms[2]) if self.dim >= 3 else 0.0
+        return Px, Py, Pz
 
     def total_energy_components(self):
-        # jen pokud máš adiabatic/E (po 1A změnách)
-        v2 = self.vx * self.vx + self.vy * self.vy + self.vz * self.vz
+        v2 = cp.zeros_like(self.rho)
+        for vv in self.vel:
+            v2 = v2 + vv * vv
         K = float(0.5 * cp.sum(self.rho * v2) * self.cell_volume)
-        U = self.internal_energy() if hasattr(self, "internal_energy") else 0.0
+        U = self.internal_energy()
         return K, U

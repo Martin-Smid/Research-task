@@ -6,8 +6,10 @@ import numpy as np
 # 🔧 MANUALLY SET YOUR DIRECTORIES HERE
 simulation_dirs = [
 
-"resources/data/simulation_20260122_123936",
-    "resources/data/simulation_20260122_122640"
+"resources/data/simulation_20260214_214733",
+    "resources/data/simulation_20260214_221026",
+    "resources/data/simulation_20260214_221840"
+
 
 
 
@@ -124,68 +126,90 @@ def plot_kinetic_energy_components(paths):
 
 def plot_virial_check(paths):
     """
-    Virial theorem diagnostic for simulations with ULDM + N-body baryons.
+    Virial diagnostics for ULDM + baryons.
 
-    For self-gravity only (no external time-dependent potential),
-    we expect approximately:
+    Two useful dimensionless diagnostics:
+      (1) Virial ratio:        2K / |W|      -> ~1 for relaxed bound system
+      (2) Virial residual: (2K + W) / |W|   -> ~0 for relaxed bound system
 
-        2 (K_flow + U_quantum + K_baryons) + W_self ≈ 0
-
-    where W_self is the self-gravitational energy from Poisson
-    using the total density (waves + baryons).
+    Here K := K_flow + U_quantum + K_baryons   (your stored decomposition)
+         W := W_self
     """
+    import os
+    import numpy as np
+    import pandas as pd
+    import matplotlib.pyplot as plt
+
     plt.figure(figsize=(9, 5))
 
     for path in paths:
         energy_file = os.path.join(path, "energy.csv")
         if not os.path.isfile(energy_file):
-            print(f"[!] Skipping: 'energy.txt' not found in {path}")
+            print(f"[!] Skipping: energy.csv not found in {path}")
             continue
 
-        try:
-            df = pd.read_csv(energy_file)
-        except Exception as e:
-            print(f"[!] Failed to read {energy_file}: {e}")
-            continue
+        df = pd.read_csv(energy_file)
 
         required_cols = {"time", "K_flow", "U_quantum", "K_baryons", "W_self"}
         if not required_cols.issubset(df.columns):
-            print(f"[!] Missing required columns in {energy_file}, found: {list(df.columns)}")
+            print(f"[!] Missing columns in {energy_file}. Have: {list(df.columns)}")
             continue
 
-        time       = df["time"]
-        K_flow     = df["K_flow"]
-        U_quantum  = df["U_quantum"]
-        K_baryons  = df["K_baryons"]
-        W_self     = df["W_self"]
+        t = df["time"].to_numpy()
+        K_flow = df["K_flow"].to_numpy()
+        U_q    = df["U_quantum"].to_numpy()
+        K_b    = df["K_baryons"].to_numpy()
+        W      = df["W_self"].to_numpy()
 
-        # Total kinetic (waves + baryons)
+        K_tot = K_flow + U_q + K_b
+        Wabs  = np.maximum(np.abs(W), 1e-30)
 
-
-        # Virial residual: should be ~0 for a relaxed, self-gravitating system
-        virial_residual = 2 * (K_flow + U_quantum + K_baryons) / np.abs(W_self)
+        virial_ratio    = 2.0 * K_tot / Wabs                 # ~1
+        virial_residual = (2.0 * K_tot + W) / Wabs            # ~0
 
         label = os.path.basename(os.path.normpath(path))
-        plt.plot(time, virial_residual, label=f"{label}: 2K_tot + W_self")
+        plt.plot(t, virial_ratio, label=f"{label}: 2K/|W|")
 
-        mean_abs = abs(virial_residual).mean()
-        mean_norm = mean_abs / max(1.0, abs(W_self).max())
-        print(
-            f"[{label}] <|2K_tot+W_self|> = {mean_abs:.3e} "
-            f"({mean_norm:.3e} × max|W_self|)"
-        )
+        print(f"[{label}] mean(2K/|W|) = {virial_ratio.mean():.3f}, "
+              f"mean((2K+W)/|W|) = {virial_residual.mean():.3f}")
 
-    plt.axhline(0, linestyle='--', linewidth=0.8)
-    plt.xlabel("Time")
-    plt.ylabel(r"$2(K_{\rm flow}+U_q+K_b) + W_{\rm self}$")
-    plt.title("Virial Theorem Residual (ULDM + baryons)")
+    plt.axhline(1.0, linestyle="--", linewidth=0.8, label="virial ratio = 1")
+    plt.xlabel("Time [Gyr]")
+    plt.ylabel("Virial ratio  $2K/|W|$")
+    plt.title("Virial diagnostics (ULDM + baryons)")
     plt.grid(True, alpha=0.3)
     plt.legend(fontsize=8)
     plt.tight_layout()
     plt.show()
-    virial_residual_waves = 2.0 * (K_flow + U_quantum) + W_self
-    plt.plot(time, virial_residual_waves, "--", alpha=0.6,
-             label=f"{label}: waves only")
+
+    # Optional: plot normalized residuals as a second figure
+    plt.figure(figsize=(9, 5))
+    for path in paths:
+        energy_file = os.path.join(path, "energy.csv")
+        if not os.path.isfile(energy_file):
+            continue
+        df = pd.read_csv(energy_file)
+        if not {"time", "K_flow", "U_quantum", "K_baryons", "W_self"}.issubset(df.columns):
+            continue
+
+        t = df["time"].to_numpy()
+        K_tot = (df["K_flow"] + df["U_quantum"] + df["K_baryons"]).to_numpy()
+        W = df["W_self"].to_numpy()
+        Wabs = np.maximum(np.abs(W), 1e-30)
+        res = (2.0 * K_tot + W) / Wabs
+
+        label = os.path.basename(os.path.normpath(path))
+        plt.plot(t, res, label=f"{label}: (2K+W)/|W|")
+
+    plt.axhline(0.0, linestyle="--", linewidth=0.8, label="residual = 0")
+    plt.xlabel("Time [Gyr]")
+    plt.ylabel("Normalized residual  $(2K+W)/|W|$")
+    plt.title("Virial residual (normalized)")
+    plt.grid(True, alpha=0.3)
+    plt.legend(fontsize=8)
+    plt.tight_layout()
+    plt.show()
+
 
 
 def plot_kinetic_energy_components_1(paths):
@@ -229,8 +253,8 @@ def plot_kinetic_energy_components_1(paths):
 
 
 if __name__ == "__main__":
-    #plot_energy_ratio(simulation_dirs)
+    plot_energy_ratio(simulation_dirs)
     plot_total_energy(simulation_dirs)
-    #plot_kinetic_energy_components(simulation_dirs)
+    plot_kinetic_energy_components(simulation_dirs)
     plot_virial_check(simulation_dirs)
     #plot_kinetic_energy_components_1(simulation_dirs)

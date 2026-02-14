@@ -4,6 +4,7 @@ from resources.Functions.system_fucntions import *
 from matplotlib.colors import LogNorm
 from resources.Classes.Simulation_Class import Simulation_Class
 from resources.Classes.Wave_vector_class import Wave_vector_class
+from resources.Classes.Nbody_classes.NBodyGas import NBodyGas
 from datetime import datetime
 import os
 import numpy as np
@@ -14,8 +15,8 @@ sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-20, 20),(-20,20),(-20,20)], # Spatial boundaries
     N=128,                             # Grid resolution
-    total_time=1,              # Total simulation time
-    h=0.001,                            # Time step
+    total_time=15,              # Total simulation time
+    h=0.002,                            # Time step
     order_of_evolution=2,
     use_gravity=True ,
     static_potential=None,
@@ -25,6 +26,9 @@ sim = Simulation_Class(
     use_sponge=True
 
 )
+
+print("podemnou")
+print(sim.h_bar_tilde)
 def generate_random_position(boundary):
     low, high = boundary
     return [np.random.uniform(low, high), np.random.uniform(low, high), 0.0]
@@ -40,7 +44,23 @@ positions = []
 min_separation =5 # Adjust based on soliton radius
 boundary = [-15,15]  # Same for all dimensions
 
-for i in range(1):
+Mgas_target = 5e7  # Msun
+rho = cp.ones_like(sim.grids[0]) * (Mgas_target / (sim.dV * sim.N**sim.dim))
+
+gas = NBodyGas(
+    simulation=sim,
+    rho=rho,
+    cs=0.05,
+    gamma=5/3,
+    tcool=0.05,
+    e_floor=0.0,
+    cfl=0.4,
+    max_substeps=200
+)
+
+#sim.add_baryons(gas)
+
+for i in range(10):
     while True:
         means = generate_random_position(boundary)
         if is_far_enough(means, positions, min_separation):
@@ -51,7 +71,7 @@ for i in range(1):
 
     vlna = Wave_vector_class(
         packet_type="resources/solitons/GroundState(1).dat",
-        means=[0,0,0],
+        means=means,
         st_deviations=[0.5, 0.5, 0.5],
         simulation=sim,
         mass=1,
@@ -63,6 +83,10 @@ for i in range(1):
     sim.add_wave_vector(wave_vector=vlna)
     vlna.cleanup_wave_vector()
     del vlna
+
+
+
+
 
 
 

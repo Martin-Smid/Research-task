@@ -9,14 +9,14 @@ from scipy.optimize import curve_fit
 
 simulation_dirs = [
 
-'resources/data/simulation_20251222_212057'
+"resources/data/SMBH+ULDM+GAS+Hernquis"
 
 
 
 
 ]
 
-specific_times = [0,0.018774,0.037180]
+specific_times = [2.000000]
 
 
 
@@ -38,8 +38,10 @@ def plot_density_profiles(simulation_dirs, times=None):
     # Dictionary to store data grouped by time
     time_data = {}
 
+
     for sim_dir in simulation_dirs:
         density_profiles_dir = os.path.join(sim_dir, "density_profiles")
+        print("a")
 
         if not os.path.exists(density_profiles_dir):
             print(f"[!] Skipping: density_profiles directory not found in {sim_dir}")

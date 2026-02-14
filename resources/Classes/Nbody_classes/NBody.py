@@ -128,11 +128,19 @@ class NBody:
         a_sq = cp.sum(forces ** 2, axis=1)
         a_max = float(cp.sqrt(cp.max(a_sq)))
 
-        if a_max < 1e-10:
-            a_max = 1e-10
-
-        f_a = 0.20
-        dt_acc = float(f_a * cp.sqrt(min_dx / a_max))
+        # **FIX: Ensure a_max produces valid dt_acc (no NaN)**
+        if not np.isfinite(a_max) or a_max < 1e-15:
+            # Very weak acceleration → use a large dt (close to total_dt_window)
+            dt_acc = total_dt_window
+        else:
+            f_a = 0.20
+            dt_acc_candidate = float(f_a * cp.sqrt(min_dx / a_max))
+            
+            # Ensure dt_acc is finite and positive
+            if not np.isfinite(dt_acc_candidate) or dt_acc_candidate <= 0:
+                dt_acc = total_dt_window
+            else:
+                dt_acc = dt_acc_candidate
 
         # --- 5. determine substeps ---
         n_vel = int(np.ceil(total_dt_window / dt_vel))

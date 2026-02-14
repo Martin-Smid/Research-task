@@ -6,6 +6,7 @@ from resources.Classes.Evolution_Class import Evolution_Class
 #from resources.Classes.Baryonic_liquid_Class import BaryonicMatter_Class
 from resources.Classes.Nbody_classes.Baryonic_N_body import Baryons
 from resources.Classes.Nbody_classes.NBodyGas import NBodyGas
+from resources.Classes.Nbody_classes.Sink_N_Body import SinkNBody
 import functools
 import sys
 import inspect
@@ -85,7 +86,7 @@ class Simulation_Class:
     """
 
     @parameter_check(int, list, int, (int, float), (int, float),int, float, float,bool, bool, object, (str, type(None)), bool,(type(None),dict), dict,bool,bool,float)
-    def __init__(self, dim, boundaries, N, total_time, h,order_of_evolution = 2, m_s=2.5e-22, sponge_V0 =0.6 ,use_sponge=True, use_gravity=False,
+    def __init__(self, dim, boundaries, N, total_time, h,order_of_evolution = 2, m_s=2.5e-22, sponge_V0 =0.6 ,use_sponge=True, use_gravity=True,
                  static_potential=None, baryonic_model = None, save_max_vals=False, sink_formation=None,
                  sim_units={"dUnits": "kpc", "tUnits": "Gyr", "mUnits": "Msun", "eUnits": "eV"},use_units=True,self_int=True,a_s=-10e-80,):
         """
@@ -510,8 +511,8 @@ class Simulation_Class:
                 self.add_baryons(baryon_sys)  # Recursive call for each
             return
 
-        if not isinstance(baryonic_system, (Baryons, NBodyGas)):
-            raise TypeError(f"Expected Baryons or NBodyGas instance, got {type(baryonic_system)}")
+        if not isinstance(baryonic_system, (Baryons, NBodyGas, SinkNBody)):
+            raise TypeError(f"Expected Baryons, NBodyGas, or SinkNBody instance, got {type(baryonic_system)}")
 
         if baryonic_system.simulation is not self:
             raise ValueError(
@@ -575,7 +576,7 @@ class Simulation_Class:
     def _truelove_rho_threshold(self, cs_eff: float, NJ: int) -> float:
         dx = self._min_dx()
         G = float(self.G)
-        return math.pi * (cs_eff ** 2) / (G * (NJ * dx) ** 2)
+        return cp.pi * (cs_eff ** 2) / (G * (NJ * dx) ** 2)
 
     def _get_first_gas_system(self):
         for b in self.baryonic_matter:
@@ -643,8 +644,17 @@ class Simulation_Class:
                     pass
                 else:
                     NJ = int(cfg.get("gas_NJ", 4))
+
+                    cs_truelove = cfg.get("gas_cs_truelove", None)
                     cs_floor = cfg.get("gas_cs_floor", None)
-                    cs_eff = self._estimate_gas_cs_eff(gas, cs_floor=cs_floor)
+
+                    if cs_truelove is not None:
+                        cs_eff = float(cs_truelove)
+                        if cs_floor is not None:
+                            cs_eff = max(cs_eff, float(cs_floor))
+                    else:
+                        cs_eff = self._estimate_gas_cs_eff(gas, cs_floor=cs_floor)
+
                     cfg["gas_density_threshold"] = self._truelove_rho_threshold(cs_eff, NJ)
 
 

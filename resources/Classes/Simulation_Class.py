@@ -206,6 +206,7 @@ class Simulation_Class:
         self.G = constants.G.to(f"{self.dUnits}3/({self.mUnits} {self.tUnits}2)").value
         self.h_bar = constants.hbar.to(f"{self.dUnits}2 {self.mUnits}/{self.tUnits}").value
         self.h_bar_tilde = (self.h_bar / self.mass_s)
+        print(f"hbartilde {self.h_bar_tilde}")
         if not self.use_units:
             self.h_bar_tilde = 1
             self.h_bar = 1

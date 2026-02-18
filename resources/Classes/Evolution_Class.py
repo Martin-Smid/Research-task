@@ -492,8 +492,8 @@ class Evolution_Class:
         if hasattr(self.simulation, 'baryonic_matter') and self.simulation.baryonic_matter:
 
             for baryon_sys in self.simulation.baryonic_matter:
-                if self._is_sink_system(baryon_sys):
-                 continue  # sinks handled analytically
+                #if self._is_sink_system(baryon_sys):
+                # continue  # sinks handled analytically
                 total_density += baryon_sys.deposit_to_grid()
 
 
@@ -1191,7 +1191,7 @@ class Evolution_Class:
             eps_cusp = float(
                 getattr(sink_sys, "softening_cusp", getattr(sink_sys, "capture_radius", 3.0 * min(self.simulation.dx))))
 
-            soft_bh = 1
+            soft_bh = 1e-6
             soft_cusp = 1
             #soft_bh = cp.exp(-0.5 * (k * eps_bh) ** 2)
             #soft_cusp = cp.exp(-0.5 * (k * eps_cusp) ** 2)

@@ -4,29 +4,31 @@ from resources.Functions.system_fucntions import *
 from matplotlib.colors import LogNorm
 from resources.Classes.Simulation_Class import Simulation_Class
 from resources.Classes.Wave_vector_class import Wave_vector_class
+from resources.Classes.Nbody_classes.NBodyGas import NBodyGas
 from datetime import datetime
 import os
 import numpy as np
 
 
 
-#TODO recrete plot 1 and 6, using 12 and 13 and 21, do not bother with tau dyn for now
-
-
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
-    boundaries=[(-50, 50),(-50,50),(-50,50)], # Spatial boundaries
-    N=512,                             # Grid resolution
-    total_time=4,              # Total simulation time
-    h=0.0004,                            # Time step
-    order_of_evolution=4,
+    boundaries=[(-20, 20),(-20,20),(-20,20)], # Spatial boundaries
+    N=128,                             # Grid resolution
+    total_time=15,              # Total simulation time
+    h=0.002,                            # Time step
+    order_of_evolution=2,
     use_gravity=True ,
     static_potential=None,
     save_max_vals=True,
     a_s=-1e-80,
-    self_int=False
+    self_int=False,
+    use_sponge=True
 
 )
+
+print("podemnou")
+print(sim.h_bar_tilde)
 def generate_random_position(boundary):
     low, high = boundary
     return [np.random.uniform(low, high), np.random.uniform(low, high), 0.0]
@@ -39,8 +41,24 @@ def is_far_enough(new_pos, existing_positions, min_dist):
 
 waves = []
 positions = []
-min_separation = 7 # Adjust based on soliton radius
-boundary = [-47,47]  # Same for all dimensions
+min_separation =5 # Adjust based on soliton radius
+boundary = [-15,15]  # Same for all dimensions
+
+Mgas_target = 5e7  # Msun
+rho = cp.ones_like(sim.grids[0]) * (Mgas_target / (sim.dV * sim.N**sim.dim))
+
+gas = NBodyGas(
+    simulation=sim,
+    rho=rho,
+    cs=0.05,
+    gamma=5/3,
+    tcool=0.05,
+    e_floor=0.0,
+    cfl=0.4,
+    max_substeps=200
+)
+
+#sim.add_baryons(gas)
 
 for i in range(25):
     while True:
@@ -68,7 +86,11 @@ for i in range(25):
 
 
 
-sim.evolve(save_every=2000)
+
+
+
+
+sim.evolve(save_every=100)
 
 
 
@@ -96,7 +118,6 @@ for time in sim.accessible_times:
     plt.contourf(x_mesh_2d, y_mesh_2d, cp.asnumpy(wave_slice).T,
                  origin="lower", levels=levels, cmap="inferno",norm=LogNorm())
     plt.colorbar(label="|ψ|²", format="%.2e")
-    plt.title(f"Wavefunction Probability Density at Time {time}")
     plt.xlabel("x")
     plt.ylabel("y")
     plt.grid()

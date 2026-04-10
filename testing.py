@@ -5,42 +5,113 @@ from resources.Functions.system_fucntions import *
 from matplotlib.colors import LogNorm
 from resources.Classes.Simulation_Class import Simulation_Class
 from resources.Classes.Wave_vector_class import Wave_vector_class
+from resources.Classes.Nbody_classes.Baryonic_N_body import Baryons
+from resources.Classes.Nbody_classes.NBodyGas import NBodyGas
 
 sim = Simulation_Class(
     dim=3,                             # 2D simulation
     boundaries=[(-20, 20),(-20, 20),(-20, 20)], # Spatial boundaries
-    N=64,                             # Grid resolution
-    total_time=33,                   # Total simulation time
-    h=0.01,                            # Time step
+    N=128,                             # Grid resolution
+    total_time=1,                   # Total simulation time
+    h=1e-3,                            # Time step
     order_of_evolution=2,
     use_gravity=True , # Enable gravitational effects
-    static_potential=gravity_potential,
+    static_potential=None,
     save_max_vals=False,
     self_int=False,
+    use_sponge=False,
+    sink_formation={
+    "source": "gas",
+    "consecutive_steps": 5,
+    "check_interval": 5,
+
+    "enable_gas_sinks": True,
+    "gas_mode": "truelove",
+    "gas_NJ": 4,
+    "gas_cs_floor": 0.01,
+    "gas_consecutive_steps": 5,
+    "gas_check_interval": 5,
+    "gas_r_acc_cells": 3,
+    "merge_r_cells": 2,
+    "merge_interval": 10,
+}
+
+
 )
 
-
+#TODO: all the additional .py files such as plot_from_snapshots, plot_density etc need grooming
 
 wave_vector = Wave_vector_class(
     packet_type="resources/solitons/GroundState(1).dat",
-    means=[5, 0, 0],
+    means=[10, 10, 0],
     st_deviations=[0.5, 0.5, 0.5],
     simulation=sim,
     mass=1,
     omega=1,
-    momenta=[0, 0.947, 0],
+    momenta=[0, 0, 0],
     spin=0,
     desired_soliton_mass=53090068
 
 )
 
+bulge = Baryons(
+
+    simulation=sim,
+    N_particles=int(1e5),
+    total_mass=1e9, # Msun
+    init_profile="hernquist",
+    scale_radius=5, # kpc
+    truncation_radius=10, # kpc
+    center=(0.0, 0.0, 0.0),
+    velocity=(0.0, 0, 0.0),
+    vel_sigma=20, # km/s → ~20 kpc/Gyr if you keep units implicit
+
+
+)
+
+sim.add_baryons(bulge)
+
+
+N = sim.N
+x, y, z = sim.grids  # your coordinate grids
+x = np.array(x); y = np.array(y); z = np.array(z)
+
+rho0 = 1.0 / (sim.dV * (N**sim.dim))
+A = 200.0 * rho0
+sigma = 5.0 * min(sim.dx)
+
+r2 = x**2 + y**2 + z**2
+rho = rho0 + A*np.exp(-0.5*r2/sigma**2)
+rho = np.maximum(rho, 1e-12)
+
+Mgas_target = 5e5
+M_current = rho.sum() * sim.dV
+rho *= (Mgas_target / M_current)
+
+gas = NBodyGas(
+    simulation=sim,
+    rho=rho,
+    cs=0.05,
+    gamma=5/3,
+    tcool=0.05,
+    e_floor=0.0,
+    cfl=0.4,
+    max_substeps=200
+)
+
+sim.add_baryons(gas)
 
 sim.add_wave_vector(wave_vector)
+
+#TODO: make it so that baryons are added tp simulations similarly to wave vectors
+#TODO: plot both the wfs and baryons
+#TODO: add conservation of mass during the sim
+
 #sim.add_wave_function(vlna2)
 #sim.add_wave_function(vlna3)
 
 
-sim.evolve(save_every=100 )
+sim.evolve(save_every=10 )
 
 '''1D
 plt.figure()
@@ -67,7 +138,7 @@ for time in sim.accessible_times:
 
     # Take the middle z-slice
     wave_slice = wave_values[:, :, z_index]
-    levels = np.logspace(np.log10(wave_values[wave_values > 0].min()),np.log10(wave_values.max()), 128)
+    levels = np.logspace(np.log10(wave_values[wave_values > 0].min()),np.log10(wave_values.max()), 128_1)
     plt.contourf(x_mesh,y_mesh,cp.asnumpy(wave_slice),
                origin="lower", levels=levels,cmap="inferno", norm=LogNorm())
     plt.colorbar(label="|ψ|²",format = "%.2e")
@@ -96,7 +167,6 @@ for time in sim.accessible_times:
     plt.contourf(x_mesh_2d, y_mesh_2d, cp.asnumpy(wave_slice).T,
                  origin="lower", levels=levels, cmap="viridis", norm=LogNorm())
     plt.colorbar(label="|ψ|²", format="%.2e")
-    plt.title(f"Wavefunction Probability Density at Time {time}")
     plt.xlabel("x")
     plt.ylabel("y")
     plt.grid()
@@ -108,7 +178,7 @@ for time in sim.accessible_times:
 
 def plot_wave_slice(sim, time, axis="z", index=None):
     wave_values = cp.asnumpy(abs(sim.get_wave_function_at_time(time)) ** 2)
-    levels = np.logspace(np.log10(wave_values[wave_values > 0].min()), np.log10(wave_values.max()), 128)
+    levels = np.logspace(np.log10(wave_values[wave_values > 0].min()), np.log10(wave_values.max()), 128_1)
 
     if axis == "z":
         index = index or sim.grids[2].shape[0] // 2
@@ -148,4 +218,3 @@ def plot_wave_slice(sim, time, axis="z", index=None):
 for time in sim.accessible_times:
     plot_wave_slice(sim, time=time, axis="x")
 '''
-#TODO make it so that you can create different dim wave from the simulation, maybe make dim a wave_function class attribute and if not given take it from sim

@@ -73,10 +73,10 @@ def gravity_potential(simulation_instance, mass_multiplier=1, center=None):
     r[r==0 ] = epsilon
 
 
-    mass = 1000000
+    mass = 1e6
     G = simulation_instance.G
-    print(mass*G)
-
+    #print(mass*G)
+    #print(np.sqrt(G*mass/5))
     # Calculate potential
     potential = -(G * mass) / r
 
@@ -117,46 +117,53 @@ def energy_nd(n, omega=1, hbar=1):
 
 def lin_harmonic_oscillator(simulation_instance):
     """
-    Create the wave function psi_0 for an N-dimensional linear harmonic oscillator.
-
-    Parameters:
-        simulation_instance: Wave function parameters from class Wave_function.
-
-    Returns:
-        psi_0: The N-dimensional wave function.
+    Create the wave function psi_0 for an N-dimensional LHO.
+    Uses st_deviations to control Gaussian width directly.
     """
-    # Extract information from Wave_function params
-    grids = simulation_instance.grids  # CuPy meshgrids for each dimension
+    grids = simulation_instance.grids
     dim = simulation_instance.dim
     means = simulation_instance.means
     dx = simulation_instance.dx
     omega = simulation_instance.omega
     h_bar_tilde = simulation_instance.h_bar_tilde
-    print(h_bar_tilde)
+    st_deviations = simulation_instance.st_deviations
 
-    quantum_numbers = [0] * dim  # Quantum numbers for each dimension
-    beta = np.sqrt(( omega) / h_bar_tilde)
+    quantum_numbers = [0] * dim
+
+    # IMPORTANT: Consistency check
+    # If st_deviations provided, use them to define omega implicitly
+    # OR if omega provided, use it to compute st_deviations
+    # For now, we use st_deviations if available
 
     gaussian_factors = []
     hermite_polynomials = []
 
-    # Loop over dimensions to compute shifted grid, Hermite polynomial, and Gaussian factor
     for i in range(dim):
-        shifted_grid = grids[i] - means[i]
-        H_numpy = hermite(quantum_numbers[i])(beta * cp.asnumpy(shifted_grid))  # Hermite polynomial
-        hermite_polynomials.append(cp.array(H_numpy))  # Convert numpy result back to CuPy array
+        shifted_grid = cp.asarray(grids[i]) - means[i]
+
+        # Use st_deviations if provided and non-zero
+        if st_deviations[i] > 0:
+            # Gaussian width from st_deviations
+            beta = 1.0 / st_deviations[i]
+            implied_omega = beta ** 2 * h_bar_tilde
+        else:
+            # Fallback to omega-based calculation
+            beta = np.sqrt(omega / h_bar_tilde)
+            implied_omega = omega
+
+        H_numpy = hermite(quantum_numbers[i])(beta * cp.asnumpy(shifted_grid))
+        hermite_polynomials.append(cp.array(H_numpy))
         gaussian_factors.append(cp.exp(-0.5 * (beta * shifted_grid) ** 2))
 
-    # Compute the full wavefunction as a product of Gaussian factors and Hermite polynomials
     psi_0 = cp.ones_like(grids[0])
     for i in range(dim):
         psi_0 *= gaussian_factors[i] * hermite_polynomials[i]
 
-    # Call coefficient_nd for normalization constant across dimensions
-    coeff = coefficient_nd(quantum_numbers, omega, h_bar_tilde)
-    psi_0 *= coeff  # Apply the normalization constant to psi_0
+    # Use the FIRST dimension's implied omega for normalization (or average them)
+    use_omega = implied_omega
+    coeff = coefficient_nd(quantum_numbers, use_omega, h_bar_tilde)
+    psi_0 *= coeff
 
-    # Normalize the wavefunction using the provided normalize_wavefunction function
     dx_total = cp.prod(cp.array(dx))
     psi_0 = normalize_wavefunction(psi_0, dx_total)
 

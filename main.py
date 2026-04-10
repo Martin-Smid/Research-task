@@ -3,54 +3,99 @@ from cupy import asnumpy
 from resources.Classes.Wave_function_class import *
 from resources.Functions.system_fucntions import *
 from resources.Classes.Wave_vector_class import Wave_vector_class
+from resources.Classes.Nbody_classes.Baryonic_N_body import Baryons
 
 # Setup parameters for the domain
-a, b = -10, 10  # Domain boundaries
-N = 512 # Number of spatial points
+a, b = -5, 5  # Domain boundaries
+N = 128 # Number of spatial points
 
 # Initialize the Wave_function instance
-
-
 sim = Simulation_Class(
-    dim=1,                             # 2D simulation
-    boundaries=[(-40, 40)], # Spatial boundaries
-    N=512,                             # Grid resolution
-    total_time=2.0,                   # Total simulation time
-    h=0.01,                            # Time step
-    use_gravity=False,  # Enable gravitational effects
-    static_potential=quadratic_potential,
-    use_units=True,
+
+    dim=3, # 2D simulation
+    boundaries=[(-50, 50),(-50, 50),(-50, 50)], # Spatial boundaries
+    N=128, # Grid resolution
+    total_time=1, # Total simulation time
+    h=3.681169e-04, # Time step
     order_of_evolution=2,
-    self_int=False
+    use_gravity=True, # Enable gravitational effects
+    static_potential=None,
+    save_max_vals=True,
+    m_s=2.5e-24,
+
+
+
 )
 
-vlna = Wave_function(
-    packet_type="LHO",
-    means=[0],
-    st_deviations=[0.2],
+baryons = Baryons(
+    simulation=sim,
+    N_particles=int(1e6),
+    total_mass=0,
+    init_profile="from_file",
+    file_path="resources\solitons\Test100_S0_Nbody.bin",
+
+    dist_factor=1000.0,
+    apply_center_offset=True,
+    center=(-50,-50,-50)
+
+)
+
+wave_vector = Wave_vector_class(
+
+    packet_type="resources/solitons/GroundState(1).dat",
+    means=[0, 0, 0],
+    st_deviations=[0.5, 0.5, 0.5],
     simulation=sim,
     mass=1,
     omega=1,
-    momenta=[0],
+    momenta=[0, 0.0, 0],
+    spin=0,
+    desired_soliton_mass=3424342073.905695
+
+
 )
 
-sim.add_wave_vector([vlna])
-#sim.add_wave_function(vlna2)
+sim.add_baryons(baryons)
+sim.add_wave_vector(wave_vector)
 
 
 sim.evolve(save_every=50)
 
 
 
-x_vals = np.linspace(a, b, N, endpoint=False)
+x_vals = cp.linspace(a, b, N, endpoint=False)
 
 #controlled_times = [0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.5,7,7.5,8,8.5,9,9.5,10]
+# BEFORE comparing, verify the setup
+print(f"Wave function omega: {vlna.omega}")
+print(f"h_bar_tilde: {sim.h_bar_tilde}")
+print(f"h_bar: {sim.h_bar}")
+print(f"st_deviations: {vlna.st_deviations}")
+
+# The initial state at t=0
+psi_init = sim.get_wave_function_at_time(0)
+psi_init_np = psi_init
+
+# Compute actual standard deviation from the numerical packet
+r = x_vals - 0  # Assuming centered at 0
+density = cp.abs(psi_init_np) ** 2
+rms_width = cp.sqrt(np.sum(density * r ** 2 * (x_vals[1] - x_vals[0])) / cp.sum(density * (x_vals[1] - x_vals[0])))
+print(f"Numerical packet width (RMS): {rms_width}")
+
+# Expected width from theory
+expected_width = np.sqrt(sim.h_bar_tilde / vlna.omega)
+print(f"Theoretical packet width: {expected_width}")
+
+# Now do the comparison
 for time in sim.accessible_times:
+    x_vals = cp.asnumpy(x_vals)
 
-
-    an_psi = asnumpy(cp.abs(sim.get_wave_function_at_time(0)  * cp.exp(-1j * energy_nd([0], omega=1, hbar=sim.h_bar) * time))**2)
-    an_psi_real = asnumpy(cp.real(sim.get_wave_function_at_time(0)  * cp.exp(-1j * energy_nd([0], omega=1, hbar=sim.h_bar) * time)))
-    an_psi_imag = asnumpy(cp.imag(sim.get_wave_function_at_time(0)  * cp.exp(-1j * energy_nd([0], omega=1, hbar=sim.h_bar) * time)))
+    an_psi = asnumpy(cp.abs(
+        sim.get_wave_function_at_time(0) * cp.exp(-1j * energy_nd([0], omega=1, hbar=sim.h_bar) * time)) ** 2)
+    an_psi_real = asnumpy(
+        cp.real(sim.get_wave_function_at_time(0) * cp.exp(-1j * energy_nd([0], omega=1, hbar=sim.h_bar) * time)))
+    an_psi_imag = asnumpy(
+        cp.imag(sim.get_wave_function_at_time(0) * cp.exp(-1j * energy_nd([0], omega=1, hbar=sim.h_bar) * time)))
 
     num_psi = sim.get_wave_function_at_time(time)
     num_psi = asnumpy(num_psi)

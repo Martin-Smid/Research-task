@@ -1,3 +1,5 @@
+import numpy
+
 from resources.Functions.Schrodinger_eq_functions import *
 from resources.Errors.Errors import *
 import numpy as np
@@ -80,6 +82,7 @@ class Packet():
 
         if is_file:
             # If `packet_type` is a path, treat it as a file
+
             file_path = self.packet_type
             if not os.path.exists(file_path):
                 raise FileNotFoundError(
@@ -101,8 +104,9 @@ class Packet():
             return wave_packet
         elif self.packet_type == "LHO":
             wave_packet = self._create_LHO_packet()
-
-            wave_packet *= self.momentum_propagator
+            #if isinstance(self.momentum_propagator, np.ndarray):
+            #    self.momentum_propagator = cp.asarray(self.momentum_propagator)
+            #wave_packet *= self.momentum_propagator
 
             return wave_packet
         else:

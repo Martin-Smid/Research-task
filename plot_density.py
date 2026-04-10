@@ -9,14 +9,14 @@ from scipy.optimize import curve_fit
 
 simulation_dirs = [
 
-"resources/data/SMBH+ULDM+GAS+Hernquis"
+"resources/data/simulation_20260405_103710"
 
 
 
 
 ]
 
-specific_times = [2.000000]
+specific_times = [0,0.997,1.993000,3.985000,5]
 
 
 
@@ -124,8 +124,8 @@ def plot_density_profiles(simulation_dirs, times=None):
                     fitted_r, fitted_density, popt = fit_soliton_nfw_profile(bin_centers[fit_mask], rho_avg[fit_mask])
                     reps_fit, rc_fit, rs_fit, logrhoc_fit = popt
 
-                    plt.plot(fitted_r, fitted_density, '--', color=color, lw=2, alpha=0.8,
-                             label=f"{sim_name} - Sol+NFW (rₑ={reps_fit:.2f}, r_c={rc_fit:.2f}, rₛ={rs_fit:.2f})")
+                    #plt.plot(fitted_r, fitted_density, '--', color=color, lw=2, alpha=0.8,
+                     #        label=f"{sim_name} - Sol+NFW (rₑ={reps_fit:.2f}, r_c={rc_fit:.2f}, rₛ={rs_fit:.2f})")
 
                 except RuntimeError as e:
                     print(f"[!] Soliton+NFW fit failed for {sim_name} at t={current_time:.2f}: {e}")

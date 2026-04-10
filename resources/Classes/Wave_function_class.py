@@ -10,7 +10,7 @@ import os
 #-----------------------------------------------------------------------------------------------------------------------
 
 
-class Wave_function():  # Streamlined and unified evolution logic
+class Wave_function():  
     def __init__(self,simulation,packet_type="gaussian", momenta=[0], means=[0], st_deviations=[0.1],
                  potential=None, gravity_potential=None, mass=1, omega=1,desired_soliton_mass=1e6, **kwargs):
         """
@@ -55,7 +55,7 @@ class Wave_function():  # Streamlined and unified evolution logic
 
         self.psi = self.packet_creator.create_psi_0()
         self.desired_soliton_mass = desired_soliton_mass
-
+        
 
         print(f"passed mass is {desired_soliton_mass}")
         if self.simulation.use_units and os.path.isfile(str(self.packet_type)):
@@ -73,12 +73,14 @@ class Wave_function():  # Streamlined and unified evolution logic
                 #self._dealias_initial_psi(frac=2/3)
             except Exception as e:
                 print(f"Warning: Could not rescale mass for packet {self.packet_type}. Using raw packet. Error: {e}")
-
-            massss = self.calclulate_soliton_mass()  # Typo in original method name kept for consistency
+            
+            massss = self.calclulate_soliton_mass()  
             print(f"{massss} sol massss")
 
-
-
+        self.soliton_radius = self.calculate_soliton_radius()
+        self.soliton_mass_radius = self.calculate_soliton_mass_radius()
+        self.soliton_dynamic_mass = self.calculate_dynamic_core_mass()
+        print(f"dynamic mass {self.soliton_dynamic_mass}")
 
     def calclulate_soliton_mass(self):
         density = np.abs(self.psi) ** 2
@@ -99,6 +101,58 @@ class Wave_function():  # Streamlined and unified evolution logic
         mass = np.trapz(integrand, r_values)
 
         return mass
+
+    def calculate_dynamic_core_mass(self):
+        """
+        Optimalizovaný výpočet hmotnosti centrálního solitonu.
+        Využívá vektorizaci místo pomalých Python cyklů.
+        """
+        import numpy as np
+    
+        # 1. Práce s daty (pokud jsou na GPU, stáhneme je)
+        if hasattr(self, 'psi') and hasattr(self.psi, 'get'): # Safe check pro CuPy
+            psi_cpu = self.psi.get()
+        else:
+            psi_cpu = self.psi
+    
+        # Výpočet hustoty (vytvoříme pole 1x)
+        density = np.abs(psi_cpu)**2
+        
+        # 2. Výpočet vzdáleností (vektorizovaně)
+        # grids[dim] jsou už 3D pole, odečteme střed a umocníme
+        r_sq = (self.grids[0] - self.means[0])**2
+        for d in range(1, self.dim):
+            r_sq += (self.grids[d] - self.means[d])**2
+        
+        r_distance = np.sqrt(r_sq)
+        del r_sq # Uvolníme paměť co nejdříve
+    
+        # 3. Zploštění a seřazení
+        # Použijeme argpartition nebo argsort. Argsort je pro přesné pořadí nutný.
+        density_flat = density.flatten()
+        r_flat = r_distance.flatten()
+        
+        # Seřadíme indexy podle vzdálenosti od středu
+        idx_sorted = np.argsort(r_flat)
+        
+        # Seřazená hustota podle vzdálenosti (zde vzniká další velké pole)
+        density_sorted = density_flat[idx_sorted]
+        
+        # 4. Hledání hranice (Vektorizovaně!)
+        max_density = density_sorted[0]
+        threshold = max_density * 1e-3
+        
+        below_threshold = np.where(density_sorted < threshold)[0]
+        
+        if below_threshold.size > 0:
+            cutoff_idx = below_threshold[0]
+        else:
+            cutoff_idx = len(density_sorted) # Pokud neklesne, vezmeme vše
+    
+        volume_element = np.prod(self.dx)
+        core_mass = np.sum(density_sorted[:cutoff_idx]) * volume_element
+        
+        return core_mass
 
     def calculate_density(self):
 
@@ -143,7 +197,7 @@ class Wave_function():  # Streamlined and unified evolution logic
         for attr in ['simulation', 'dim', 'boundaries', 'multiplicity', 'N', 'means',
                      'total_time', 'h', 'num_steps', 'dx', 'grids', 'momenta',
                      'mass', 'h_bar_tilde', 'omega', 'packet_type', 'packet_creator',
-                     'desired_soliton_mass', 'soliton_mass', 'scaling_lambda']:
+                     'desired_soliton_mass', 'soliton_mass', 'scaling_lambda','soliton_radius','soliton_mass_radius','soliton_dynamic_mass']:
             setattr(clone, attr, getattr(self, attr))
 
         # Now set ψ and multiplicity
@@ -162,6 +216,92 @@ class Wave_function():  # Streamlined and unified evolution logic
         psi_k = cp.fft.fftn(self.psi)
         psi_k *= kinetic_propagator
         self.psi = cp.fft.ifftn(psi_k)
+
+    def calculate_soliton_mass_radius(self, mass_fraction=0.5):
+        """
+        Vypočítá poloměr, do kterého se vejde zadané procento (defaultně 99 %) 
+        celkové hmotnosti solitonu.
+        """
+        import numpy as np
+        
+        density = np.abs(self.psi) ** 2
+        
+        r_distance = np.zeros_like(self.grids[0])
+        for dim in range(self.dim):
+            r_distance += (self.grids[dim] - self.means[dim]) ** 2
+        r_distance = np.sqrt(r_distance)
+        
+        r_flat = r_distance.flatten()
+        density_flat = density.flatten()
+        
+        # Seřadíme body podle vzdálenosti od středu
+        sorted_indices = np.argsort(r_flat)
+        r_sorted = r_flat[sorted_indices]
+        density_sorted = density_flat[sorted_indices]
+        
+        # Objemový element pro integraci (předpokládám dx je list kroků)
+        dv = np.prod(self.dx)
+        
+        # Vytvoříme pole kumulativní hmotnosti
+        # (postupně sčítáme hmotnost od středu k okraji)
+        mass_elements = density_sorted * dv
+        cumulative_mass = np.cumsum(mass_elements)
+        
+        total_mass = cumulative_mass[-1]
+        target_mass = total_mass * mass_fraction
+        
+        # Najdeme první index, kde kumulativní hmotnost přesáhne náš cíl
+        idx = np.argmax(cumulative_mass >= target_mass)
+        r_mass_raw = r_sorted[idx]
+        
+        # Aplikace přeškálování
+        if hasattr(self, 'scaling_lambda') and self.scaling_lambda is not None:
+            return r_mass_raw / self.scaling_lambda
+        return r_mass_raw
+        
+    def calculate_soliton_radius(self):
+        """
+        Vypočítá poloměr solitonu (half-density core radius).
+        Vzdálenost od středu, kde hustota klesne na polovinu maxima.
+        """
+        import numpy as np
+        
+        density = np.abs(self.psi) ** 2
+        
+        max_density = np.max(density)
+        half_max_density = max_density / 2.0
+        
+
+        r_distance = np.zeros_like(self.grids[0])
+        for dim in range(self.dim):
+            r_distance += (self.grids[dim] - self.means[dim]) ** 2
+        r_distance = np.sqrt(r_distance)
+        
+
+        r_flat = r_distance.flatten()
+        density_flat = density.flatten()
+        
+        sorted_indices = np.argsort(r_flat)
+        r_sorted = r_flat[sorted_indices]
+        density_sorted = density_flat[sorted_indices]
+        
+        # Najdeme první poloměr, kde hustota klesne pod polovinu
+        r_c_raw = None
+        for r_val, dens_val in zip(r_sorted, density_sorted):
+            if dens_val <= half_max_density:
+                r_c_raw = r_val
+                break
+                
+        if r_c_raw is None:
+            print("r_half missin")
+            return None
+
+        if hasattr(self, 'scaling_lambda') and self.scaling_lambda is not None:
+            r_c_rescaled = r_c_raw / self.scaling_lambda
+            return r_c_rescaled
+        else:
+            return r_c_raw
+
 
     def _dealias_initial_psi(self, frac=2/3):
         """
@@ -204,3 +344,5 @@ class Wave_function():  # Streamlined and unified evolution logic
             psi_f = psi_f * xp.sqrt(mass0 / mass1)
 
         self.psi = psi_f.astype(psi.dtype, copy=False)
+
+    

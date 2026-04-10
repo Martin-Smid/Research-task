@@ -15,7 +15,7 @@ import numpy as np
 from astropy import units, constants
 import math
 
-np.random.seed(1)
+#np.random.seed(1)
 
 def parameter_check(*types):
     def decorator(func):

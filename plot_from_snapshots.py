@@ -1,7 +1,7 @@
 from resources.Functions.system_fucntions import *
 
 
-snapshot_directory = 'resources/data/simulation_20251112_113630' # Replace with your path
+#snapshot_directory = 'Projects/Reasearch-task/Research-task/resources/data/simulation_20260218_170320' # Replace with your path
 
 #-------------------------JUST WFS -----------------------------------------------------------
 '''
@@ -39,14 +39,12 @@ plot_wave_function_panel(
 )
 
 
-'''
 
-'''
 
 #------------------------------------------BOTH WFS AND BARYONS-----------------------------------------------------------------------
-times = [0,0.1,0.2,0.3,0.4,1]
+times = [0,0.1,0.2,0.3,0.4,1,3,4,5]
 for time in times:
-    snapshot_dir = "resources\data\simulation_20251221_224647"   # your snapshot folder
+    snapshot_dir = r"resources/data/simulation_20260405_180518"   # your snapshot folder
                                         # choose time (matches filename)
     wf_idx = 0                                            # which ψ to plot
     import numpy as np
@@ -127,11 +125,11 @@ for time in times:
     plt.grid(alpha=0.3)
     plt.tight_layout()
     plt.show()
-'''
+
 
 
 #------------------------------------------JUST BARYONS-------------------------------------------------
-'''
+
 snapshot_dir = "resources/data/simulation_20260121_112709"  # your snapshot folder
 boundaries = [(-50, 50), (-50, 50), (-50, 50)]              # same as in Simulation_Class
 slice_axis = 2                                              # 0=x,1=y,2=z
@@ -215,10 +213,16 @@ plt.tight_layout(); plt.show()
 
 # -----------------------------------------------------total dansity-------------------------------
 
-snapshot_dir = r"resources/data/simulation_20260214_214733"
-times_to_plot = [0, 0.1, 0.2, 0.3, 0.4, 0.5]
-L = 3
+import os
+import glob
+import numpy as np
+import matplotlib.pyplot as plt
 
+snapshot_dir = r"resources/data/simulation_20260409_111809"
+times_to_plot = [0, 0.25, 0.5, 0.75,1, 1.25,1.5,1.75,2,2.5,3,3.5,4,5]
+
+L_full = 25   # full physical half-size of the simulation box
+L = 20         # half-size of the region to actually plot
 
 files = sorted(glob.glob(os.path.join(snapshot_dir, "total_density_snapshot_at_time_*.npy")))
 available_times = [float(f.split("at_time_")[-1].replace(".npy", "")) for f in files]
@@ -227,31 +231,47 @@ for t in times_to_plot:
     # Find closest file
     idx = np.argmin(np.abs(np.array(available_times) - t))
     actual_time = available_times[idx]
-    
+
     # Load data
     rho = np.load(files[idx])
-    
-    # Automatic Slicing: Find indices of global max density
-    mx, my, mz = np.unravel_index(np.argmax(rho), rho.shape)
-    data_slice = rho[:, :, mz] # Slice XY plane at the Z-height of the max density
-    
-    # Setup coordinates
-    N = rho.shape[0]
-    extent = [-L, L, -L, L]
-    x = np.linspace(-L, L, N)
-    y = np.linspace(-L, L, N)
-    X, Y = np.meshgrid(x, y)
 
-    Z = np.clip(data_slice, 1e-30, None)
+    # Automatic slicing: find indices of global max density
+    mx, my, mz = np.unravel_index(np.argmax(rho), rho.shape)
+    data_slice = rho[:, :, mz]   # XY plane at z = mz
+
+    # Full physical coordinates of the simulation box
+    N = rho.shape[0]
+    x_full = np.linspace(-L_full, L_full, N)
+    y_full = np.linspace(-L_full, L_full, N)
+
+    # Select only data within [-L, L] in both x and y
+    ix = np.where((x_full >= -L) & (x_full <= L))[0]
+    iy = np.where((y_full >= -L) & (y_full <= L))[0]
+
+    data_zoom = data_slice[np.ix_(ix, iy)]
+    x = x_full[ix]
+    y = y_full[iy]
+
+    Z = np.clip(data_zoom, 1e-30, None)
+    logZ = np.log10(Z)
+    vmin = np.percentile(logZ, 5)
+    vmax = np.percentile(logZ, 99.5)
+
     plt.figure(figsize=(6, 5))
-    plt.imshow(np.log10(Z).T, origin="lower",
-               extent=[x.min(), x.max(), y.min(), y.max()],
-               aspect="equal")
+    plt.imshow(
+        logZ.T,
+        origin="lower",
+        extent=[x.min(), x.max(), y.min(), y.max()],
+        aspect="equal",
+        vmin=vmin,
+        vmax=vmax,
+        cmap="magma",
+    )
     plt.colorbar(label=r"$\log_{10}\rho$")
     plt.title(f"t={actual_time:.3f}, z={mz}")
-    plt.xlabel("x");
+    plt.xlabel("x")
     plt.ylabel("y")
     plt.tight_layout()
     plt.show()
 
-
+    

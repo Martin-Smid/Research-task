@@ -28,6 +28,7 @@ class NBody:
         # Particle data (N_particles, 3) - stored on GPU with CuPy
         self.positions = cp.zeros((N_particles, 3), dtype=cp.float64)
         self.velocities = cp.zeros((N_particles, 3), dtype=cp.float64)
+        self.name = "baryons"
 
 
 
@@ -421,3 +422,86 @@ class NBody:
         """
         v2 = (self.velocities ** 2).sum(axis=1)  # |v|^2 per particle
         return 0.5 * self.m_particle * v2.sum()
+
+    def compute_rotation_curve(self, nbins=40, center=(0.0, 0.0, 0.0), zmax=None, rmax=None):
+        """
+        Compute a particle-based rotation curve by binning azimuthal velocities
+        in cylindrical radius R around the z-axis.
+    
+        Parameters
+        ----------
+        nbins : int
+            Number of radial bins.
+        center : tuple
+            Galactic center (x0, y0, z0).
+        zmax : float or None
+            If given, only particles with |z-z0| <= zmax are included.
+        rmax : float or None
+            Maximum cylindrical radius to include. If None, uses half the
+            smallest box size.
+    
+        Returns
+        -------
+        R_centers : np.ndarray
+            Radial bin centers.
+        vphi_mean : np.ndarray
+            Mean azimuthal velocity in each bin.
+        vphi_std : np.ndarray
+            Standard deviation of azimuthal velocity in each bin.
+        counts : np.ndarray
+            Number of particles in each bin.
+        """
+        pos = cp.asnumpy(self.positions)
+        vel = cp.asnumpy(self.velocities)
+    
+        x0, y0, z0 = center
+        x = pos[:, 0] - x0
+        y = pos[:, 1] - y0
+        z = pos[:, 2] - z0
+    
+        vx = vel[:, 0]
+        vy = vel[:, 1]
+    
+        R = np.sqrt(x**2 + y**2)
+    
+        # azimuthal velocity around z-axis
+        eps = 1e-12
+        vphi = (-y * vx + x * vy) / (R + eps)
+    
+        mask = np.isfinite(R) & np.isfinite(vphi)
+        if zmax is not None:
+            mask &= (np.abs(z) <= zmax)
+    
+        if rmax is None:
+            box_sizes = [b[1] - b[0] for b in self.simulation.boundaries[:2]]
+            rmax = 0.5 * min(box_sizes)
+    
+        mask &= (R <= rmax)
+    
+        R_sel = R[mask]
+        vphi_sel = vphi[mask]
+    
+        if len(R_sel) == 0:
+            return (
+                np.array([]),
+                np.array([]),
+                np.array([]),
+                np.array([])
+            )
+    
+        bins = np.linspace(0.0, rmax, nbins + 1)
+        bin_ids = np.digitize(R_sel, bins) - 1
+    
+        R_centers = 0.5 * (bins[:-1] + bins[1:])
+        vphi_mean = np.full(nbins, np.nan)
+        vphi_std = np.full(nbins, np.nan)
+        counts = np.zeros(nbins, dtype=int)
+    
+        for i in range(nbins):
+            m = (bin_ids == i)
+            if np.any(m):
+                counts[i] = np.sum(m)
+                vphi_mean[i] = np.mean(vphi_sel[m])
+                vphi_std[i] = np.std(vphi_sel[m])
+    
+        return R_centers, vphi_mean, vphi_std, counts

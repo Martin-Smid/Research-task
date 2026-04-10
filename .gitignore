@@ -1,3 +1,12 @@
+
+resources/data/
+.ipynb_checkpoints/
+.idea/
+*.dat
+*.txt
+*.csv
+resources/solitons/
 .venv/
 __pycache__/
 
+.research-task/

@@ -176,6 +176,7 @@ class NBodyGas:
 
         dt_sub = self._compute_cfl_timestep()
         need = int(np.ceil(dt_window / dt_sub))
+        
         if need > self.max_substeps:
             raise FloatingPointError(
                 f"[Gas] CFL requires {need} substeps but max_substeps={self.max_substeps}. "
@@ -440,3 +441,102 @@ class NBodyGas:
         K = float(0.5 * cp.sum(self.rho * v2) * self.cell_volume)
         U = self.internal_energy()
         return K, U
+
+    def compute_rotation_curve(self, nbins=40, center=(0.0, 0.0, 0.0), zmax=None, rmax=None, mass_weighted=True):
+        """
+        Compute a gas rotation curve by binning azimuthal velocity in cylindrical
+        annuli around the z-axis.
+    
+        Parameters
+        ----------
+        nbins : int
+            Number of radial bins.
+        center : tuple
+            Galactic center (x0, y0, z0).
+        zmax : float or None
+            If given, only cells with |z-z0| <= zmax are included.
+        rmax : float or None
+            Maximum cylindrical radius to include. If None, uses half the
+            smallest box size.
+        mass_weighted : bool
+            If True, compute rho-weighted mean and dispersion.
+    
+        Returns
+        -------
+        R_centers : np.ndarray
+            Radial bin centers.
+        vphi_mean : np.ndarray
+            Mean azimuthal velocity in each bin.
+        vphi_std : np.ndarray
+            Standard deviation of azimuthal velocity in each bin.
+        weights_sum : np.ndarray
+            Total counts or total mass-weights in each bin.
+        """
+        # coordinates from simulation grid
+        xg = cp.asnumpy(self.simulation.grids[0])
+        yg = cp.asnumpy(self.simulation.grids[1])
+        zg = cp.asnumpy(self.simulation.grids[2])
+    
+        rho = cp.asnumpy(self.rho)
+        vx = cp.asnumpy(self.vx)
+        vy = cp.asnumpy(self.vy)
+    
+        x0, y0, z0 = center
+        x = xg - x0
+        y = yg - y0
+        z = zg - z0
+    
+        R = np.sqrt(x**2 + y**2)
+    
+        eps = 1e-12
+        vphi = (-y * vx + x * vy) / (R + eps)
+    
+        mask = np.isfinite(R) & np.isfinite(vphi) & np.isfinite(rho)
+        if zmax is not None:
+            mask &= (np.abs(z) <= zmax)
+    
+        if rmax is None:
+            box_sizes = [b[1] - b[0] for b in self.simulation.boundaries[:2]]
+            rmax = 0.5 * min(box_sizes)
+    
+        mask &= (R <= rmax)
+    
+        R_sel = R[mask]
+        vphi_sel = vphi[mask]
+    
+        if mass_weighted:
+            w_sel = rho[mask]
+        else:
+            w_sel = np.ones_like(vphi_sel)
+    
+        if len(R_sel) == 0:
+            return (
+                np.array([]),
+                np.array([]),
+                np.array([]),
+                np.array([])
+            )
+    
+        bins = np.linspace(0.0, rmax, nbins + 1)
+        bin_ids = np.digitize(R_sel, bins) - 1
+    
+        R_centers = 0.5 * (bins[:-1] + bins[1:])
+        vphi_mean = np.full(nbins, np.nan)
+        vphi_std = np.full(nbins, np.nan)
+        weights_sum = np.zeros(nbins, dtype=float)
+    
+        for i in range(nbins):
+            m = (bin_ids == i)
+            if np.any(m):
+                ww = w_sel[m]
+                vv = vphi_sel[m]
+                wtot = np.sum(ww)
+                weights_sum[i] = wtot
+    
+                mean = np.sum(ww * vv) / wtot
+                var = np.sum(ww * (vv - mean)**2) / wtot
+    
+                vphi_mean[i] = mean
+                vphi_std[i] = np.sqrt(var)
+    
+        return R_centers, vphi_mean, vphi_std, weights_sum

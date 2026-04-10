@@ -1,4 +1,4 @@
-from resources.Functions.Schrodinger_eq_functions import *
+#from resources.Functions.Schrodinger_eq_functions import *
 import pandas as pd
 import matplotlib.pyplot as plt
 

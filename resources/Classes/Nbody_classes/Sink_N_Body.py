@@ -370,7 +370,7 @@ class SinkNBody(NBody):
         # --- Bondi prefactor per sink ---
         M = self.masses
         dM_fac = float(dt) * 4.0 * np.pi * float(lam) * (G * M) ** 2 / (float(sound_speed) ** 3)
-
+        
         # Accumulate per-sink mass and (optionally) momentum gains.
         dM = cp.zeros(self.N, dtype=cp.float64)
         dP = cp.zeros((self.N, 3), dtype=cp.float64)

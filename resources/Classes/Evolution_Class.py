@@ -171,12 +171,33 @@ class Evolution_Class:
                 save_step = True
 
             #checking if BH appeared
+            '''
+            #off right now
             new_sink = self._check_and_form_sinks(step)
             self._perform_sink_accretion()
             if new_sink:
                 print("New sink formed at step", step)
                 total_density = self._compute_total_density(wave_functions)
-
+            '''
+            #temporary Mbh mass gain
+            if self.sink_system is not None and self.sink_system.N > 0:
+                M_start = 1e7  
+                M_end = 3e7    
+                
+               
+                growth_end_step = 0.5 * self.num_steps
+                
+                
+                if step <= growth_end_step:
+                    fraction = step / growth_end_step
+                    new_mass = M_start + (M_end - M_start) * fraction
+               
+                else:
+                    new_mass = M_end
+                
+                self.sink_system.mass_bh[0] = new_mass
+                self.sink_system.masses[0] = new_mass
+                
             # Perform evolution step
             wave_functions = self._perform_evolution_step(wave_functions, total_density, step, save_step)
 
@@ -226,9 +247,17 @@ class Evolution_Class:
                     baryon_density=baryon_density_to_save,
                     gas_density=gas_density_to_save
                 )
-                
+                                
                 self.scribe.flush_trajectory_buffer()
 
+                # Save rotation curves for baryonic components
+                self._compute_and_save_rotation_curves(
+                    current_time=current_time,
+                    nbins=40,
+                    rmax=15.0,
+                    zmax_gas=1.0,
+                    zmax_stars=2.0
+                )
                 #checking for conservation params
                 gas_systems = [s for s in self.simulation.baryonic_matter if
                                s.__class__.__name__.lower().endswith("gas")]
@@ -447,13 +476,17 @@ class Evolution_Class:
 
 
 
-    def _kick_all_wave_functions(self, wave_functions, total_density, is_first_step, is_last_step,
-                                 time_factor_key='full'):
+    def _kick_all_wave_functions(self, wave_functions, total_density, is_first_step, is_last_step, time_factor_key='full'):
         """Apply kick step to all wave functions with shared density."""
         time_factor = self.coefficients[time_factor_key]
+        
+        phi_sink = self._compute_sink_potential_analytic_kspace()
+        
+
+        dt_step = self.h * time_factor
+        bh_propagator = cp.exp(-1j * phi_sink * dt_step / self.simulation.h_bar_tilde)
 
         for wf in wave_functions:
-            # Compute total dynamic propagator (gravity + self-int + sponge)
             dynamic_propagator = self.propagator.compute_total_propagator(
                 density=total_density, psi=wf.psi,
                 first_step=is_first_step,
@@ -461,14 +494,13 @@ class Evolution_Class:
                 time_factor=time_factor
             )
 
-
             if time_factor_key in self.static_propagators:
                 static_propagator = self.static_propagators[time_factor_key]
                 full_propagator = dynamic_propagator * static_propagator
             else:
                 full_propagator = dynamic_propagator
 
-            wf.psi *= full_propagator
+            wf.psi *= full_propagator * bh_propagator
 
 
 
@@ -1007,7 +1039,7 @@ class Evolution_Class:
                 gas_systems.append(b)
             elif hasattr(b, 'N'):  # Particle-based baryons
                 baryon_systems.append(b)
-
+        
         # === ACCRETE FROM BARYONS ===
         if baryon_systems:
             # Track initial state
@@ -1037,6 +1069,7 @@ class Evolution_Class:
         if gas_systems:
             for gas in gas_systems:
                 # Track initial state
+
                 initial_gas_mass = float(cp.sum(gas.rho) * self.simulation.dV)
                 initial_gas_momentum = gas.total_momentum()
 
@@ -1059,6 +1092,7 @@ class Evolution_Class:
                         f"    Δ Momentum: ({delta_momentum[0]:.3e}, {delta_momentum[1]:.3e}, {delta_momentum[2]:.3e})")
                     print(f"    Remaining gas mass: {final_gas_mass:.6e} Msun")
                     '''
+                    
 
         # Drain reservoir (common for all sources)
         self.sink_system.drain_reservoir(self.h)
@@ -1191,10 +1225,10 @@ class Evolution_Class:
             eps_cusp = float(
                 getattr(sink_sys, "softening_cusp", getattr(sink_sys, "capture_radius", 3.0 * min(self.simulation.dx))))
 
-            soft_bh = 1e-6
-            soft_cusp = 1
-            #soft_bh = cp.exp(-0.5 * (k * eps_bh) ** 2)
-            #soft_cusp = cp.exp(-0.5 * (k * eps_cusp) ** 2)
+            #soft_bh = 1e-6
+            #soft_cusp = 1
+            soft_bh = cp.exp(-0.5 * (k * eps_bh) ** 2)
+            soft_cusp = cp.exp(-0.5 * (k * eps_cusp) ** 2)
 
             for mbh, mres, pos in zip(cp.asnumpy(sink_sys.mass_bh),
                                       cp.asnumpy(sink_sys.mass_res),
@@ -1215,6 +1249,47 @@ class Evolution_Class:
         phi_k_total[mask0] = 0.0 + 0.0j
         phi_sink = cp.fft.ifftn(phi_k_total).real.astype(cp.float64)
         return phi_sink
+
+    def _compute_and_save_rotation_curves(self, current_time, nbins=40, rmax=None, zmax_gas=1.0, zmax_stars=2.0):
+        """
+        Compute and save rotation curves for all baryonic components that implement
+        compute_rotation_curve().
+        """
+        if not getattr(self.simulation, "baryonic_matter", None):
+            return
+    
+        for i, sys in enumerate(self.simulation.baryonic_matter):
+            if not hasattr(sys, "compute_rotation_curve"):
+                continue
+    
+            # choose a readable component name
+            if self._is_gas_system(sys):
+                component_name = "gas"
+                zmax = zmax_gas
+            elif self._is_sink_system(sys):
+                continue   # sink does not have a meaningful rotation curve here
+            else:
+                # try to distinguish particle components
+                component_name = getattr(sys, "name", f"baryons_{i}")
+                zmax = zmax_stars
+    
+            try:
+                R, vphi, sigma, weights = sys.compute_rotation_curve(
+                    nbins=nbins,
+                    center=(0.0, 0.0, 0.0),
+                    zmax=zmax,
+                    rmax=rmax
+                )
+                self.scribe.save_rotation_curve(
+                    time=current_time,
+                    component_name=component_name,
+                    R_centers=R,
+                    vphi_mean=vphi,
+                    vphi_std=sigma,
+                    weights=weights
+                )
+            except Exception as e:
+                print(f"[Evolution] Warning: could not compute rotation curve for {component_name}: {e}")
 
     def _is_gas_system(self, sys):
         """Check if a baryonic system is a gas system."""

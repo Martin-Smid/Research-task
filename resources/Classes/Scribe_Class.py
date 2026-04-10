@@ -63,6 +63,10 @@ class Scribe:
         with open(self.max_locations_path, "w") as f:
             f.write("# time, ix, iy, iz, x, y, z\n")
 
+        self.rotation_curve_path = os.path.join(self.snapshot_directory, "rotational_velocity.dat")
+        with open(self.rotation_curve_path, "w") as f:
+            f.write("time,component,R,vphi_mean,vphi_std,weight\n")
+
 
         return save_dir
 
@@ -384,3 +388,34 @@ class Scribe:
         # Append to csv, avoiding rewriting header
         df.to_csv(self.trajectory_path, mode='a', header=False, index=False)
         self.trajectory_log = []  # Clear memory
+
+    def save_rotation_curve(self, time, component_name, R_centers, vphi_mean, vphi_std, weights):
+        """
+        Append one component's rotation curve to rotational_velocity.dat
+    
+        Parameters
+        ----------
+        time : float
+            Simulation time.
+        component_name : str
+            Name of the component, e.g. "gas", "bulge", "stellar_disk".
+        R_centers, vphi_mean, vphi_std, weights : array-like
+            Rotation-curve data returned by compute_rotation_curve().
+        """
+        if R_centers is None or len(R_centers) == 0:
+            return
+    
+        try:
+            with open(self.rotation_curve_path, "a") as f:
+                for R, vm, vs, w in zip(R_centers, vphi_mean, vphi_std, weights):
+                    if np.isfinite(R):
+                        f.write(
+                            f"{float(time):.15e},"
+                            f"{component_name},"
+                            f"{float(R):.15e},"
+                            f"{float(vm):.15e},"
+                            f"{float(vs):.15e},"
+                            f"{float(w):.15e}\n"
+                        )
+        except Exception as e:
+            print(f"[Scribe] Error writing rotation curve for {component_name} at t={time}: {e}")

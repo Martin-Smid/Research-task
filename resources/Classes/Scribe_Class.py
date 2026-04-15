@@ -3,6 +3,7 @@ import datetime
 import numpy as np
 import cupy as cp
 import pandas as pd
+import json
 
 
 class Scribe:
@@ -82,7 +83,7 @@ class Scribe:
             np.save(initial_path, cp.asnumpy(wf.psi))
             self.wave_values[wf_idx].append(initial_path)
 
-    def save_snapshots(self, wave_functions, step, h, total_density=None, baryon_density=None,  gas_density=None):
+    def save_snapshots(self, wave_functions, current_time, total_density=None, baryon_density=None, gas_density=None):
         """
         Save wave function snapshots, baryon density, and total density at current step.
 
@@ -93,12 +94,12 @@ class Scribe:
             total_density: (Optional) Total density grid (Waves + Baryons + Sinks)
             baryon_density: (Optional) Total baryon density grid (Gas + Sinks)
         """
-        current_time = step * h
-
+        saved_wave_files = []
         # Save Wave Functions
         for wf_idx, wf in enumerate(wave_functions):
             snapshot_path = f"{self.snapshot_directory}/wf_{wf_idx}_snapshot_at_time_{current_time:.6f}.npy"
             np.save(snapshot_path, cp.asnumpy(wf.psi))
+            saved_wave_files.append(os.path.basename(snapshot_path))
             self.wave_values[wf_idx].append(snapshot_path)
 
         # Save Baryon Density 
@@ -125,6 +126,7 @@ class Scribe:
                 print(f"[Scribe] Warning: could not save total density snapshot at time {current_time:.6f}: {e}")
 
         self.accessible_times.append(current_time)
+        return saved_wave_files
 
     def save_final_state(self, wave_functions, num_steps, save_every, h, total_time):
         """
@@ -137,22 +139,29 @@ class Scribe:
             h: Time step size
             total_time: Total simulation time
         """
+        saved_wave_files = []
         if (num_steps - 1) % save_every != 0:
             final_time = total_time
             for wf_idx, wf in enumerate(wave_functions):
                 final_path = f"{self.snapshot_directory}/wf_{wf_idx}_snapshot_at_time_{final_time:.6f}.npy"
                 np.save(final_path, cp.asnumpy(wf.psi))
+                saved_wave_files.append(os.path.basename(final_path))
                 self.wave_values[wf_idx].append(final_path)
 
-            if hasattr(self.simulation, "baryonic_matter") and self.simulation.baryonic_matter is not None:
+            if hasattr(self.simulation, "baryonic_matter") and self.simulation.baryonic_matter:
                 try:
-                    rho_baryons = self.simulation.baryonic_matter.deposit_to_grid()
+                    shape = (self.simulation.N,) * self.simulation.dim
+                    rho_baryons = cp.zeros(shape, dtype=cp.float64)
+            
+                    for sys in self.simulation.baryonic_matter:
+                        rho_baryons += sys.deposit_to_grid()
+            
                     baryon_path = f"{self.snapshot_directory}/baryons_snapshot_at_time_{final_time:.6f}.npy"
                     np.save(baryon_path, cp.asnumpy(rho_baryons))
                 except Exception as e:
                     print(f"[Scribe] Warning: could not save baryon snapshot at time {final_time:.6f}: {e}")
-
             self.accessible_times.append(final_time)
+        return saved_wave_files
 
     def save_metadata(self, num_steps, h, total_time, order, num_wave_functions):
         """
@@ -419,3 +428,111 @@ class Scribe:
                         )
         except Exception as e:
             print(f"[Scribe] Error writing rotation curve for {component_name} at t={time}: {e}")
+
+    def save_restart_metadata(self, current_step, current_time, save_every, order, num_wave_functions,wave_files=None,baryonic_component_files=None):
+        """
+        Save minimal restart metadata describing the latest valid checkpoint.
+        """
+        restart_path = os.path.join(self.snapshot_directory, "restart_state.json")
+    
+        data = {
+            "current_step": int(current_step),
+            "current_time": float(current_time),
+            "save_every": int(save_every),
+            "order": int(order),
+            "num_wave_functions": int(num_wave_functions),
+        
+            "simulation_config": {
+                "dim": int(self.simulation.dim),
+                "N": int(self.simulation.N),
+                "boundaries": [[float(a), float(b)] for (a, b) in self.simulation.boundaries],
+                "h": float(self.simulation.h),
+                "total_time": float(self.simulation.total_time),
+                "num_steps": int(self.simulation.num_steps),
+        
+                "m_s": float(self.simulation.m_s),
+                "sponge_V0": float(self.simulation.sponge_V0),
+                "use_sponge": bool(self.simulation.use_sponge),
+                "use_gravity": bool(self.simulation.use_gravity),
+                "save_max_vals": bool(self.simulation.save_max_vals),
+                "use_units": bool(self.simulation.use_units),
+                "self_int": bool(self.simulation.use_self_int),
+                "a_s": float(self.simulation.a_s),
+        
+                "sim_units": {
+                    "dUnits": self.simulation.dUnits,
+                    "tUnits": self.simulation.tUnits,
+                    "mUnits": self.simulation.mUnits,
+                    "eUnits": self.simulation.eUnits,
+                },
+        
+                "has_static_potential": self.simulation.static_potential is not None,
+                "has_external_density": self.simulation.external_density is not None,
+                "overwrite_density": bool(self.simulation.overwrite_density),
+        
+                "sink_formation": self.simulation._sink_cfg,
+
+                "wave_files": wave_files if wave_files is not None else [],
+                "baryonic_component_files": baryonic_component_files if baryonic_component_files is not None else [],
+            }
+            }
+        with open(restart_path, "w") as f:
+            json.dump(data, f, indent=2)
+
+    def save_baryonic_components(self, baryonic_matter, current_time):
+        """
+        Save full state of all baryonic components for restart.
+        Each component is stored in a separate .npz file.
+        """
+        if not baryonic_matter:
+            return []
+    
+        saved_files = []
+    
+        for idx, comp in enumerate(baryonic_matter):
+            cls_name = comp.__class__.__name__
+            save_path = os.path.join(
+                self.snapshot_directory,
+                f"baryonic_component_{idx}_{cls_name}_at_time_{current_time:.6f}.npz"
+            )
+    
+            data = {"class_name": cls_name}
+    
+            if cls_name == "Baryons":
+                data.update({
+                    "positions": cp.asnumpy(comp.positions),
+                    "velocities": cp.asnumpy(comp.velocities),
+                    "m_particle": float(comp.m_particle),
+                    "N": int(comp.N),
+                })
+    
+            elif cls_name == "NBodyGas":
+                data.update({
+                    "rho": cp.asnumpy(comp.rho),
+                    "vx": cp.asnumpy(comp.vx),
+                    "vy": cp.asnumpy(comp.vy),
+                    "vz": cp.asnumpy(comp.vz),
+                    "E": cp.asnumpy(comp.E) if hasattr(comp, "E") else None,
+                    "E_radiated": float(getattr(comp, "E_radiated", 0.0)),
+                })
+    
+            elif cls_name == "SinkNBody":
+                data.update({
+                    "positions": cp.asnumpy(comp.positions),
+                    "velocities": cp.asnumpy(comp.velocities),
+                    "mass_bh": cp.asnumpy(comp.mass_bh),
+                    "mass_res": cp.asnumpy(comp.mass_res),
+                    "masses": cp.asnumpy(comp.masses),
+                    "N": int(comp.N),
+                    "E_diss_kin_total": float(getattr(comp, "E_diss_kin_total", 0.0)),
+                    "E_diss_formation_total": float(getattr(comp, "E_diss_formation_total", 0.0)),
+                })
+    
+            else:
+                print(f"[Scribe] Warning: unsupported baryonic component type for restart: {cls_name}")
+                continue
+    
+            np.savez(save_path, **data)
+            saved_files.append(os.path.basename(save_path))
+
+        return saved_files

@@ -14,6 +14,10 @@ from itertools import chain
 import numpy as np
 from astropy import units, constants
 import math
+import json
+import os
+
+
 
 #np.random.seed(1)
 
@@ -179,7 +183,8 @@ class Simulation_Class:
         self.overwrite_density = False
 
         self._sink_cfg = self._sink_cfg = None if sink_formation is None else dict(sink_formation) #configuration for sink particles
-
+        self.is_restart = False
+        
     def setup_units(self, sim_units, m_s):
         """
         Setup physical units for the simulation.
@@ -320,16 +325,14 @@ class Simulation_Class:
         """
 
         # Extract wave functions from the dictionary storage (used for Wave_vector_class)
-        vlnky = []
-        for spin in self.wave_vectors:
-            vlnky.append(self.wave_vectors[spin])
-
-
-        wave_vectors_flat = list(chain.from_iterable(vlnky))
-        self.wave_functions.extend(wave_vectors_flat)
-
-
-        self.wave_vectors = {}
+        if not self.is_restart:
+            vlnky = []
+            for spin in self.wave_vectors:
+                vlnky.append(self.wave_vectors[spin])
+        
+            wave_vectors_flat = list(chain.from_iterable(vlnky))
+            self.wave_functions.extend(wave_vectors_flat)
+            self.wave_vectors = {}
 
         print(f"pracuji s len {len(self.wave_functions)} functions: {self.wave_functions}")
 
@@ -360,7 +363,7 @@ class Simulation_Class:
 
 
 
-    def evolve(self, save_every=1):
+    def evolve(self, save_every=1,start_step=0):
         """
         Start the evolution process.
 
@@ -368,7 +371,12 @@ class Simulation_Class:
             save_every (int): How often to save the wave function during evolution
         """
         self.initialize_simulation()
-        final_wave_functions = self.evolution.evolve(self.wave_functions, save_every)
+
+        final_wave_functions = self.evolution.evolve(
+            self.wave_functions,
+            save_every,
+            start_step=start_step
+        )
 
         # Update simulation state
         self.combined_psi = final_wave_functions
@@ -670,3 +678,4 @@ class Simulation_Class:
                     cfg["density_threshold"] = self._truelove_rho_threshold(float(sigma_1d), NJ_b)
 
         return cfg
+

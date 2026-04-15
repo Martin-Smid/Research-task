@@ -57,7 +57,7 @@ class Evolution_Class:
         self._ref_mass = None
         self._ref_mom = None
 
-    def evolve(self, wave_functions, save_every=1):
+    def evolve(self, wave_functions, save_every=1, start_step=0):
         """
         Perform the full time evolution for multiple wave functions.
 
@@ -92,55 +92,70 @@ class Evolution_Class:
 
 
         # Setup directories and save initial state
-        self.scribe.setup_directories(self.num_wave_functions)
-        self.scribe.save_initial_states(wave_functions)
+        if start_step == 0:
+            self.scribe.setup_directories(self.num_wave_functions)
+            self.scribe.save_initial_states(wave_functions)
+        else:
+            current_time = start_step * self.h
+            self.scribe.snapshot_directory = getattr(self.simulation, "snapshot_directory", None)
+            if self.scribe.snapshot_directory is None:
+                raise ValueError("Restart mode requires simulation.snapshot_directory to be set.")
+        
+            self.scribe.energy_path = os.path.join(self.scribe.snapshot_directory, "energy.csv")
+            self.scribe.trajectory_path = os.path.join(self.scribe.snapshot_directory, "particle_trajectory.csv")
+            self.scribe.max_locations_path = os.path.join(self.scribe.snapshot_directory, "max_locations.txt")
+            self.scribe.rotation_curve_path = os.path.join(self.scribe.snapshot_directory, "rotational_velocity.dat")
+        
+            if not self.scribe.wave_values or len(self.scribe.wave_values) != self.num_wave_functions:
+                self.scribe.wave_values = [[] for _ in range(self.num_wave_functions)]
 
 
 
         # Initial diagnostics
-        total_density = self._compute_total_density(wave_functions)
-
-        mass_total = cp.sum(total_density) * self.simulation.dV
-        print("Mass:", mass_total)
-        print("Deviation [%]:", 100 * (mass_total / 1e8 - 1))
-
-
-        current_time = 0
-        if self.simulation.dim == 3:
-            # Check if density has any non-zero values
-            max_indices = cp.argwhere(total_density == total_density.max())
-            if max_indices.size > 0:
-                ix, iy, iz = cp.asnumpy(max_indices[0])
-                self.scribe.record_max_location(int(ix), int(iy), int(iz), float(current_time))
-                self._compute_and_save_radial_profile(total_density, current_time, ix, iy, iz)
-            else:
-                print("Warning: No maximum density location found (density may be zero everywhere)")
-                ix, iy, iz = self.simulation.N // 2, self.simulation.N // 2, self.simulation.N // 2
-
-        self.compute_total_energy(wave_functions, total_density, current_time)
-
-        # Check mass conservation
-        if wave_functions:
-            try:
-                mass_diff = (
-                            (abs(total_density).sum() * (self.simulation.dV ** 3))
-                            / wave_functions[0].soliton_mass
+        if start_step == 0:
+            
+            total_density = self._compute_total_density(wave_functions)
+        
+            mass_total = cp.sum(total_density) * self.simulation.dV
+            print("Mass:", mass_total)
+            print("Deviation [%]:", 100 * (mass_total / 1e8 - 1))
+        
+            current_time = start_step * self.h
+            if self.simulation.dim == 3:
+                max_indices = cp.argwhere(total_density == total_density.max())
+                if max_indices.size > 0:
+                    ix, iy, iz = cp.asnumpy(max_indices[0])
+                    self.scribe.record_max_location(int(ix), int(iy), int(iz), float(current_time))
+                    self._compute_and_save_radial_profile(total_density, current_time, ix, iy, iz)
+                else:
+                    print("Warning: No maximum density location found (density may be zero everywhere)")
+                    ix, iy, iz = self.simulation.N // 2, self.simulation.N // 2, self.simulation.N // 2
+        
+            self.compute_total_energy(wave_functions, total_density, current_time)
+        
+            if wave_functions:
+                try:
+                    mass_diff = (
+                        (abs(total_density).sum() * (self.simulation.dV ** 3))
+                        / wave_functions[0].soliton_mass
                     ) - self.simulation.num_of_w_vects_in_sim
-            except AttributeError:
+                except AttributeError:
+                    mass_diff = 0
+            else:
                 mass_diff = 0
+                print("no wave functions detected")
+        
+            if mass_diff > 1e-2:
+                print(f"mass diff {mass_diff} is greater than 1e-2, might want to increase the resolution")
+            else:
+                print(f"mass diff is {mass_diff:.6f} Msun")
         else:
-            mass_diff = 0
-            print("no wave functions detected")
-
-        if mass_diff > 1e-2:
-            print(f"mass diff {mass_diff} is greater than 1e-2, might want to increase the resolution")
-        else:
-            print(f"mass diff is {mass_diff:.6f} Msun")
+            total_density = self._compute_total_density(wave_functions)
 
 
 
         # Main evolution loop
-        for step in tqdm(range(self.num_steps), desc="Simulation Progress", unit="step"):
+        for step in tqdm(range(start_step, self.num_steps), desc="Simulation Progress", unit="step"):
             if step == 0:
                 print("starting evolution")
             else:
@@ -238,16 +253,39 @@ class Evolution_Class:
 
                     baryon_density_to_save = rho_baryons_all
                     total_density_to_save = total_density + rho_sinks_only + rho_gas_only
+                wave_files = []
+                baryonic_component_files = []
 
-                self.scribe.save_snapshots(
-                    wave_functions, 
-                    step, 
-                    self.h, 
+                wave_files = self.scribe.save_snapshots(
+                    wave_functions,
+                    current_time=current_time,
                     total_density=total_density_to_save,
                     baryon_density=baryon_density_to_save,
                     gas_density=gas_density_to_save
                 )
-                                
+                wave_files = self.scribe.save_snapshots(
+                    wave_functions,
+                    current_time=current_time,
+                    total_density=total_density_to_save,
+                    baryon_density=baryon_density_to_save,
+                    gas_density=gas_density_to_save
+                )
+                
+                baryonic_component_files = self.scribe.save_baryonic_components(
+                    self.simulation.baryonic_matter,
+                    current_time=current_time
+                )
+                
+                self.scribe.save_restart_metadata(
+                    current_step=step + 1,
+                    current_time=current_time,
+                    save_every=save_every,
+                    order=self.order,
+                    num_wave_functions=self.num_wave_functions,
+                    wave_files=wave_files,
+                    baryonic_component_files=baryonic_component_files,
+                )
+                                                
                 self.scribe.flush_trajectory_buffer()
 
                 # Save rotation curves for baryonic components
@@ -290,7 +328,26 @@ class Evolution_Class:
         cp.get_default_memory_pool().free_all_blocks()
 
         # Save final state and finalize
-        self.scribe.save_final_state(wave_functions, self.num_steps, save_every, self.h, self.total_time)
+        final_wave_files = self.scribe.save_final_state(
+            wave_functions,
+            self.num_steps,
+            save_every,
+            self.h,
+            self.total_time
+        )
+        final_baryonic_component_files = self.scribe.save_baryonic_components(
+            self.simulation.baryonic_matter,
+            current_time=self.total_time
+        )
+        self.scribe.save_restart_metadata(
+            current_step=self.num_steps,
+            current_time=self.total_time,
+            save_every=save_every,
+            order=self.order,
+            num_wave_functions=self.num_wave_functions,
+            wave_files=final_wave_files,
+            baryonic_component_files=final_baryonic_component_files,
+        )
         self._finalize_evolution()
 
         return wave_functions

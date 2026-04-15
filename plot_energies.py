@@ -6,7 +6,8 @@ import numpy as np
 # 🔧 MANUALLY SET YOUR DIRECTORIES HERE
 simulation_dirs = [
 
-"resources/data/simulation_20260409_085600"
+    "resources/data/simulation_20260415_194133",
+
 
 
 
@@ -73,6 +74,7 @@ def plot_total_energy(paths):
     plt.ylabel(r"$\Delta E / E_0$")
     plt.legend()
     plt.tight_layout()
+    #plt.savefig("plots/energy_conservation/orders.png",dpi=300)
     plt.show()
 
 

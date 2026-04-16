@@ -218,8 +218,8 @@ import glob
 import numpy as np
 import matplotlib.pyplot as plt
 
-snapshot_dir = r"resources/data/simulation_20260415_194133"
-times_to_plot = [0, 0.25, 0.5, 0.75,1, 1.25,1.5,1.75,2,2.5,3,3.5,4,5]
+snapshot_dir = r"resources/data/simulation_20260416_133110"
+times_to_plot = [0,1, 2,3,4,5,6,7,8,9,10]
 
 L_full = 25   # full physical half-size of the simulation box
 L = 20         # half-size of the region to actually plot

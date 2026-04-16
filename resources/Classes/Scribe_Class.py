@@ -132,7 +132,7 @@ class Scribe:
         self.accessible_times.append(current_time)
         return saved_wave_files
 
-    def save_final_state(self, wave_functions, num_steps, save_every, h, total_time):
+    def save_final_state(self, wave_functions, num_steps, save_every, h, total_time, total_density):
         """
         Save final state if it wasn't already saved.
 
@@ -151,6 +151,9 @@ class Scribe:
                 np.save(final_path, cp.asnumpy(wf.psi))
                 saved_wave_files.append(os.path.basename(final_path))
                 self.wave_values[wf_idx].append(final_path)
+            if total_density is not None:
+                total_path = f"{self.snapshot_directory}/total_density_snapshot_at_time_{final_time:.6f}.npy"
+                np.save(total_path, cp.asnumpy(total_density))
 
             if hasattr(self.simulation, "baryonic_matter") and self.simulation.baryonic_matter:
                 try:

@@ -218,6 +218,10 @@ class Evolution_Class:
 
             total_density = self._compute_total_density(wave_functions)
             current_time = (step + 1) * self.h
+            if self.save_max_vals:
+                max_val = float(cp.max(cp.abs(total_density)))
+
+                self.scribe.track_max_value(step + 1, max_val)
             self.compute_total_energy(wave_functions, total_density, current_time)
 
             # Save snapshots and profiles
@@ -263,13 +267,7 @@ class Evolution_Class:
                     baryon_density=baryon_density_to_save,
                     gas_density=gas_density_to_save
                 )
-                wave_files = self.scribe.save_snapshots(
-                    wave_functions,
-                    current_time=current_time,
-                    total_density=total_density_to_save,
-                    baryon_density=baryon_density_to_save,
-                    gas_density=gas_density_to_save
-                )
+                
                 
                 baryonic_component_files = self.scribe.save_baryonic_components(
                     self.simulation.baryonic_matter,
@@ -333,7 +331,8 @@ class Evolution_Class:
             self.num_steps,
             save_every,
             self.h,
-            self.total_time
+            self.total_time,
+            total_density=total_density
         )
         final_baryonic_component_files = self.scribe.save_baryonic_components(
             self.simulation.baryonic_matter,
@@ -369,11 +368,6 @@ class Evolution_Class:
         is_last = (step == self.num_steps - 1)
 
         wave_functions = evolution_methods[self.order](wave_functions, total_density, is_first, is_last, save_step)
-
-        # Track maximum values if enabled
-        if self.save_max_vals:
-            max_val = float(abs(total_density).max())
-            self.scribe.track_max_value(step, max_val)
 
         return wave_functions
 
@@ -850,9 +844,10 @@ class Evolution_Class:
 
         # Handle max values if enabled
         if self.save_max_vals:
+            spin = getattr(self.simulation, "spin", None)
             self.scribe.save_max_values(
                 resolution=int(self.simulation.N),
-                spin=self.simulation.spin if getattr(self.simulation, "spin", None) else None
+                spin=spin if spin is not None else None
             )
             plot_y_or_n = input("Should I plot these values? (y/n/del): ")
             if plot_y_or_n == "y":

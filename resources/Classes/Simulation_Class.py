@@ -183,8 +183,9 @@ class Simulation_Class:
         self.overwrite_density = False
 
         self._sink_cfg = self._sink_cfg = None if sink_formation is None else dict(sink_formation) #configuration for sink particles
-        self.is_restart = False
         
+        self.is_restart = False
+        self.initialized = False
     def setup_units(self, sim_units, m_s):
         """
         Setup physical units for the simulation.
@@ -325,6 +326,7 @@ class Simulation_Class:
         """
 
         # Extract wave functions from the dictionary storage (used for Wave_vector_class)
+        
         if not self.is_restart:
             vlnky = []
             for spin in self.wave_vectors:
@@ -355,6 +357,7 @@ class Simulation_Class:
                     f"Invalid sink_formation config keys/values: {self._sink_cfg}. "
                     f"Expected keys: density_threshold, consecutive_steps, check_interval."
                 ) from e
+        self.initialized = True
 
 
 
@@ -370,7 +373,8 @@ class Simulation_Class:
         Parameters:
             save_every (int): How often to save the wave function during evolution
         """
-        self.initialize_simulation()
+        if not self.initialized:
+            self.initialize_simulation()
 
         final_wave_functions = self.evolution.evolve(
             self.wave_functions,

@@ -37,10 +37,14 @@ class Scribe:
         """
         Create directory structure for saving data AND initialize energy log.
         """
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        save_dir = f"resources/data/simulation_{timestamp}"
+        if self.snapshot_directory is None:
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            save_dir = f"resources/data/simulation_{timestamp}"
+        else: 
+            save_dir = self.snapshot_directory
         os.makedirs(save_dir, exist_ok=True)
         self.snapshot_directory = save_dir
+        print(self.snapshot_directory)
 
         self.max_vals_filename = "resources/data/max_values.csv"
 

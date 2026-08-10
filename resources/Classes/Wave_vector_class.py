@@ -152,7 +152,11 @@ class Wave_vector_class:
     def _create_polarization_wave_functions(self):
         """Create the directly evolved fields psi_m, ordered by m."""
         result = []
-        momentum_factor = self.wave_blueprint.packet_creator.momentum_propagator
+        momentum_factor = (
+            1.0
+            if self.wave_blueprint.packet_type == "gaussian"
+            else self.wave_blueprint.packet_creator.momentum_propagator
+        )
 
         for coefficient, phase in zip(
             self.polarization_coefficients, self.polarization_phases

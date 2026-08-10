@@ -29,6 +29,12 @@ class NBody:
         self.positions = cp.zeros((N_particles, 3), dtype=cp.float64)
         self.velocities = cp.zeros((N_particles, 3), dtype=cp.float64)
         self.name = "baryons"
+        self._density_cache = None
+        self._density_cache_valid = False
+
+    def invalidate_density_cache(self):
+        """Mark the deposited particle density for recomputation."""
+        self._density_cache_valid = False
 
 
 
@@ -76,6 +82,8 @@ class NBody:
             force_computer: callable that returns forces (N_particles, 3)
             dt: time step
         """
+        self.invalidate_density_cache()
+
         # Half kick with current forces
         forces = force_computer()
         self.velocities += forces * (dt / 2)
@@ -98,11 +106,9 @@ class NBody:
         Update baryonic particle positions/velocities with substeps.
         Uses DKD (Drift-Kick-Drift) scheme with single force evaluation per substep.
         """
-        # --- 1. total dt window ---
-        if first_step or last_step:
-            total_dt_window = dt / 2.0
-        else:
-            total_dt_window = dt
+        # TODO: check this - drift already advances a complete DKD step.
+        total_dt_window = dt
+        self.invalidate_density_cache()
 
         if isinstance(potential_grid, (tuple, list)) and len(potential_grid) == 3:
             Fx_grid, Fy_grid, Fz_grid = potential_grid
@@ -225,6 +231,10 @@ class NBody:
         """Deposit with atomic operations via cupyx.scatter_add"""
         import cupyx
 
+        # TODO: check this - reuse CIC density until particle positions change.
+        if self._density_cache_valid and self._density_cache is not None:
+            return self._density_cache
+
         sim = self.simulation
         N = sim.N
         dim = sim.dim
@@ -309,7 +319,9 @@ class NBody:
         if error > 1e-6:
             print(f"⚠️  MASS CONSERVATION ERROR: {error:.3e}")
 
-        return rho_grid
+        self._density_cache = rho_grid
+        self._density_cache_valid = True
+        return self._density_cache
 
     def _interpolate_force_trilinear(self, Fx_grid, Fy_grid, Fz_grid):
         """

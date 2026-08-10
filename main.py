@@ -13,15 +13,17 @@ N = 128 # Number of spatial points
 sim = Simulation_Class(
 
     dim=3, # 2D simulation
-    boundaries=[(-50, 50),(-50, 50),(-50, 50)], # Spatial boundaries
+    boundaries=[(-10,10)]*3, # Spatial boundaries
     N=128, # Grid resolution
-    total_time=0.1, # Total simulation time
-    h=3.681169e-04, # Time step
+    total_time=1, # Total simulation time
+    h=0.001, # Time step
     order_of_evolution=2,
     use_gravity=True, # Enable gravitational effects
     static_potential=None,
     save_max_vals=True,
-    m_s=2.5e-24,
+    m_s=2.5e-22,
+    use_sponge=False,
+    self_int=False,
 
 
 
@@ -50,12 +52,12 @@ wave_vector = Wave_vector_class(
     omega=1,
     momenta=[0, 0.0, 0],
     spin=0,
-    desired_soliton_mass=3424342073.905695
+    desired_soliton_mass=53090064.0
 
 
 )
 
-sim.add_baryons(baryons)
+#sim.add_baryons(baryons)
 sim.add_wave_vector(wave_vector)
 
 

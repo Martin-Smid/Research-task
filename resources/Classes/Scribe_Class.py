@@ -71,7 +71,7 @@ class Scribe:
 
         return save_dir
 
-    def save_initial_states(self, wave_functions):
+    def save_initial_states(self, wave_functions, total_density=None):
         """
         Save initial wave function states.
 
@@ -82,6 +82,11 @@ class Scribe:
             initial_path = f"{self.snapshot_directory}/wf_{wf_idx}_snapshot_at_time_0.npy"
             np.save(initial_path, cp.asnumpy(wf.psi))
             self.wave_values[wf_idx].append(initial_path)
+
+        # TODO: check this - keep the initial total-density snapshot aligned with wf snapshots.
+        if total_density is not None:
+            total_path = f"{self.snapshot_directory}/total_density_snapshot_at_time_0.npy"
+            np.save(total_path, cp.asnumpy(total_density))
 
     def save_snapshots(self, wave_functions, current_time, total_density=None, baryon_density=None, gas_density=None):
         """
@@ -128,7 +133,8 @@ class Scribe:
         self.accessible_times.append(current_time)
         return saved_wave_files
 
-    def save_final_state(self, wave_functions, num_steps, save_every, h, total_time):
+    def save_final_state(self, wave_functions, num_steps, save_every, h, total_time,
+                         total_density=None):
         """
         Save final state if it wasn't already saved.
 
@@ -140,13 +146,18 @@ class Scribe:
             total_time: Total simulation time
         """
         saved_wave_files = []
-        if (num_steps - 1) % save_every != 0:
-            final_time = total_time
+        final_time = total_time
+        # TODO: check this - snapshots are scheduled by completed steps, not zero-based indices.
+        if num_steps % save_every != 0:
             for wf_idx, wf in enumerate(wave_functions):
                 final_path = f"{self.snapshot_directory}/wf_{wf_idx}_snapshot_at_time_{final_time:.6f}.npy"
                 np.save(final_path, cp.asnumpy(wf.psi))
                 saved_wave_files.append(os.path.basename(final_path))
                 self.wave_values[wf_idx].append(final_path)
+
+            if total_density is not None:
+                total_path = f"{self.snapshot_directory}/total_density_snapshot_at_time_{final_time:.6f}.npy"
+                np.save(total_path, cp.asnumpy(total_density))
 
             if hasattr(self.simulation, "baryonic_matter") and self.simulation.baryonic_matter:
                 try:
@@ -161,6 +172,12 @@ class Scribe:
                 except Exception as e:
                     print(f"[Scribe] Warning: could not save baryon snapshot at time {final_time:.6f}: {e}")
             self.accessible_times.append(final_time)
+        else:
+            # TODO: check this - restart metadata still needs the files saved by the regular schedule.
+            for wf_idx in range(len(wave_functions)):
+                final_path = f"{self.snapshot_directory}/wf_{wf_idx}_snapshot_at_time_{final_time:.6f}.npy"
+                if os.path.exists(final_path):
+                    saved_wave_files.append(os.path.basename(final_path))
         return saved_wave_files
 
     def save_metadata(self, num_steps, h, total_time, order, num_wave_functions):

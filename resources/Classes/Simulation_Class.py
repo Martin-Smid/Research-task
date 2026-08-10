@@ -363,19 +363,21 @@ class Simulation_Class:
 
 
 
-    def evolve(self, save_every=1,start_step=0):
+    def evolve(self, save_every=1, start_step=0, diagnostics_every=3):
         """
         Start the evolution process.
 
         Parameters:
             save_every (int): How often to save the wave function during evolution
+            diagnostics_every (int): How often to compute and log energies
         """
         self.initialize_simulation()
 
         final_wave_functions = self.evolution.evolve(
             self.wave_functions,
             save_every,
-            start_step=start_step
+            start_step=start_step,
+            diagnostics_every=diagnostics_every
         )
 
         # Update simulation state

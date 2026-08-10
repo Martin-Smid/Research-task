@@ -113,7 +113,8 @@ class Propagator_Class:
             return self.simulation.sponge_potential
         return cp.zeros_like(self.grids[0], dtype=cp.complex128)
 
-    def compute_total_potential(self, psi, density, include_static=False,extra_potential=None):
+    def compute_total_potential(self, psi, density, include_static=False,
+                                extra_potential=None, gravity_potential=None):
         """
         Combine all dynamic potentials into one.
         Static potential is handled separately via pre-computed propagators.
@@ -122,11 +123,16 @@ class Propagator_Class:
             psi: Wave function
             density: Total density
             include_static: Deprecated - static potential handled separately
+            gravity_potential: Optional precomputed shared gravity potential
 
         Returns:
             Total potential (real for gravity/self-int, complex if sponge included)
         """
-        V_grav = self.compute_gravity_potential(density)
+        V_grav = (
+            self.compute_gravity_potential(density)
+            if gravity_potential is None
+            else gravity_potential
+        )
 
         if extra_potential is not None:
             V_grav = V_grav + extra_potential
@@ -141,7 +147,9 @@ class Propagator_Class:
         self.total_potential = V_total
         return V_total
 
-    def compute_total_propagator(self, density, psi=None, first_step=False, last_step=False, time_factor=1,extra_potential=None):
+    def compute_total_propagator(self, density, psi=None, first_step=False,
+                                 last_step=False, time_factor=1,
+                                 extra_potential=None, gravity_potential=None):
         """
         Compute propagator from total DYNAMIC potential only.
         Static potential is applied separately via pre-computed propagators.
@@ -151,7 +159,13 @@ class Propagator_Class:
         """
         # Only compute dynamic potentials (gravity, self-int, sponge)
         # Static potential is handled separately
-        V_total = self.compute_total_potential(psi, density, include_static=False, extra_potential=extra_potential)
+        V_total = self.compute_total_potential(
+            psi,
+            density,
+            include_static=False,
+            extra_potential=extra_potential,
+            gravity_potential=gravity_potential,
+        )
 
         if first_step or last_step:
             dt = (self.h * time_factor) / 2

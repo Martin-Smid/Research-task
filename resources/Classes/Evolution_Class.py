@@ -57,18 +57,21 @@ class Evolution_Class:
         self._ref_mass = None
         self._ref_mom = None
 
-    def evolve(self, wave_functions, save_every=1, start_step=0):
+    def evolve(self, wave_functions, save_every=1, start_step=0, diagnostics_every=3):
         """
         Perform the full time evolution for multiple wave functions.
 
         Parameters:
             wave_functions (list): List of wave function instances, each with .psi attribute
             save_every (int): Frequency of saving the wave function values
+            diagnostics_every (int): Frequency of computing and logging energies
 
         Returns:
             list: List of wave function instances with evolved .psi attributes
         """
         save_every = max(1, save_every)
+        # TODO: check this - energy diagnostics are intentionally independent of snapshots.
+        diagnostics_every = max(1, int(diagnostics_every))
         self.num_wave_functions = len(wave_functions)
 
         if self.sink_system is None and getattr(self.simulation, "baryonic_matter", None):
@@ -94,7 +97,6 @@ class Evolution_Class:
         # Setup directories and save initial state
         if start_step == 0:
             self.scribe.setup_directories(self.num_wave_functions)
-            self.scribe.save_initial_states(wave_functions)
         else:
             current_time = start_step * self.h
             self.scribe.snapshot_directory = getattr(self.simulation, "snapshot_directory", None)
@@ -115,6 +117,18 @@ class Evolution_Class:
         if start_step == 0:
             
             total_density = self._compute_total_density(wave_functions)
+
+            initial_density_to_save = total_density
+            if hasattr(self.simulation, 'baryonic_matter') and self.simulation.baryonic_matter:
+                for sys in self.simulation.baryonic_matter:
+                    if self._is_sink_system(sys):
+                        initial_density_to_save = initial_density_to_save + sys.deposit_to_grid()
+
+            # TODO: check this - save density at the same physical t=0 as the initial wave fields.
+            self.scribe.save_initial_states(
+                wave_functions,
+                total_density=initial_density_to_save
+            )
         
             mass_total = cp.sum(total_density) * self.simulation.dV
             print("Mass:", mass_total)
@@ -122,14 +136,9 @@ class Evolution_Class:
         
             current_time = start_step * self.h
             if self.simulation.dim == 3:
-                max_indices = cp.argwhere(total_density == total_density.max())
-                if max_indices.size > 0:
-                    ix, iy, iz = cp.asnumpy(max_indices[0])
-                    self.scribe.record_max_location(int(ix), int(iy), int(iz), float(current_time))
-                    self._compute_and_save_radial_profile(total_density, current_time, ix, iy, iz)
-                else:
-                    print("Warning: No maximum density location found (density may be zero everywhere)")
-                    ix, iy, iz = self.simulation.N // 2, self.simulation.N // 2, self.simulation.N // 2
+                ix, iy, iz = self._density_max_location(total_density)
+                self.scribe.record_max_location(int(ix), int(iy), int(iz), float(current_time))
+                self._compute_and_save_radial_profile(total_density, current_time, ix, iy, iz)
         
             self.compute_total_energy(wave_functions, total_density, current_time)
         
@@ -174,15 +183,10 @@ class Evolution_Class:
 
             # Track max location
             if self.simulation.dim == 3:
-                max_indices = cp.argwhere(total_density == total_density.max())
-                if max_indices.size > 0:
-                    ix, iy, iz = cp.asnumpy(max_indices[0])
-                    self.scribe.record_max_location(int(ix), int(iy), int(iz), float(current_time))
-                else:
-                    # Use center of grid as fallback
-                    ix, iy, iz = self.simulation.N // 2, self.simulation.N // 2, self.simulation.N // 2
+                ix, iy, iz = self._density_max_location(total_density)
+                self.scribe.record_max_location(int(ix), int(iy), int(iz), float(current_time))
 
-            if step % save_every == 0 and step > 0:
+            if (step + 1) % save_every == 0:
                 save_step = True
 
             #checking if BH appeared
@@ -218,10 +222,12 @@ class Evolution_Class:
 
             total_density = self._compute_total_density(wave_functions)
             current_time = (step + 1) * self.h
-            self.compute_total_energy(wave_functions, total_density, current_time)
+            if (step + 1) % diagnostics_every == 0:
+                self.compute_total_energy(wave_functions, total_density, current_time)
 
             # Save snapshots and profiles
-            if step % save_every == 0:
+            # TODO: check this - current_time is the state after step + 1, so schedule by step + 1.
+            if (step + 1) % save_every == 0:
 
 
                 if self.simulation.dim == 3:
@@ -252,17 +258,10 @@ class Evolution_Class:
 
 
                     baryon_density_to_save = rho_baryons_all
-                    total_density_to_save = total_density + rho_sinks_only + rho_gas_only
+                    total_density_to_save = total_density + rho_sinks_only
                 wave_files = []
                 baryonic_component_files = []
 
-                wave_files = self.scribe.save_snapshots(
-                    wave_functions,
-                    current_time=current_time,
-                    total_density=total_density_to_save,
-                    baryon_density=baryon_density_to_save,
-                    gas_density=gas_density_to_save
-                )
                 wave_files = self.scribe.save_snapshots(
                     wave_functions,
                     current_time=current_time,
@@ -317,12 +316,19 @@ class Evolution_Class:
                         print(f"[Gas invariants] t={current_time:.4f}  dM={dM:.12e}  dP=({dPx:.12e},{dPy:.12e},{dPz:.12e})")
 
             # Memory cleanup
-            cp.get_default_memory_pool().free_all_blocks()
+            # TODO: check this - clearing every step defeats CuPy's allocation cache.
+            # cp.get_default_memory_pool().free_all_blocks()
 
         # Final state
         total_density = self._compute_total_density(wave_functions)
+        final_density_to_save = total_density
+        if hasattr(self.simulation, 'baryonic_matter') and self.simulation.baryonic_matter:
+            for sys in self.simulation.baryonic_matter:
+                if self._is_sink_system(sys):
+                    final_density_to_save = final_density_to_save + sys.deposit_to_grid()
+
         if self.simulation.dim == 3:
-            ix, iy, iz = cp.asnumpy(cp.argwhere(total_density == total_density.max())[0])
+            ix, iy, iz = self._density_max_location(total_density)
             self.scribe.record_max_location(int(ix), int(iy), int(iz), float(current_time))
             self._compute_and_save_radial_profile(total_density, current_time, ix, iy, iz)
         cp.get_default_memory_pool().free_all_blocks()
@@ -333,7 +339,8 @@ class Evolution_Class:
             self.num_steps,
             save_every,
             self.h,
-            self.total_time
+            self.total_time,
+            total_density=final_density_to_save
         )
         final_baryonic_component_files = self.scribe.save_baryonic_components(
             self.simulation.baryonic_matter,
@@ -385,15 +392,7 @@ class Evolution_Class:
 
         # is there baryonic matter in the sim?
         if self.simulation.baryonic_matter:
-            # Potential used for baryon drift is computed in Evolution (Poisson + static potential if present)
-            if wave_functions:
-                total_density_baryons = self._compute_total_density(wave_functions)
-            else:
-                shape = (self.simulation.N,) * self.simulation.dim
-                total_density_baryons = cp.zeros(shape, dtype=cp.float64)
-                for baryon_sys in self.simulation.baryonic_matter:
-                    total_density_baryons += baryon_sys.deposit_to_grid()
-
+            # TODO: check this - total_density is already available; the old recomputation was unused.
             phi_sink = self._compute_sink_potential_analytic_kspace()
             phi_environment = self.propagator.compute_gravity_potential(total_density)
             phi_total = phi_environment + phi_sink
@@ -536,6 +535,9 @@ class Evolution_Class:
     def _kick_all_wave_functions(self, wave_functions, total_density, is_first_step, is_last_step, time_factor_key='full'):
         """Apply kick step to all wave functions with shared density."""
         time_factor = self.coefficients[time_factor_key]
+
+        # TODO: check this - gravity depends on shared density, so solve Poisson once per kick.
+        gravity_potential = self.propagator.compute_gravity_potential(total_density)
         
         phi_sink = self._compute_sink_potential_analytic_kspace()
         
@@ -548,7 +550,8 @@ class Evolution_Class:
                 density=total_density, psi=wf.psi,
                 first_step=is_first_step,
                 last_step=is_last_step,
-                time_factor=time_factor
+                time_factor=time_factor,
+                gravity_potential=gravity_potential
             )
 
             if time_factor_key in self.static_propagators:
@@ -587,6 +590,15 @@ class Evolution_Class:
 
 
         return total_density
+
+    @staticmethod
+    def _density_max_location(total_density):
+        # TODO: check this - argmax avoids allocating a full equality mask and argwhere result.
+        flat_index = int(cp.argmax(total_density).get())
+        return tuple(
+            int(index)
+            for index in np.unravel_index(flat_index, total_density.shape)
+        )
 
     def compute_total_energy(self, wave_functions, total_density, current_time):
         """Compute all energy components (waves + baryons) and log them."""

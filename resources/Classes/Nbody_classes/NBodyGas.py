@@ -158,7 +158,7 @@ class NBodyGas:
 
     def drift(self, dt, potential_grid, first_step=False, last_step=False):
         """
-        Evolve gas for time dt (or dt/2 on first/last step) with subcycling.
+        Evolve gas for time dt with subcycling.
 
         Parameters
         ----------
@@ -167,7 +167,8 @@ class NBodyGas:
             Usually (Fx,Fy,Fz) from Evolution. If an array is provided, we interpret
             it as a potential Phi and compute forces by centered differences.
         """
-        dt_window = dt / 2.0 if (first_step or last_step) else dt
+        # TODO: check this - drift already advances a complete Strang step.
+        dt_window = dt
         if dt_window <= 0:
             return
 

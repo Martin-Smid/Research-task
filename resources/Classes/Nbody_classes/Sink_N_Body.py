@@ -223,6 +223,9 @@ class SinkNBody(NBody):
             baryons.positions = baryons.positions[keep_mask]
             baryons.velocities = baryons.velocities[keep_mask]
             baryons.N = int(cp.sum(keep_mask))
+            # TODO: check this - particle removal invalidates cached CIC density.
+            if hasattr(baryons, "invalidate_density_cache"):
+                baryons.invalidate_density_cache()
 
             total_accreted += n_accrete
 
@@ -881,6 +884,9 @@ def check_and_create_sinks(simulation, sink_tracker, density_threshold,
                 baryons.positions = baryons.positions[keep_mask]
                 baryons.velocities = baryons.velocities[keep_mask]
                 baryons.N = int(cp.sum(keep_mask))
+                # TODO: check this - particle removal invalidates cached CIC density.
+                if hasattr(baryons, "invalidate_density_cache"):
+                    baryons.invalidate_density_cache()
 
         if total_mass > 0:
             v_sink = total_momentum / total_mass

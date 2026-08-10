@@ -218,7 +218,12 @@ class NBodyGas:
         """
         a_list = [ax, ay, az]
         for i in range(min(self.dim, len(a_list))):
-            self.vel[i] += a_list[i] * dt
+            delta_v = a_list[i] * dt
+            # TODO: check this - gravity must change total energy with kinetic energy.
+            self.E += self.rho * (
+                self.vel[i] * delta_v + 0.5 * delta_v * delta_v
+            )
+            self.vel[i] += delta_v
 
         # sync named components
         self.vx = self.vel[0]
@@ -251,7 +256,8 @@ class NBodyGas:
 
         # Dimensionally split update (Lie splitting). For many comparisons (esp. 1D) this is enough.
         for axis in range(self.dim):
-            rho, moms, E = self._sweep_axis(rho, moms, E, axis, dt / self.dim, self.dx_list[axis])
+            # TODO: check this - each directional operator advances the full dt.
+            rho, moms, E = self._sweep_axis(rho, moms, E, axis, dt, self.dx_list[axis])
 
         # Back to primitive
         rho = cp.maximum(rho, self.rho_floor)

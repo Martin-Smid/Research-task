@@ -581,8 +581,8 @@ class Evolution_Class:
         if hasattr(self.simulation, 'baryonic_matter') and self.simulation.baryonic_matter:
 
             for baryon_sys in self.simulation.baryonic_matter:
-                #if self._is_sink_system(baryon_sys):
-                # continue  # sinks handled analytically
+                if self._is_sink_system(baryon_sys):
+                    continue  # sinks handled analytically
                 total_density += baryon_sys.deposit_to_grid()
 
 
@@ -663,8 +663,7 @@ class Evolution_Class:
         W_w_self = 0.5 * cp.sum(rho_w * phi_w) * dV
         W_s_self = 0.5 * cp.sum(rho_s * phi_s) * dV
 
-        # cross terms (MISSING in your current version)
-        W_cross = (cp.sum(rho_w * phi_s) + cp.sum(rho_s * phi_w)) * dV
+        W_cross = 0.5 * (cp.sum(rho_w * phi_s) + cp.sum(rho_s * phi_w)) * dV
 
         W_static = 0.0
         if self.simulation.static_potential is not None:

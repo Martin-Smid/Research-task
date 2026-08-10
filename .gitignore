@@ -10,3 +10,5 @@ resources/solitons/
 __pycache__/
 
 .research-task/
+verify_spin_tensors.py
+tests

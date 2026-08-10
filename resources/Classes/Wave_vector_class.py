@@ -1,124 +1,192 @@
-import numpy as np
 import gc
-from sympy.physics.quantum.cg import CG
-from sympy import S
-
-
-from resources.Classes.Wave_function_class import *
-from numpy import random
-from resources.Errors.Errors import IncorrectWaveBlueprintError
-from itertools import combinations_with_replacement
-
-
-#np.random.seed(12345)
+from itertools import combinations_with_replacement, permutations
 
 import numpy as np
-from itertools import combinations_with_replacement
-import copy
 
 from resources.Classes.Wave_function_class import Wave_function
 
+
 class Wave_vector_class:
-    def __init__(self, spin=0, **wave_function_kwargs):
+    """Construct an irreducible integer-spin ULDM wave vector."""
+
+    def __init__(
+        self,
+        spin=0,
+        polarization_coefficients=None,
+        polarization_phases=None,
+        random_seed=None,
+        **wave_function_kwargs,
+    ):
+        self._validate_spin(spin)
         self.spin = spin
+        self.m_values = tuple(range(-spin, spin + 1))
+        # Tensor metadata is retained for inspection/validation, but the GPU
+        # evolution stores the smaller set of 2s+1 polarization amplitudes.
+        self.index_combinations = list(
+            combinations_with_replacement(range(3), spin)
+        )
+        self.num_tensor_components = len(self.index_combinations)
+        self.num_components = 2 * spin + 1
+        self.index_multiplicities = get_index_multiplicities(
+            self.index_combinations
+        )
+
+        self.wave_blueprint = Wave_function(**wave_function_kwargs)
+        # Preserve compatibility with existing scripts that call
+        # np.random.seed(...), while also allowing a per-vector seed.
+        rng = (
+            np.random
+            if random_seed is None
+            else np.random.default_rng(random_seed)
+        )
+        self.polarization_coefficients = self._prepare_coefficients(
+            polarization_coefficients, rng
+        )
+        self.polarization_phases = self._prepare_phases(
+            polarization_phases, rng
+        )
+        self.polarization_bases = self.generate_spin_basis(spin)
+        self.wave_vector = self._create_polarization_wave_functions()
+
+    @staticmethod
+    def _validate_spin(spin):
+        if isinstance(spin, bool) or not isinstance(spin, (int, np.integer)):
+            raise TypeError("Spin must be a non-negative integer")
         if spin < 0:
             raise ValueError("Spin must be a non-negative integer")
 
-        self.index_combinations = list(combinations_with_replacement(range(3), spin))
-        self.num_components = len(self.index_combinations)
+    def _prepare_coefficients(self, coefficients, rng):
+        size = 2 * self.spin + 1
+        values = (
+            rng.uniform(-1.0, 1.0, size)
+            if coefficients is None
+            else np.asarray(coefficients, dtype=float)
+        )
+        if values.shape != (size,):
+            raise ValueError(
+                f"polarization_coefficients must have shape ({size},), "
+                f"ordered by m={self.m_values}"
+            )
+        norm = np.linalg.norm(values)
+        if not np.isfinite(norm) or norm == 0.0:
+            raise ValueError("Polarization coefficients need a finite non-zero norm")
+        return values / norm
 
-        self.wave_blueprint = Wave_function(**wave_function_kwargs)
+    def _prepare_phases(self, phases, rng):
+        size = 2 * self.spin + 1
+        values = (
+            rng.uniform(0.0, 2.0 * np.pi, size)
+            if phases is None
+            else np.asarray(phases, dtype=float)
+        )
+        if values.shape != (size,):
+            raise ValueError(
+                f"polarization_phases must have shape ({size},), "
+                f"ordered by m={self.m_values}"
+            )
+        if not np.all(np.isfinite(values)):
+            raise ValueError("Polarization phases must be finite")
+        return values
 
-        self.polarization_coefficients = np.random.uniform(-1, 1, 2 * spin + 1)
-        self.polarization_coefficients /= np.linalg.norm(self.polarization_coefficients)
-        self.polarization_phases = np.random.uniform(0, 2 * np.pi, 2 * spin + 1)
-
-        self.index_combinations = list(combinations_with_replacement(range(3), spin))
-        self.index_multiplicities = get_index_multiplicities(self.index_combinations)
-
-        self.polarization_bases = self.generate_spin_basis()
-        self.wave_vector = self._create_combined_wave_function()
-
-    def generate_spin_basis(self):
-        if self.spin == 0:
-            return [np.array(1.0)]
-
-        from sympy.physics.quantum.cg import CG
-        from sympy import S
-
-        e_m = {
-            -1: np.array([1, -1j, 0]) / np.sqrt(2),
-            0: np.array([0, 0, 1]),
-            1: np.array([-1, -1j, 0]) / np.sqrt(2)
+    @staticmethod
+    def spin_one_basis():
+        return {
+            -1: np.array([1.0, -1.0j, 0.0], complex) / np.sqrt(2.0),
+            0: np.array([0.0, 0.0, 1.0], complex),
+            1: np.array([-1.0, -1.0j, 0.0], complex) / np.sqrt(2.0),
         }
 
-        basis = []
-        for m in range(-self.spin, self.spin + 1):
-            tensor = np.zeros([3] * self.spin, dtype=complex) #Creates a tensor with dimensions 3×3×...×3 (spin times)
+    @staticmethod
+    def _maximal_cg_coefficient(j, m, q):
+        """Return <j,m;1,q|j+1,m+q>."""
+        denominator = (j + 1) * (2 * j + 1)
+        if q == 1:
+            return np.sqrt(
+                (j + m + 1) * (j + m + 2) / (2.0 * denominator)
+            )
+        if q == 0:
+            return np.sqrt(
+                (j - m + 1) * (j + m + 1) / denominator
+            )
+        if q == -1:
+            return np.sqrt(
+                (j - m + 1) * (j - m + 2) / (2.0 * denominator)
+            )
+        raise ValueError("q must be -1, 0, or 1")
 
-            def build(ms=(), total=0): #ms are magnetic quantum numbers, total is their sum
-                if len(ms) == self.spin:
-                    if total != m:
-                        return
-                    vecs = [e_m[mi] for mi in ms]
-                    t = vecs[0]
-                    for v in vecs[1:]:
-                        t = np.tensordot(t, v, axes=0)
-                    tensor[:] += t
-                    '''
-                    This creates a list of spherical basis vectors corresponding to each magnetic quantum number in the tuple ms
-                    for spin 2: vecs = [e_m[-1], e_m[1]]
-                                vecs = [np.array([1, -1j, 0]) / np.sqrt(2), np.array([-1, -1j, 0]) / np.sqrt(2)] 
-                    '''
-                else:
-                    for mi in [-1, 0, 1]:
-                        build(ms + (mi,), total + mi)
+    @classmethod
+    def generate_spin_basis(cls, spin):
+        """Return tensors ordered by m=-spin,...,+spin."""
+        cls._validate_spin(spin)
+        if spin == 0:
+            return [np.array(1.0, dtype=complex)]
 
-            build()
-            norm = np.linalg.norm(tensor)
-            basis.append(tensor / norm if norm > 0 else tensor)
-        return basis
+        spin_one = cls.spin_one_basis()
+        basis_by_m = dict(spin_one)
 
-    def _create_combined_wave_function(self):
+        for total_spin in range(2, spin + 1):
+            previous_spin = total_spin - 1
+            next_basis = {}
+            for total_m in range(-total_spin, total_spin + 1):
+                tensor = np.zeros((3,) * total_spin, dtype=complex)
+                for q, vector in spin_one.items():
+                    previous_m = total_m - q
+                    if previous_m not in basis_by_m:
+                        continue
+                    coefficient = cls._maximal_cg_coefficient(
+                        previous_spin, previous_m, q
+                    )
+                    tensor += coefficient * np.tensordot(
+                        basis_by_m[previous_m], vector, axes=0
+                    )
+                norm = np.linalg.norm(tensor)
+                if not np.isfinite(norm) or norm == 0.0:
+                    raise RuntimeError(
+                        f"Failed to construct spin={total_spin}, m={total_m}"
+                    )
+                next_basis[total_m] = tensor / norm
+            basis_by_m = next_basis
+
+        return [basis_by_m[m] for m in range(-spin, spin + 1)]
+
+    def _create_polarization_wave_functions(self):
+        """Create the directly evolved fields psi_m, ordered by m."""
         result = []
+        momentum_factor = self.wave_blueprint.packet_creator.momentum_propagator
 
-        # Compute the full weighted tensor from all polarizations
-        full_tensor = sum(
-            coeff * np.exp(-1j * phase) * basis
-            for coeff, phase, basis in zip(
-                self.polarization_coefficients,
-                self.polarization_phases,
-                self.polarization_bases)
-        )
-
-        for idx in self.index_combinations:
-            value = full_tensor[idx]
-            raw_psi = self.wave_blueprint.psi * value * self.wave_blueprint.packet_creator.momentum_propagator
-            multiplicity = self.index_multiplicities[idx]
-            psi = raw_psi / np.sqrt(multiplicity)
-
-            new_wf = self.wave_blueprint.softcopy_psi(psi, multiplicity=multiplicity)
-
-
-            result.append(new_wf)
-
+        for coefficient, phase in zip(
+            self.polarization_coefficients, self.polarization_phases
+        ):
+            polarization_amplitude = coefficient * np.exp(-1j * phase)
+            psi_m = (
+                self.wave_blueprint.psi
+                * polarization_amplitude
+                * momentum_factor
+            )
+            result.append(
+                self.wave_blueprint.softcopy_psi(
+                    psi_m, multiplicity=1
+                )
+            )
         return result
 
     def cleanup_wave_vector(self):
-        """absolute purge of wave vector"""
         self.wave_vector.clear()
         self.wave_blueprint = None
         self.polarization_bases = None
         self.polarization_coefficients = None
         self.polarization_phases = None
         gc.collect()
-        cp.get_default_memory_pool().free_all_blocks()
+        try:
+            from resources.Classes.Wave_function_class import cp
 
-from itertools import permutations
+            cp.get_default_memory_pool().free_all_blocks()
+        except (ImportError, AttributeError):
+            pass
+
 
 def get_index_multiplicities(index_combinations):
-    multiplicities = {}
-    for idx in index_combinations:
-        perms = set(permutations(idx))
-        multiplicities[idx] = len(perms)
-    return multiplicities
+    return {
+        index: len(set(permutations(index)))
+        for index in index_combinations
+    }

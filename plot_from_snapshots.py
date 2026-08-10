@@ -1,8 +1,9 @@
 from resources.Functions.system_fucntions import *
 
 
-snapshot_directory = 'resources/data/simulation_20250618_151117' # Replace with your path
+#snapshot_directory = 'Projects/Reasearch-task/Research-task/resources/data/simulation_20260218_170320' # Replace with your path
 
+#-------------------------JUST WFS -----------------------------------------------------------
 '''
 wave_function_number = 6# Which wave function to plot
 
@@ -21,18 +22,256 @@ plot_multiple_wave_functions(
      wf_numbers=[0, 1, 2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25],  # List of wave functions to compare
      save_plots=True,
      show_plots=False)
-'''
+
 
 plot_wave_function_panel(
-    snapshot_dir="resources/data/simulation_20250808_170854",
+    snapshot_dir="resources/data/simulation_20251029_133606",
     wf_number=0,
-    times=[8, 16, 24,33.2],  # pick any 4+
-    ncols=2,                 # 2x2 grid
+    times=[2.5,5, 7.5,10, 12.5,15],  # pick any 4+
+    ncols=3,                 # 2x2 grid
     z_index=None,            # middle slice for 3D
     log_scale=True,          # shared LogNorm
     figsize=(10, 9),
     fontsize=16,             # bigger labels/ticks
-    save_path="wf0_panel.png",  # perfect for LaTeX
-    dpi=300,
+    save_path="wf0_panel.jpg",  # perfect for LaTeX
+    dpi=900,
     show=False
 )
+
+
+
+
+#------------------------------------------BOTH WFS AND BARYONS-----------------------------------------------------------------------
+times = [0,0.1,0.2,0.3,0.4,1,3,4,5]
+for time in times:
+    snapshot_dir = r"resources/data/simulation_20260405_180518"   # your snapshot folder
+                                        # choose time (matches filename)
+    wf_idx = 0                                            # which ψ to plot
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import LogNorm
+    import glob
+    import os
+
+    boundaries = [(-50, 50), (-50, 50), (-50, 50)]           # same as used in Simulation_Class
+    wf_index = 0                                             # which ψ field to plot
+    slice_axis = 2                                           # 0=x,1=y,2=z
+    time_target = time                                   # pick saved time
+    # ===================
+
+    # --- load metadata ---
+    #meta_path = os.path.join(snapshot_dir, "metadata.txt")
+    #with open(meta_path) as f:
+    #    lines = f.readlines()
+
+    # find grid size by reading one wf file
+    wf_files = sorted(glob.glob(os.path.join(snapshot_dir, f"wf_{wf_index}_snapshot_at_time_*.npy")))
+    if not wf_files:
+        raise FileNotFoundError("No wavefunction snapshots found in folder")
+
+    # pick closest time
+    def extract_time(fname):
+        try:
+            return float(fname.split("at_time_")[1].replace(".npy", ""))
+        except Exception:
+            return np.inf
+
+    times = np.array([extract_time(f) for f in wf_files])
+    chosen_i = np.argmin(abs(times - time_target))
+    wf_file = wf_files[chosen_i]
+    actual_time = times[chosen_i]
+
+    # --- load data ---
+    psi = np.load(wf_file)
+    rho_wf = np.abs(psi) ** 2
+
+    # baryons (if exists)
+    baryon_path = os.path.join(snapshot_dir, f"baryons_snapshot_at_time_{actual_time:.6f}.npy")
+    rho_b = np.load(baryon_path) if os.path.exists(baryon_path) else None
+
+    # --- build coordinate grid ---
+    N = rho_wf.shape[0]
+    x = np.linspace(boundaries[0][0], boundaries[0][1], N, endpoint=False)
+    y = np.linspace(boundaries[1][0], boundaries[1][1], N, endpoint=False)
+    z = np.linspace(boundaries[2][0], boundaries[2][1], N, endpoint=False)
+    x_mesh_2d, y_mesh_2d = np.meshgrid(x, y)
+
+    # --- pick slice ---
+    z_index = N // 2 if slice_axis == 2 else None
+    wf_slice = rho_wf[:, :, z_index]
+    if rho_b is not None:
+        baryon_slice = rho_b[:, :, z_index]
+
+    # --- prepare contour levels ---
+    pos_vals = wf_slice[wf_slice > 0]
+    levels = np.logspace(np.log10(pos_vals.min()), np.log10(pos_vals.max()), 128)
+
+    # --- plotting ---
+    plt.figure(figsize=(8, 6))
+    plt.contourf(x_mesh_2d, y_mesh_2d, wf_slice.T, origin="lower",
+                levels=levels, cmap="viridis", norm=LogNorm())
+
+    if rho_b is not None:
+        pos_b = baryon_slice[baryon_slice > 0]
+        if pos_b.size > 0:
+            b_levels = np.logspace(np.log10(pos_b.min()), np.log10(pos_b.max()), 8)
+            plt.contour(x_mesh_2d, y_mesh_2d, baryon_slice.T,
+                        levels=b_levels, colors="cyan", linewidths=0.8)
+
+    plt.colorbar(label="|ψ|²")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.title(f"t = {actual_time:.3f}")
+    plt.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+
+
+
+#------------------------------------------JUST BARYONS-------------------------------------------------
+
+snapshot_dir = "resources/data/simulation_20260121_112709"  # your snapshot folder
+boundaries = [(-50, 50), (-50, 50), (-50, 50)]              # same as in Simulation_Class
+slice_axis = 2                                              # 0=x,1=y,2=z
+time_target = 0.1                                       # pick saved time
+
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
+import glob, os
+
+
+baryon_files = sorted(
+    glob.glob(os.path.join(snapshot_dir, "baryons_snapshot_at_time_*.npy"))
+)
+if not baryon_files:
+    raise FileNotFoundError("No baryon snapshots found in folder")
+
+import re
+num_re = re.compile(r"at_time_([0-9.+\-eE]+)\.npy$")
+
+def extract_time(fname):
+    m = num_re.search(fname)
+    return float(m.group(1)) if m else np.inf
+
+times = np.array([extract_time(f) for f in baryon_files], dtype=float)
+if np.isinf(times).all():
+    raise ValueError("Failed to parse any snapshot times.")
+
+# choose closest by numeric time
+chosen_i = int(np.nanargmin(np.abs(times - time_target)))
+baryon_file = baryon_files[chosen_i]
+actual_time = float(times[chosen_i])
+
+# --- load baryon density grid ---
+rho_b = np.load(baryon_file)  # expected shape (N,N,N), non-negative
+if np.any(~np.isfinite(rho_b)):
+    rho_b = np.nan_to_num(rho_b, nan=0.0, posinf=0.0, neginf=0.0)
+
+# --- build coordinate grid matching chosen slice ---
+N = rho_b.shape[0]
+axes = [
+    np.linspace(boundaries[0][0], boundaries[0][1], N, endpoint=False),
+    np.linspace(boundaries[1][0], boundaries[1][1], N, endpoint=False),
+    np.linspace(boundaries[2][0], boundaries[2][1], N, endpoint=False),
+]
+
+# --- pick slice & its coordinate mesh correctly ---
+idx = N // 2
+if slice_axis == 0:           # x-slice -> show y–z
+    baryon_slice = rho_b[idx, :, :]
+    A, B = np.meshgrid(axes[1], axes[2], indexing="ij")
+    xlabel, ylabel = "y", "z"
+elif slice_axis == 1:         # y-slice -> show x–z
+    baryon_slice = rho_b[:, idx, :]
+    A, B = np.meshgrid(axes[0], axes[2], indexing="ij")
+    xlabel, ylabel = "x", "z"
+else:                         # z-slice -> show x–y
+    baryon_slice = rho_b[:, :, idx]
+    A, B = np.meshgrid(axes[0], axes[1], indexing="ij")
+    xlabel, ylabel = "x", "y"
+
+# --- require strictly positive values for LogNorm; fall back to epsilon if tiny roundoff ---
+pos = baryon_slice > 0
+if not np.any(pos):
+    raise ValueError(f"Slice has no positive baryon density at t={actual_time:.3f}. "
+                     f"Check snapshot contents or clump leaving the slice plane.")
+levels = np.logspace(np.log10(baryon_slice[pos].min()),
+                     np.log10(baryon_slice[pos].max()), 128)
+
+# --- plot ---
+plt.figure(figsize=(8, 6))
+plt.contourf(A, B, baryon_slice.T, origin="lower", levels=levels,
+             cmap="viridis", norm=LogNorm())
+plt.colorbar(label=r"$\rho_{\mathrm{baryons}}$")
+plt.xlabel(xlabel); plt.ylabel(ylabel)
+plt.title(f"t = {actual_time:.3f}  (baryons only)")
+plt.grid(alpha=0.3)
+plt.tight_layout(); plt.show()
+
+'''
+
+# -----------------------------------------------------total dansity-------------------------------
+
+import os
+import glob
+import numpy as np
+import matplotlib.pyplot as plt
+
+snapshot_dir = r"resources/data/simulation_20260415_194133"
+times_to_plot = [0, 0.25, 0.5, 0.75,1, 1.25,1.5,1.75,2,2.5,3,3.5,4,5]
+
+L_full = 25   # full physical half-size of the simulation box
+L = 20         # half-size of the region to actually plot
+
+files = sorted(glob.glob(os.path.join(snapshot_dir, "total_density_snapshot_at_time_*.npy")))
+available_times = [float(f.split("at_time_")[-1].replace(".npy", "")) for f in files]
+
+for t in times_to_plot:
+    # Find closest file
+    idx = np.argmin(np.abs(np.array(available_times) - t))
+    actual_time = available_times[idx]
+
+    # Load data
+    rho = np.load(files[idx])
+
+    # Automatic slicing: find indices of global max density
+    mx, my, mz = np.unravel_index(np.argmax(rho), rho.shape)
+    data_slice = rho[:, :, mz]   # XY plane at z = mz
+
+    # Full physical coordinates of the simulation box
+    N = rho.shape[0]
+    x_full = np.linspace(-L_full, L_full, N)
+    y_full = np.linspace(-L_full, L_full, N)
+
+    # Select only data within [-L, L] in both x and y
+    ix = np.where((x_full >= -L) & (x_full <= L))[0]
+    iy = np.where((y_full >= -L) & (y_full <= L))[0]
+
+    data_zoom = data_slice[np.ix_(ix, iy)]
+    x = x_full[ix]
+    y = y_full[iy]
+
+    Z = np.clip(data_zoom, 1e-30, None)
+    logZ = np.log10(Z)
+    vmin = np.percentile(logZ, 5)
+    vmax = np.percentile(logZ, 99.5)
+
+    plt.figure(figsize=(6, 5))
+    plt.imshow(
+        logZ.T,
+        origin="lower",
+        extent=[x.min(), x.max(), y.min(), y.max()],
+        aspect="equal",
+        vmin=vmin,
+        vmax=vmax,
+        cmap="magma",
+    )
+    plt.colorbar(label=r"$\log_{10}\rho$")
+    plt.title(f"t={actual_time:.3f}, z={mz}")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.tight_layout()
+    plt.show()
+
+    

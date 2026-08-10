@@ -1,3 +1,5 @@
+import numpy
+
 from resources.Functions.Schrodinger_eq_functions import *
 from resources.Errors.Errors import *
 import numpy as np
@@ -43,7 +45,9 @@ class Packet():
 
         if self.grids is None or len(self.grids) != self.dim:
             raise ValueError("Grids must be provided for each dimension.")
-
+    def return_blank(self):
+        return np.zeros_like(np.asarray(self.grids[0]), dtype=np.complex128)
+    
     def compute_momentum_propagator(self):
         """Compute the kinetic propagator based on Fourier space components."""
         # Use single-precision floats to save memory
@@ -80,6 +84,7 @@ class Packet():
 
         if is_file:
             # If `packet_type` is a path, treat it as a file
+
             file_path = self.packet_type
             if not os.path.exists(file_path):
                 raise FileNotFoundError(
@@ -92,17 +97,21 @@ class Packet():
             return wave_packet
 
         # Start creating the wavefunction
-        if self.packet_type == "gaussian":
+        if self.packet_type == "blank":
+            return self.return_blank()
+        elif self.packet_type == "gaussian":
 
             wave_packet = self._create_gaussian_packet()
 
             wave_packet *= self.momentum_propagator
 
             return wave_packet
+        
         elif self.packet_type == "LHO":
             wave_packet = self._create_LHO_packet()
-
-            wave_packet *= self.momentum_propagator
+            #if isinstance(self.momentum_propagator, np.ndarray):
+            #    self.momentum_propagator = cp.asarray(self.momentum_propagator)
+            #wave_packet *= self.momentum_propagator
 
             return wave_packet
         else:

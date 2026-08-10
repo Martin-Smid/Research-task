@@ -29,7 +29,7 @@ class Propagator_Class:
         self.h_bar_tilde = self.simulation.h_bar_tilde
         # Placeholders for propagators
         self.kinetic_propagator = None
-        self.static_potential_propagator = None
+        self.static_potential_propagator = self.simulation.static_potential if self.simulation.static_potential is not None else None
         self.gravity_propagator = None
         self.gravity_potential=None
         if not self.simulation.use_units:
@@ -46,13 +46,15 @@ class Propagator_Class:
             cp.ndarray: The kinetic propagator in k-space
         """
         # Calculate k_squared_sum for the Laplacian operator
-        k_squared_sum = cp.zeros_like(self.k_space[0], dtype=cp.float32)
+        k_squared_sum = cp.zeros_like(self.k_space[0], dtype=cp.float64)
         for k in self.k_space:
             k_squared_sum += k ** 2
 
 
-        self.kinetic_propagator = cp.exp(((-1j * ((self.h*time_factor) / 2) * k_squared_sum )*(self.h_bar_tilde)), dtype=cp.complex64)
+        self.kinetic_propagator = cp.exp(((-1j * ((self.h*time_factor) / 2) * k_squared_sum )*(self.h_bar_tilde)), dtype=cp.complex128)
+
         return self.kinetic_propagator
+
 
     def compute_static_potential_propagator(self, potential_function,time_factor=1):
         """
@@ -64,56 +66,15 @@ class Propagator_Class:
         Returns:
             cp.ndarray: The potential propagator in real space
         """
+
         if potential_function is not None:
             potential_values = potential_function(self.simulation)
-            self.static_potential_propagator = cp.exp((-1j * self.h*time_factor * potential_values)/(self.h_bar_tilde) , dtype=cp.complex64)
-
+            exponent = -1j * self.h * time_factor * cp.asarray(potential_values) / self.h_bar_tilde
+            self.static_potential_propagator = cp.exp(exponent, dtype=cp.complex128)
         else:
-            # If no potential is provided, use unit propagator (no effect)
-            self.static_potential_propagator = cp.ones(self.simulation.grids[0].shape, dtype=cp.complex64)
+            self.static_potential_propagator = cp.ones(self.simulation.grids[0].shape, dtype=cp.complex128)
 
         return self.static_potential_propagator
-
-    def compute_gravity_propagator(self, psi, density,first_step=False, last_step=False,time_factor=1):
-        """
-        Compute the gravitational potential propagator based on current wave function density.
-
-        Parameters:
-            psi (cp.ndarray): Current wave function
-            first_step (bool): True if this is the first step in evolution
-            last_step (bool): True if this is the last step in evolution
-
-        Returns:
-            cp.ndarray: The gravity propagator in real space
-        """
-
-        if not self.simulation.use_gravity:
-            return cp.ones_like(psi, dtype=cp.complex64)
-
-        #density = self.compute_density(psi)
-
-        a_s = (self.simulation.a_s * units.cm).to(f"{self.simulation.dUnits}").value
-
-
-        if not self.simulation.use_self_int:
-            self_int_potential = cp.ones_like(psi, dtype=cp.complex64)
-        elif self.simulation.use_self_int:
-            self_int_potential = self.get_self_int_potential(density, psi, a_s)
-
-
-
-        # Solve Poisson equation for gravitational potential
-        gravity_potential = self.solve_poisson(density)
-        self.gravity_potential = gravity_potential + self_int_potential
-
-        if first_step or last_step:
-            self.gravity_propagator = cp.exp((-1j * ((self.h*time_factor) / 2) * self.gravity_potential )/(self.simulation.h_bar_tilde), dtype=cp.complex64)
-        else:
-            self.gravity_propagator = cp.exp((-1j  * (self.h*time_factor) * self.gravity_potential)/(self.simulation.h_bar_tilde), dtype=cp.complex64)
-
-
-        return self.gravity_propagator
-
 
 
     def get_self_int_potential(self, density, psi,a_s):
@@ -131,36 +92,118 @@ class Propagator_Class:
         return potential
 
 
+    def compute_gravity_potential(self, density):
+        """Compute gravitational potential only (no propagator)."""
+        if not self.simulation.use_gravity:
+            return cp.zeros_like(density, dtype=cp.float64)
 
+        return self.solve_poisson(density)
 
-    def solve_poisson(self, density):
+    def compute_self_interaction_potential(self, density, psi):
+        """Compute self-interaction potential only."""
+        if not self.simulation.use_self_int:
+            return cp.zeros_like(psi, dtype=cp.float64)
+
+        a_s = (self.simulation.a_s * units.cm).to(f"{self.simulation.dUnits}").value
+        return self.get_self_int_potential(density, psi, a_s)
+
+    def compute_sponge_potential(self):
+        """Get sponge potential - computed in simulation class ."""
+        if self.simulation.sponge_potential is not None:
+            return self.simulation.sponge_potential
+        return cp.zeros_like(self.grids[0], dtype=cp.complex128)
+
+    def compute_total_potential(self, psi, density, include_static=False,extra_potential=None):
         """
-        Solve the Poisson equation ∇²V = 4πGρ.
+        Combine all dynamic potentials into one.
+        Static potential is handled separately via pre-computed propagators.
 
         Parameters:
-            density (cp.ndarray): Mass density distribution
+            psi: Wave function
+            density: Total density
+            include_static: Deprecated - static potential handled separately
 
         Returns:
-            cp.ndarray: Gravitational potential
+            Total potential (real for gravity/self-int, complex if sponge included)
         """
+        V_grav = self.compute_gravity_potential(density)
 
+        if extra_potential is not None:
+            V_grav = V_grav + extra_potential
 
+        if psi is not None:
+            V_self_int = self.compute_self_interaction_potential(density, psi)
+        else:
+            V_self_int = cp.zeros_like(V_grav, dtype=cp.float64)
 
-        # FFT of density
-        density_k = cp.fft.fftn((density- cp.mean(density)).astype(cp.complex64))
+        V_sponge = self.compute_sponge_potential()
+        V_total = V_grav + V_self_int + V_sponge
+        self.total_potential = V_total
+        return V_total
 
-        # Calculate k_squared_sum for Laplacian
+    def compute_total_propagator(self, density, psi=None, first_step=False, last_step=False, time_factor=1,extra_potential=None):
+        """
+        Compute propagator from total DYNAMIC potential only.
+        Static potential is applied separately via pre-computed propagators.
+
+        Returns:
+            Propagator exp(-i * dt * V_dynamic / hbar)
+        """
+        # Only compute dynamic potentials (gravity, self-int, sponge)
+        # Static potential is handled separately
+        V_total = self.compute_total_potential(psi, density, include_static=False, extra_potential=extra_potential)
+
+        if first_step or last_step:
+            dt = (self.h * time_factor) / 2
+        else:
+            dt = self.h * time_factor
+
+        propagator = cp.exp((-1j * dt * V_total) / self.simulation.h_bar_tilde, dtype=cp.complex128)
+        return propagator
+
+    def solve_poisson(self, density):
+        if self.simulation.overwrite_density:
+            density = self.simulation.external_density
+
+        density_k = cp.fft.fftn((density - cp.mean(density)).astype(cp.complex128))
         k_squared_sum = sum(k ** 2 for k in self.k_space)
 
-        # Avoid division by zero at k=0
-        mask = k_squared_sum == 0
-        k_squared_sum[mask] = 1
 
-        # Calculate potential in k-space: -4πGρ/k²
-        potential_k = (-4 * cp.pi * self.G* density_k) / k_squared_sum.astype(cp.complex64)
-        potential_k[mask] = 0  # Set k=0 mode to zero
+        k_squared_softened = k_squared_sum
 
-        # Transform back to real space
-        potential = cp.fft.ifftn(potential_k).real.astype(cp.float32)
+        mask_zero = k_squared_softened == 0
+        k_squared_softened[mask_zero] = 1.0
 
+        potential_k = (-4 * cp.pi * self.G * density_k) / k_squared_softened.astype(cp.complex128)
+        potential_k[mask_zero] = 0.0
+
+        potential = cp.fft.ifftn(potential_k).real.astype(cp.float64)
         return potential
+
+    def compute_force_grids_from_potential(self, potential):
+        """
+        Compute acceleration grids a = -∇Phi on the simulation grid.
+        Returns force components as cp.float64 grids, handling arbitrary dimensions.
+        
+        Returns:
+            tuple: (Fx, Fy, Fz) where missing dimensions are zero arrays
+        """
+        Phi_k = cp.fft.fftn(potential.astype(cp.complex128))
+        
+        # Create zero arrays for all three spatial dimensions
+        shape = potential.shape
+        Fx = cp.zeros(shape, dtype=cp.float64)
+        Fy = cp.zeros(shape, dtype=cp.float64)
+        Fz = cp.zeros(shape, dtype=cp.float64)
+        
+        # Only compute forces for dimensions that exist
+        if self.dim >= 1:
+            Fx = cp.fft.ifftn((-1j) * self.k_space[0] * Phi_k).real.astype(cp.float64)
+        
+        if self.dim >= 2:
+            Fy = cp.fft.ifftn((-1j) * self.k_space[1] * Phi_k).real.astype(cp.float64)
+        
+        if self.dim >= 3:
+            Fz = cp.fft.ifftn((-1j) * self.k_space[2] * Phi_k).real.astype(cp.float64)
+        
+        return Fx, Fy, Fz

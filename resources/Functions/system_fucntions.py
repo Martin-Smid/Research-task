@@ -1,4 +1,4 @@
-from resources.Functions.Schrodinger_eq_functions import *
+#from resources.Functions.Schrodinger_eq_functions import *
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -56,11 +56,11 @@ def calculate_errors_between_num_and_analytical_evolution(wave_function, time_st
     }
 
 
-def plot_max_values_on_N(simulation_class_instance):
+def plot_max_values_on_N(evolution_class_instance):
     import pandas as pd
     import matplotlib.pyplot as plt
 
-    filename = simulation_class_instance.max_vals_filename
+    filename = evolution_class_instance.scribe.max_vals_filename
 
     # Načti s MultiIndex ve sloupcích (dva řádky záhlaví), ignoruj komentáře
     data = pd.read_csv(filename, comment='#', header=[0, 1], index_col=0)
@@ -165,7 +165,7 @@ def plot_lambda_rho_evolution(file_name):
     plt.show()
 
 
-plot_lambda_rho_evolution(r'C:\projekty\Research-task\resources\data\good_max_vval_data.csv')
+#plot_lambda_rho_evolution(r'C:\projekty\Research-task\resources\data\good_max_vval_data.csv')
 
 #plot_max_values('/home/martin/ploty/max_values_4.csv')
 
@@ -565,8 +565,8 @@ def plot_wave_function_panel(
             sl.T, origin="lower", extent=extent, cmap=cmap, norm=norm, aspect="auto"
         )
         ax.set_title(f"t = {t:.1f}", fontsize=fontsize)
-        ax.set_xlabel("x", fontsize=fontsize)
-        ax.set_ylabel("y", fontsize=fontsize)
+        #ax.set_xlabel("x", fontsize=fontsize)
+        #ax.set_ylabel("y", fontsize=fontsize)
         ax.tick_params(labelsize=fontsize-2)
 
     # Hide any unused axes

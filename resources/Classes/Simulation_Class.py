@@ -146,6 +146,7 @@ class Simulation_Class:
         self.wave_masses = []
         self.wave_momenta = []
         self.wave_omegas = []
+        self.wave_vector_seeds = []
         self.total_omega = 0
         self.combined_psi = None
 
@@ -186,6 +187,12 @@ class Simulation_Class:
         self.is_restart = False
         self.current_step = 0
         self.current_time = 0.0
+        self._run_id = None
+        self._run_mode = "new"
+        self._source_checkpoint = None
+        self._source_step = None
+        self._source_time = None
+        self._run_parameter_changes = {}
         
     def setup_units(self, sim_units, m_s):
         """
@@ -314,6 +321,10 @@ class Simulation_Class:
                 #self.wave_functions.append(wave_vector.wave_vector)
                 self.num_of_w_vects_in_sim +=1
                 self.spin = wave_vector.spin
+                self.wave_vector_seeds.append({
+                    "spin": int(wave_vector.spin),
+                    "seed": getattr(wave_vector, "random_seed", None),
+                })
 
             except Exception as e:
                 raise ValueError(f"Tried adding either a Wave_vector.wave_vector, list of Wave_functions or Wave_function but failed \n"
@@ -430,8 +441,14 @@ class Simulation_Class:
                 f"{self.current_step}"
             )
 
+        previous_total_time = self.total_time
         self.total_time = target_steps * self.h
         self.num_steps = target_steps
+        if not np.isclose(previous_total_time, self.total_time):
+            self._run_parameter_changes["total_time"] = {
+                "from": previous_total_time,
+                "to": self.total_time,
+            }
         for wave in self.wave_functions:
             wave.total_time = self.total_time
             wave.num_steps = self.num_steps
@@ -465,6 +482,26 @@ class Simulation_Class:
                 "start_new_segment() requires a completed endpoint checkpoint. "
                 "Use resume() for an intermediate checkpoint."
             )
+
+        source_checkpoint = (
+            self._source_checkpoint if self.is_restart else self.snapshot_directory
+        )
+        source_step = self.current_step
+        source_time = self.current_time
+        requested_changes = dict(changes)
+        previous_values = {
+            "total_time": self.total_time,
+            "h": self.h,
+            "order_of_evolution": self.order_of_evolution,
+            "use_gravity": self.use_gravity,
+            "static_potential": self.static_potential,
+            "use_sponge": self.use_sponge,
+            "sponge_V0": self.sponge_V0,
+            "save_max_vals": self.save_max_vals,
+            "self_int": self.use_self_int,
+            "a_s": self.a_s,
+            "sink_formation": self._sink_cfg,
+        }
 
         allowed = {
             "h",
@@ -537,6 +574,29 @@ class Simulation_Class:
         self.snapshot_directory = None
         self.accessible_times = []
         self.wave_values = []
+        current_values = {
+            "total_time": self.total_time,
+            "h": self.h,
+            "order_of_evolution": self.order_of_evolution,
+            "use_gravity": self.use_gravity,
+            "static_potential": self.static_potential,
+            "use_sponge": self.use_sponge,
+            "sponge_V0": self.sponge_V0,
+            "save_max_vals": self.save_max_vals,
+            "self_int": self.use_self_int,
+            "a_s": self.a_s,
+            "sink_formation": self._sink_cfg,
+        }
+        changed_names = {"total_time", *requested_changes}
+        self._run_parameter_changes = {
+            name: {"from": previous_values[name], "to": current_values[name]}
+            for name in changed_names
+        }
+        self._run_id = None
+        self._run_mode = "endpoint_segment"
+        self._source_checkpoint = source_checkpoint
+        self._source_step = source_step
+        self._source_time = source_time
         return self
 
     def get_wave_function_at_time(self, time):

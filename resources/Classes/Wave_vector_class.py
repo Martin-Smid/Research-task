@@ -19,6 +19,7 @@ class Wave_vector_class:
     ):
         self._validate_spin(spin)
         self.spin = spin
+        self.random_seed = random_seed
         self.m_values = tuple(range(-spin, spin + 1))
         # Tensor metadata is retained for inspection/validation, but the GPU
         # evolution stores the smaller set of 2s+1 polarization amplitudes.

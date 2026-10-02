@@ -1,6 +1,5 @@
 import cupy as cp
 import numpy as np
-from resources.Functions.system_fucntions import plot_max_values_on_N
 from resources.Classes.Nbody_classes.Sink_N_Body import check_and_create_gas_sinks, SinkNBody
 from resources.Classes.Scribe_Class import Scribe
 from resources.Functions.checkpointing import save_checkpoint
@@ -74,6 +73,11 @@ class Evolution_Class:
         save_every = max(1, save_every)
         # TODO: check this - energy diagnostics are intentionally independent of snapshots.
         diagnostics_every = max(1, int(diagnostics_every))
+        self.simulation._run_schedule = {
+            "start_step": int(start_step),
+            "save_every": int(save_every),
+            "diagnostics_every": diagnostics_every,
+        }
         self.num_wave_functions = len(wave_functions)
 
         if self.sink_system is None and getattr(self.simulation, "baryonic_matter", None):
@@ -126,6 +130,7 @@ class Evolution_Class:
             if not self.scribe.wave_values or len(self.scribe.wave_values) != self.num_wave_functions:
                 self.scribe.wave_values = [[] for _ in range(self.num_wave_functions)]
 
+        self.scribe.save_run_config(status="running", current_step=start_step)
 
 
         # Initial diagnostics
@@ -867,16 +872,8 @@ class Evolution_Class:
                 resolution=int(self.simulation.N),
                 spin=self.simulation.spin if getattr(self.simulation, "spin", None) else None
             )
-            plot_y_or_n = input("Should I plot these values? (y/n/del): ")
-            if plot_y_or_n == "y":
-                plot_max_values_on_N(self)
-            elif plot_y_or_n == "del":
-                max_vals_filename = self.scribe.max_vals_filename
-                if os.path.exists(max_vals_filename):
-                    os.remove(max_vals_filename)
-                    print(f"File '{max_vals_filename}' has been deleted.")
-                else:
-                    print(f"File '{max_vals_filename}' does not exist.")
+
+        self.scribe.save_run_config(status="completed", current_step=self.num_steps)
 
         print("Evolution completed successfully")
         print(f"Saved times are {self.scribe.accessible_times}")

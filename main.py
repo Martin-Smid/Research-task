@@ -10,6 +10,8 @@ a, b = -5, 5  # Domain boundaries
 N = 128 # Number of spatial points
 
 # Initialize the Wave_function instance
+
+
 '''
 sim = Simulation_Class(
 
@@ -56,12 +58,12 @@ sim.evolve(save_every=50)
 
 
 sim = Simulation_Class.from_checkpoint(
-    "resources/data/simulation_20261002_173113_818470"
+    "resources/data/simulation_20261002_215726_387710"
 )
-
+sim.resume(save_every=50)
 print(sim.current_step)  # mělo by vypsat 250
 
-sim.resume(save_every=50)
+
 
 
 

@@ -82,7 +82,7 @@ def _save_npz(path: Path, **arrays: Any) -> None:
         np.savez(handle, **cpu_arrays)
 
 
-def _simulation_config(simulation: Any) -> dict[str, Any]:
+def simulation_config(simulation: Any) -> dict[str, Any]:
     return {
         "dim": simulation.dim,
         "boundaries": simulation.boundaries,
@@ -109,6 +109,7 @@ def _simulation_config(simulation: Any) -> dict[str, Any]:
         "has_external_density": simulation.external_density is not None,
         "overwrite_density": simulation.overwrite_density,
         "spin": getattr(simulation, "spin", None),
+        "wave_vector_seeds": getattr(simulation, "wave_vector_seeds", []),
     }
 
 
@@ -260,7 +261,7 @@ def save_checkpoint(
             "current_time": float(current_time),
             "save_every": int(save_every),
             "diagnostics_every": int(diagnostics_every),
-            "simulation_config": _simulation_config(simulation),
+            "simulation_config": simulation_config(simulation),
             "waves": waves,
             "components": components,
             "external_density_file": external_density_file,
@@ -490,6 +491,7 @@ def load_checkpoint(
     simulation.overwrite_density = bool(config["overwrite_density"])
     if config.get("spin") is not None:
         simulation.spin = config["spin"]
+    simulation.wave_vector_seeds = list(config.get("wave_vector_seeds", []))
 
     simulation.is_restart = True
     simulation.current_step = int(manifest["current_step"])
@@ -504,4 +506,9 @@ def load_checkpoint(
     simulation._restart_scribe_state = manifest.get("scribe", {})
     simulation._restart_save_every = int(manifest["save_every"])
     simulation._restart_diagnostics_every = int(manifest["diagnostics_every"])
+    simulation._run_mode = "resume"
+    simulation._source_checkpoint = str(manifest_path)
+    simulation._source_step = simulation.current_step
+    simulation._source_time = simulation.current_time
+    simulation._run_parameter_changes = {}
     return simulation

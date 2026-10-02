@@ -1,8 +1,15 @@
 import os
 import datetime
+import json
+import subprocess
+import uuid
+from pathlib import Path
+
 import numpy as np
 import cupy as cp
 import pandas as pd
+
+from resources.Functions.checkpointing import _json_value, simulation_config
 
 
 class Scribe:
@@ -70,6 +77,139 @@ class Scribe:
 
 
         return save_dir
+
+    @staticmethod
+    def _callable_name(value):
+        if value is None:
+            return None
+        module = getattr(value, "__module__", None)
+        name = getattr(value, "__qualname__", getattr(value, "__name__", None))
+        return f"{module}.{name}" if module and name else str(value)
+
+    @staticmethod
+    def _portable_path(value):
+        if value is None:
+            return None
+        project_root = Path(__file__).resolve().parents[2]
+        try:
+            return Path(value).resolve().relative_to(project_root).as_posix()
+        except (OSError, ValueError):
+            return str(value)
+
+    @staticmethod
+    def _git_state():
+        project_root = Path(__file__).resolve().parents[2]
+        try:
+            commit = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=project_root,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            ).stdout.strip()
+            dirty = bool(subprocess.run(
+                ["git", "status", "--porcelain"],
+                cwd=project_root,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            ).stdout.strip())
+            return {"commit": commit, "dirty": dirty}
+        except (OSError, subprocess.SubprocessError):
+            return {"commit": None, "dirty": None}
+
+    def save_run_config(self, status, current_step):
+        """Create or update reproducibility metadata for this evolution call."""
+        if self.snapshot_directory is None:
+            raise ValueError("Cannot save run_config.json before creating an output directory")
+
+        simulation = self.simulation
+        if getattr(simulation, "_run_id", None) is None:
+            simulation._run_id = uuid.uuid4().hex
+
+        path = Path(self.snapshot_directory) / "run_config.json"
+        try:
+            data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        except (OSError, json.JSONDecodeError):
+            data = {}
+
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        lifecycle = data.get("lifecycle", [])
+        event = next(
+            (item for item in lifecycle if item.get("run_id") == simulation._run_id),
+            None,
+        )
+        if event is None:
+            event = {
+                "run_id": simulation._run_id,
+                "started_at": now,
+            }
+            lifecycle.append(event)
+
+        event.update({
+            "mode": getattr(simulation, "_run_mode", "new"),
+            "status": status,
+            "source_checkpoint": self._portable_path(
+                getattr(simulation, "_source_checkpoint", None)
+            ),
+            "source_step": getattr(simulation, "_source_step", None),
+            "source_time": getattr(simulation, "_source_time", None),
+            "parameter_changes": getattr(simulation, "_run_parameter_changes", {}),
+            "schedule": getattr(simulation, "_run_schedule", {}),
+            "current_step": int(current_step),
+            "current_time": float(current_step * simulation.h),
+        })
+        if status == "completed":
+            event["completed_at"] = now
+
+        config = simulation_config(simulation)
+        config["static_potential"] = self._callable_name(simulation.static_potential)
+        data = {
+            "schema_version": 1,
+            "simulation": config,
+            "random_seeds": {
+                "wave_vectors": getattr(simulation, "wave_vector_seeds", []),
+            },
+            "git": self._git_state(),
+            "components": [
+                {
+                    "type": component.__class__.__name__,
+                    "name": getattr(component, "name", None),
+                    "count": getattr(component, "N", None),
+                }
+                for component in simulation.baryonic_matter
+            ],
+            "wave_functions": [
+                {
+                    "packet_type": str(getattr(wave, "packet_type", None)),
+                    "means": getattr(wave, "means", None),
+                    "momenta": getattr(wave, "momenta", None),
+                    "st_deviations": getattr(wave, "st_deviations", None),
+                    "omega": getattr(wave, "omega", None),
+                    "multiplicity": getattr(wave, "multiplicity", None),
+                    "desired_soliton_mass": getattr(
+                        wave,
+                        "desired_soliton_mass",
+                        None,
+                    ),
+                }
+                for wave in simulation.wave_functions
+            ],
+            "lifecycle": lifecycle,
+        }
+
+        temporary_path = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            temporary_path.write_text(
+                json.dumps(_json_value(data), indent=2),
+                encoding="utf-8",
+            )
+            os.replace(temporary_path, path)
+        finally:
+            if temporary_path.exists():
+                temporary_path.unlink()
 
     def save_initial_states(self, wave_functions, total_density=None):
         """

@@ -3,7 +3,6 @@ import datetime
 import numpy as np
 import cupy as cp
 import pandas as pd
-import json
 
 
 class Scribe:
@@ -21,6 +20,7 @@ class Scribe:
         """
         self.simulation = simulation
         self.snapshot_directory = None
+        self.max_vals_filename = None
         self.max_locations_path = None
         self.trajectory_path = None
         self.total_density = None
@@ -37,12 +37,12 @@ class Scribe:
         """
         Create directory structure for saving data AND initialize energy log.
         """
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         save_dir = f"resources/data/simulation_{timestamp}"
         os.makedirs(save_dir, exist_ok=True)
         self.snapshot_directory = save_dir
 
-        self.max_vals_filename = "resources/data/max_values.csv"
+        self.max_vals_filename = os.path.join(self.snapshot_directory, "max_values.csv")
 
         self.energy_path = os.path.join(self.snapshot_directory, "energy.csv")
 
@@ -339,17 +339,9 @@ class Scribe:
             columns=columns
         )
 
-        if os.path.exists(self.max_vals_filename):
-            existing_data = pd.read_csv(self.max_vals_filename, header=[0, 1], index_col=0, comment="#")
-            updated_data = pd.concat([existing_data, new_data], axis=1)
-
-            with open(self.max_vals_filename, "w") as file:
-                file.write("\n".join(header) + "\n")
-            updated_data.to_csv(self.max_vals_filename)
-        else:
-            with open(self.max_vals_filename, "w") as file:
-                file.write("\n".join(header) + "\n")
-            new_data.to_csv(self.max_vals_filename)
+        with open(self.max_vals_filename, "w") as file:
+            file.write("\n".join(header) + "\n")
+        new_data.to_csv(self.max_vals_filename)
 
         print(f"{self.max_vals_filename} saved")
 
@@ -445,111 +437,3 @@ class Scribe:
                         )
         except Exception as e:
             print(f"[Scribe] Error writing rotation curve for {component_name} at t={time}: {e}")
-
-    def save_restart_metadata(self, current_step, current_time, save_every, order, num_wave_functions,wave_files=None,baryonic_component_files=None):
-        """
-        Save minimal restart metadata describing the latest valid checkpoint.
-        """
-        restart_path = os.path.join(self.snapshot_directory, "restart_state.json")
-    
-        data = {
-            "current_step": int(current_step),
-            "current_time": float(current_time),
-            "save_every": int(save_every),
-            "order": int(order),
-            "num_wave_functions": int(num_wave_functions),
-        
-            "simulation_config": {
-                "dim": int(self.simulation.dim),
-                "N": int(self.simulation.N),
-                "boundaries": [[float(a), float(b)] for (a, b) in self.simulation.boundaries],
-                "h": float(self.simulation.h),
-                "total_time": float(self.simulation.total_time),
-                "num_steps": int(self.simulation.num_steps),
-        
-                "m_s": float(self.simulation.m_s),
-                "sponge_V0": float(self.simulation.sponge_V0),
-                "use_sponge": bool(self.simulation.use_sponge),
-                "use_gravity": bool(self.simulation.use_gravity),
-                "save_max_vals": bool(self.simulation.save_max_vals),
-                "use_units": bool(self.simulation.use_units),
-                "self_int": bool(self.simulation.use_self_int),
-                "a_s": float(self.simulation.a_s),
-        
-                "sim_units": {
-                    "dUnits": self.simulation.dUnits,
-                    "tUnits": self.simulation.tUnits,
-                    "mUnits": self.simulation.mUnits,
-                    "eUnits": self.simulation.eUnits,
-                },
-        
-                "has_static_potential": self.simulation.static_potential is not None,
-                "has_external_density": self.simulation.external_density is not None,
-                "overwrite_density": bool(self.simulation.overwrite_density),
-        
-                "sink_formation": self.simulation._sink_cfg,
-
-                "wave_files": wave_files if wave_files is not None else [],
-                "baryonic_component_files": baryonic_component_files if baryonic_component_files is not None else [],
-            }
-            }
-        with open(restart_path, "w") as f:
-            json.dump(data, f, indent=2)
-
-    def save_baryonic_components(self, baryonic_matter, current_time):
-        """
-        Save full state of all baryonic components for restart.
-        Each component is stored in a separate .npz file.
-        """
-        if not baryonic_matter:
-            return []
-    
-        saved_files = []
-    
-        for idx, comp in enumerate(baryonic_matter):
-            cls_name = comp.__class__.__name__
-            save_path = os.path.join(
-                self.snapshot_directory,
-                f"baryonic_component_{idx}_{cls_name}_at_time_{current_time:.6f}.npz"
-            )
-    
-            data = {"class_name": cls_name}
-    
-            if cls_name == "Baryons":
-                data.update({
-                    "positions": cp.asnumpy(comp.positions),
-                    "velocities": cp.asnumpy(comp.velocities),
-                    "m_particle": float(comp.m_particle),
-                    "N": int(comp.N),
-                })
-    
-            elif cls_name == "NBodyGas":
-                data.update({
-                    "rho": cp.asnumpy(comp.rho),
-                    "vx": cp.asnumpy(comp.vx),
-                    "vy": cp.asnumpy(comp.vy),
-                    "vz": cp.asnumpy(comp.vz),
-                    "E": cp.asnumpy(comp.E) if hasattr(comp, "E") else None,
-                    "E_radiated": float(getattr(comp, "E_radiated", 0.0)),
-                })
-    
-            elif cls_name == "SinkNBody":
-                data.update({
-                    "positions": cp.asnumpy(comp.positions),
-                    "velocities": cp.asnumpy(comp.velocities),
-                    "mass_bh": cp.asnumpy(comp.mass_bh),
-                    "mass_res": cp.asnumpy(comp.mass_res),
-                    "masses": cp.asnumpy(comp.masses),
-                    "N": int(comp.N),
-                    "E_diss_kin_total": float(getattr(comp, "E_diss_kin_total", 0.0)),
-                    "E_diss_formation_total": float(getattr(comp, "E_diss_formation_total", 0.0)),
-                })
-    
-            else:
-                print(f"[Scribe] Warning: unsupported baryonic component type for restart: {cls_name}")
-                continue
-    
-            np.savez(save_path, **data)
-            saved_files.append(os.path.basename(save_path))
-
-        return saved_files

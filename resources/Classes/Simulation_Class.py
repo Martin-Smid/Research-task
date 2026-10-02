@@ -182,8 +182,10 @@ class Simulation_Class:
         self.external_density = None
         self.overwrite_density = False
 
-        self._sink_cfg = self._sink_cfg = None if sink_formation is None else dict(sink_formation) #configuration for sink particles
+        self._sink_cfg = None if sink_formation is None else dict(sink_formation) #configuration for sink particles
         self.is_restart = False
+        self.current_step = 0
+        self.current_time = 0.0
         
     def setup_units(self, sim_units, m_s):
         """
@@ -385,6 +387,157 @@ class Simulation_Class:
         self.wave_values = self.evolution.scribe.wave_values
         self.accessible_times = self.evolution.scribe.accessible_times
         self.snapshot_directory = self.evolution.scribe.snapshot_directory
+        self.current_step = self.num_steps
+        self.current_time = self.total_time
+
+        return final_wave_functions
+
+    @classmethod
+    def from_checkpoint(cls, path, static_potential=None, output_directory=None):
+        """Reconstruct a simulation from a versioned checkpoint."""
+        from resources.Functions.checkpointing import load_checkpoint
+
+        return load_checkpoint(
+            simulation_class=cls,
+            path=path,
+            static_potential=static_potential,
+            output_directory=output_directory,
+        )
+
+    def resume(self, until=None, save_every=None, diagnostics_every=None):
+        """Continue a loaded checkpoint to its configured or supplied end time."""
+        if not self.is_restart:
+            raise ValueError("resume() requires a simulation loaded with from_checkpoint()")
+
+        target_time = self.total_time if until is None else float(until)
+        target_steps_float = target_time / self.h
+        target_steps = int(round(target_steps_float))
+        if not np.isclose(target_steps_float, target_steps, rtol=0.0, atol=1e-10):
+            raise ValueError("The resume target must be an integer multiple of h")
+        configured_final_step = self.num_steps
+        if (
+            self.current_step >= configured_final_step
+            and target_steps > configured_final_step
+        ):
+            raise ValueError(
+                "A final-step checkpoint cannot be extended exactly because the "
+                "integrator has already applied its closing half-step. Resume from "
+                "an earlier checkpoint instead."
+            )
+        if target_steps <= self.current_step:
+            raise ValueError(
+                f"Resume target step {target_steps} must be after checkpoint step "
+                f"{self.current_step}"
+            )
+
+        self.total_time = target_steps * self.h
+        self.num_steps = target_steps
+        for wave in self.wave_functions:
+            wave.total_time = self.total_time
+            wave.num_steps = self.num_steps
+
+        effective_save_every = (
+            self._restart_save_every if save_every is None else int(save_every)
+        )
+        effective_diagnostics_every = (
+            self._restart_diagnostics_every
+            if diagnostics_every is None
+            else int(diagnostics_every)
+        )
+        return self.evolve(
+            save_every=effective_save_every,
+            start_step=self.current_step,
+            diagnostics_every=effective_diagnostics_every,
+        )
+
+    def start_new_segment(self, total_time, **changes):
+        """Use the current state as initial data for a new simulation segment.
+
+        Unlike ``resume()``, this deliberately starts a fresh integrator interval
+        and output directory. It is intended for endpoint experiments such as
+        adding a sink after a system has relaxed or changing selected physics.
+        With unchanged physics, the closing and opening half-kicks compose like
+        one uninterrupted run up to floating-point roundoff. Grid/domain changes
+        require explicit remapping and are therefore rejected.
+        """
+        if self.is_restart and self.current_step < self.num_steps:
+            raise ValueError(
+                "start_new_segment() requires a completed endpoint checkpoint. "
+                "Use resume() for an intermediate checkpoint."
+            )
+
+        allowed = {
+            "h",
+            "order_of_evolution",
+            "use_gravity",
+            "static_potential",
+            "use_sponge",
+            "sponge_V0",
+            "save_max_vals",
+            "self_int",
+            "a_s",
+            "sink_formation",
+        }
+        unknown = set(changes) - allowed
+        if unknown:
+            names = ", ".join(sorted(unknown))
+            raise ValueError(
+                f"Unsupported new-segment parameter(s): {names}. "
+                "Changing dim, N, boundaries, or units requires state remapping."
+            )
+
+        new_h = float(changes.pop("h", self.h))
+        new_total_time = float(total_time)
+        if new_h <= 0 or new_total_time <= 0:
+            raise ValueError("h and total_time must be positive")
+        steps_float = new_total_time / new_h
+        new_num_steps = int(round(steps_float))
+        if not np.isclose(steps_float, new_num_steps, rtol=0.0, atol=1e-10):
+            raise ValueError("total_time must be an integer multiple of h")
+
+        if "order_of_evolution" in changes:
+            order = int(changes.pop("order_of_evolution"))
+            if order not in (2, 4, 6):
+                raise ValueError("order_of_evolution must be 2, 4, or 6")
+            self.order_of_evolution = order
+
+        attribute_names = {
+            "use_gravity": "use_gravity",
+            "static_potential": "static_potential",
+            "use_sponge": "use_sponge",
+            "sponge_V0": "sponge_V0",
+            "save_max_vals": "save_max_vals",
+            "self_int": "use_self_int",
+            "a_s": "a_s",
+            "sink_formation": "_sink_cfg",
+        }
+        for public_name, attribute_name in attribute_names.items():
+            if public_name in changes:
+                value = changes.pop(public_name)
+                if public_name == "sink_formation" and value is not None:
+                    value = dict(value)
+                setattr(self, attribute_name, value)
+
+        self.h = new_h
+        self.total_time = new_num_steps * new_h
+        self.num_steps = new_num_steps
+        self.sponge_V0 = float(self.sponge_V0)
+        self.sponge_potential = self._build_sponge_potential()
+        for wave in self.wave_functions:
+            wave.h = self.h
+            wave.total_time = self.total_time
+            wave.num_steps = self.num_steps
+
+        self.is_restart = False
+        self.current_step = 0
+        self.current_time = 0.0
+        self.propagator = None
+        self.evolution = None
+        self.combined_psi = None
+        self.snapshot_directory = None
+        self.accessible_times = []
+        self.wave_values = []
+        return self
 
     def get_wave_function_at_time(self, time):
         """

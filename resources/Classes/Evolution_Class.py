@@ -3,6 +3,7 @@ import numpy as np
 from resources.Functions.system_fucntions import plot_max_values_on_N
 from resources.Classes.Nbody_classes.Sink_N_Body import check_and_create_gas_sinks, SinkNBody
 from resources.Classes.Scribe_Class import Scribe
+from resources.Functions.checkpointing import save_checkpoint
 import os
 from tqdm import tqdm
 
@@ -56,6 +57,7 @@ class Evolution_Class:
         #values for checking conservations within gas
         self._ref_mass = None
         self._ref_mom = None
+        self._last_checkpoint_step = None
 
     def evolve(self, wave_functions, save_every=1, start_step=0, diagnostics_every=3):
         """
@@ -107,7 +109,20 @@ class Evolution_Class:
             self.scribe.trajectory_path = os.path.join(self.scribe.snapshot_directory, "particle_trajectory.csv")
             self.scribe.max_locations_path = os.path.join(self.scribe.snapshot_directory, "max_locations.txt")
             self.scribe.rotation_curve_path = os.path.join(self.scribe.snapshot_directory, "rotational_velocity.dat")
-        
+
+            restart_scribe = getattr(self.simulation, "_restart_scribe_state", {})
+            self.scribe.accessible_times = list(restart_scribe.get("accessible_times", []))
+            self.scribe.wave_values = list(restart_scribe.get("wave_values", []))
+            self.scribe.energy_log = list(restart_scribe.get("energy_log", []))
+            self.scribe.max_wave_vals_during_evolution = {
+                int(key): value
+                for key, value in restart_scribe.get("max_wave_values", {}).items()
+            }
+            self.scribe.max_vals_filename = os.path.join(
+                self.scribe.snapshot_directory,
+                "max_values.csv",
+            )
+
             if not self.scribe.wave_values or len(self.scribe.wave_values) != self.num_wave_functions:
                 self.scribe.wave_values = [[] for _ in range(self.num_wave_functions)]
 
@@ -141,6 +156,9 @@ class Evolution_Class:
                 self._compute_and_save_radial_profile(total_density, current_time, ix, iy, iz)
         
             self.compute_total_energy(wave_functions, total_density, current_time)
+
+            if self.save_max_vals:
+                self.scribe.track_max_value(0, float(abs(total_density).max()))
         
             if wave_functions:
                 try:
@@ -198,25 +216,6 @@ class Evolution_Class:
                 print("New sink formed at step", step)
                 total_density = self._compute_total_density(wave_functions)
             '''
-            #temporary Mbh mass gain
-            if self.sink_system is not None and self.sink_system.N > 0:
-                M_start = 1e7  
-                M_end = 3e7    
-                
-               
-                growth_end_step = 0.5 * self.num_steps
-                
-                
-                if step <= growth_end_step:
-                    fraction = step / growth_end_step
-                    new_mass = M_start + (M_end - M_start) * fraction
-               
-                else:
-                    new_mass = M_end
-                
-                self.sink_system.mass_bh[0] = new_mass
-                self.sink_system.masses[0] = new_mass
-                
             # Perform evolution step
             wave_functions = self._perform_evolution_step(wave_functions, total_density, step, save_step)
 
@@ -259,31 +258,23 @@ class Evolution_Class:
 
                     baryon_density_to_save = rho_baryons_all
                     total_density_to_save = total_density + rho_sinks_only
-                wave_files = []
-                baryonic_component_files = []
-
-                wave_files = self.scribe.save_snapshots(
+                self.scribe.save_snapshots(
                     wave_functions,
                     current_time=current_time,
                     total_density=total_density_to_save,
                     baryon_density=baryon_density_to_save,
                     gas_density=gas_density_to_save
                 )
-                
-                baryonic_component_files = self.scribe.save_baryonic_components(
-                    self.simulation.baryonic_matter,
-                    current_time=current_time
-                )
-                
-                self.scribe.save_restart_metadata(
+                save_checkpoint(
+                    simulation=self.simulation,
+                    wave_functions=wave_functions,
+                    scribe=self.scribe,
                     current_step=step + 1,
                     current_time=current_time,
                     save_every=save_every,
-                    order=self.order,
-                    num_wave_functions=self.num_wave_functions,
-                    wave_files=wave_files,
-                    baryonic_component_files=baryonic_component_files,
+                    diagnostics_every=diagnostics_every,
                 )
+                self._last_checkpoint_step = step + 1
                                                 
                 self.scribe.flush_trajectory_buffer()
 
@@ -334,7 +325,7 @@ class Evolution_Class:
         cp.get_default_memory_pool().free_all_blocks()
 
         # Save final state and finalize
-        final_wave_files = self.scribe.save_final_state(
+        self.scribe.save_final_state(
             wave_functions,
             self.num_steps,
             save_every,
@@ -342,19 +333,17 @@ class Evolution_Class:
             self.total_time,
             total_density=final_density_to_save
         )
-        final_baryonic_component_files = self.scribe.save_baryonic_components(
-            self.simulation.baryonic_matter,
-            current_time=self.total_time
-        )
-        self.scribe.save_restart_metadata(
-            current_step=self.num_steps,
-            current_time=self.total_time,
-            save_every=save_every,
-            order=self.order,
-            num_wave_functions=self.num_wave_functions,
-            wave_files=final_wave_files,
-            baryonic_component_files=final_baryonic_component_files,
-        )
+        if self._last_checkpoint_step != self.num_steps:
+            save_checkpoint(
+                simulation=self.simulation,
+                wave_functions=wave_functions,
+                scribe=self.scribe,
+                current_step=self.num_steps,
+                current_time=self.total_time,
+                save_every=save_every,
+                diagnostics_every=diagnostics_every,
+            )
+            self._last_checkpoint_step = self.num_steps
         self._finalize_evolution()
 
         return wave_functions
@@ -377,10 +366,11 @@ class Evolution_Class:
 
         wave_functions = evolution_methods[self.order](wave_functions, total_density, is_first, is_last, save_step)
 
-        # Track maximum values if enabled
+        # Track the state after the completed step, including the final state.
         if self.save_max_vals:
-            max_val = float(abs(total_density).max())
-            self.scribe.track_max_value(step, max_val)
+            completed_density = self._compute_total_density(wave_functions)
+            max_val = float(abs(completed_density).max())
+            self.scribe.track_max_value(step + 1, max_val)
 
         return wave_functions
 
@@ -388,7 +378,10 @@ class Evolution_Class:
         """Second-order split-step evolution."""
 
         if wave_functions:
-            self._kick_all_wave_functions(wave_functions, total_density, is_first, is_last)
+            # Interior kick pairs are combined into one full kick. Only the
+            # opening kick of the first step is halved here; the closing half
+            # kick is applied explicitly after the final drift below.
+            self._kick_all_wave_functions(wave_functions, total_density, is_first, False)
 
         # is there baryonic matter in the sim?
         if self.simulation.baryonic_matter:
@@ -440,8 +433,10 @@ class Evolution_Class:
         for i, (operation, coeff_key) in enumerate(steps):
             if operation == 'kick':
                 total_density = self._compute_total_density(wave_functions)
-                first_op = is_first and i == 0
-                last_op = is_last and i == len(steps) - 1
+                # This composition already contains its complete boundary
+                # coefficients, so global first/last-step halving is incorrect.
+                first_op = False
+                last_op = False
 
                 if wave_functions:
                     self._kick_all_wave_functions(wave_functions, total_density, first_op, last_op, coeff_key)
@@ -492,8 +487,8 @@ class Evolution_Class:
         for i, (operation, coeff_key) in enumerate(steps):
             if operation == 'kick':
                 total_density = self._compute_total_density(wave_functions)
-                first_op = is_first and i == 0
-                last_op = is_last and i == len(steps) - 1
+                first_op = False
+                last_op = False
 
                 if wave_functions:
                     self._kick_all_wave_functions(wave_functions, total_density, first_op, last_op, coeff_key)
@@ -535,6 +530,7 @@ class Evolution_Class:
     def _kick_all_wave_functions(self, wave_functions, total_density, is_first_step, is_last_step, time_factor_key='full'):
         """Apply kick step to all wave functions with shared density."""
         time_factor = self.coefficients[time_factor_key]
+        edge_factor = 0.5 if (is_first_step or is_last_step) else 1.0
 
         # TODO: check this - gravity depends on shared density, so solve Poisson once per kick.
         gravity_potential = self.propagator.compute_gravity_potential(total_density)
@@ -542,7 +538,7 @@ class Evolution_Class:
         phi_sink = self._compute_sink_potential_analytic_kspace()
         
 
-        dt_step = self.h * time_factor
+        dt_step = self.h * time_factor * edge_factor
         bh_propagator = cp.exp(-1j * phi_sink * dt_step / self.simulation.h_bar_tilde)
 
         for wf in wave_functions:
@@ -554,8 +550,9 @@ class Evolution_Class:
                 gravity_potential=gravity_potential
             )
 
-            if time_factor_key in self.static_propagators:
-                static_propagator = self.static_propagators[time_factor_key]
+            static_key = (time_factor_key, edge_factor)
+            if static_key in self.static_propagators:
+                static_propagator = self.static_propagators[static_key]
                 full_propagator = dynamic_propagator * static_propagator
             else:
                 full_propagator = dynamic_propagator
@@ -832,10 +829,15 @@ class Evolution_Class:
 
         # Pre-calculate static propagators
         self.static_propagators = {}
-        for label, factor in potential_coeffs:
-            self.static_propagators[label] = self.propagator.compute_static_potential_propagator(
-                self.simulation.static_potential, time_factor=factor
-            )
+        if self.simulation.static_potential is not None:
+            for label, factor in potential_coeffs:
+                for edge_factor in (1.0, 0.5):
+                    self.static_propagators[(label, edge_factor)] = (
+                        self.propagator.compute_static_potential_propagator(
+                            self.simulation.static_potential,
+                            time_factor=factor * edge_factor,
+                        )
+                    )
 
 
         # Pre-calculate kinetic propagators
@@ -869,7 +871,7 @@ class Evolution_Class:
             if plot_y_or_n == "y":
                 plot_max_values_on_N(self)
             elif plot_y_or_n == "del":
-                max_vals_filename = "resources/data/max_values.csv"
+                max_vals_filename = self.scribe.max_vals_filename
                 if os.path.exists(max_vals_filename):
                     os.remove(max_vals_filename)
                     print(f"File '{max_vals_filename}' has been deleted.")

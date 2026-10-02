@@ -10,11 +10,12 @@ a, b = -5, 5  # Domain boundaries
 N = 128 # Number of spatial points
 
 # Initialize the Wave_function instance
+'''
 sim = Simulation_Class(
 
     dim=3, # 2D simulation
     boundaries=[(-10,10)]*3, # Spatial boundaries
-    N=128, # Grid resolution
+    N=64, # Grid resolution
     total_time=1, # Total simulation time
     h=0.001, # Time step
     order_of_evolution=2,
@@ -29,18 +30,7 @@ sim = Simulation_Class(
 
 )
 
-baryons = Baryons(
-    simulation=sim,
-    N_particles=int(1e6),
-    total_mass=0,
-    init_profile="from_file",
-    file_path="resources\solitons\Test100_S0_Nbody.bin",
 
-    dist_factor=1000.0,
-    apply_center_offset=True,
-    center=(-50,-50,-50)
-
-)
 
 wave_vector = Wave_vector_class(
 
@@ -62,6 +52,16 @@ sim.add_wave_vector(wave_vector)
 
 
 sim.evolve(save_every=50)
+'''
+
+
+sim = Simulation_Class.from_checkpoint(
+    "resources/data/simulation_20261002_173113_818470"
+)
+
+print(sim.current_step)  # mělo by vypsat 250
+
+sim.resume(save_every=50)
 
 
 

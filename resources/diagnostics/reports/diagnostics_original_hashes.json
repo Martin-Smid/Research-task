@@ -1,0 +1,27 @@
+[
+  {
+    "Algorithm": "SHA256",
+    "Hash": "13213F88F61EF010C546A4BFD1185A777FDF81610B012507ADE927EC4B02D5DC",
+    "Path": "resources/diagnostics/baselines/chat_regression_baselines/wave_baryons_gas_sink.npz"
+  },
+  {
+    "Algorithm": "SHA256",
+    "Hash": "B8606DD60B56F75C62F18998A75C32111837023D78F13E5A0CA4CC18E43E43C6",
+    "Path": "resources/diagnostics/baselines/chat_regression_baselines/wave_baryons_gas.npz"
+  },
+  {
+    "Algorithm": "SHA256",
+    "Hash": "03E0CC119391E387F76928A731ED1E3DC65CFC0FC4A0B6859ED6F69501DC03B6",
+    "Path": "resources/diagnostics/baselines/chat_regression_baselines/wave_baryons.npz"
+  },
+  {
+    "Algorithm": "SHA256",
+    "Hash": "98880DED1C0F979A6829B7A6AAA3CED64D60B71A6195F61FBB55ABA7554E938C",
+    "Path": "resources/diagnostics/baselines/chat_regression_baselines/wave.npz"
+  },
+  {
+    "Algorithm": "SHA256",
+    "Hash": "BDD43749F3BB2320336FBCB35CC6DF3B124505AFC5491654E8C4E11CF740D7FE",
+    "Path": "resources/diagnostics/baselines/chat_regression_baselines/manifest.json"
+  }
+]

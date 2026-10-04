@@ -7,19 +7,22 @@ The four scenarios progressively enable:
 3. wave vector + collisionless baryons + gas,
 4. wave vector + collisionless baryons + gas + a central sink.
 
-Frozen baseline arrays live below resources/diagnostics/baselines/.
-Generated replay runs and compiler caches are ignored by Git.
+Baseline arrays are written below resources/data/. That directory is ignored by
+Git, while this harness remains versioned with the source code.
 
 Create baselines with ``python chats_playground.py baseline``, compare after a
 code change with ``python chats_playground.py compare``, and verify exact
 midpoint continuation with ``python chats_playground.py restart-check``.
 Use ``python chats_playground.py segment-check`` to verify that ending and
 restarting an unchanged simulation composes like one uninterrupted run.
-Use ``diagnostics-baseline`` before extracting diagnostics, then
-``diagnostics-check`` to compare every energy sample and saved grid/diagnostic file.
 """
 
 from __future__ import annotations
+
+# Historical snapshot/migration: retained for review, not for execution.
+if __name__ == "__main__":
+    raise SystemExit("Archived file; use the documented active diagnostics instead.")
+
 
 import argparse
 import hashlib
@@ -33,7 +36,7 @@ from typing import Any
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-DEFAULT_BASELINE_DIR = PROJECT_ROOT / "resources" / "diagnostics" / "baselines" / "chat_regression_baselines"
+DEFAULT_BASELINE_DIR = PROJECT_ROOT / "resources" / "data" / "chat_regression_baselines"
 SCENARIOS = (
     "wave",
     "wave_baryons",
@@ -47,7 +50,7 @@ ATOL = 1.0e-12
 
 def _configure_local_runtime_directories() -> None:
     """Keep compiler scratch/cache files inside the writable ignored data tree."""
-    runtime_root = PROJECT_ROOT / "resources" / "diagnostics" / "runtime"
+    runtime_root = PROJECT_ROOT / "resources" / "data" / "chat_runtime"
     temp_dir = runtime_root / "tmp"
     cache_dir = runtime_root / "cupy_cache"
     temp_dir.mkdir(parents=True, exist_ok=True)
@@ -779,61 +782,6 @@ def check_endpoint_segments(
     return all_passed
 
 
-def check_diagnostics_outputs(mode: str, baseline_dir: Path = DEFAULT_BASELINE_DIR,
-                              allow_rotation_changes: bool = False) -> bool:
-    """Compare every energy sample, final state, and saved diagnostic/grid file exactly."""
-    root = baseline_dir / "diagnostics"
-    root.mkdir(parents=True, exist_ok=True)
-    manifest_path = root / "manifest.json"
-    creating = mode == "diagnostics-baseline"
-    if creating and manifest_path.exists():
-        raise FileExistsError("Diagnostics references already exist; refusing to overwrite")
-    manifest = {} if creating else json.loads(manifest_path.read_text(encoding="utf-8"))
-    cases = [(name, 2, False) for name in SCENARIOS]
-    cases += [("wave_baryons", 4, False), ("wave_baryons", 6, False), ("wave", 2, True)]
-    for name, order, static in cases:
-        label = f"{name}_order{order}" + ("_static" if static else "")
-        simulation, _ = build_scenario(name, total_time=0.006)
-        simulation.order_of_evolution = order
-        simulation.save_max_vals = True
-        if static:
-            simulation.static_potential = lambda sim: 0.01 * sum(cp.asarray(g) ** 2 for g in sim.grids)
-        simulation.evolve(save_every=2, diagnostics_every=1)
-        state = _capture_finished_simulation(simulation)
-        directory = Path(simulation.snapshot_directory)
-        outputs = {
-            path.relative_to(directory).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
-            for path in directory.rglob("*")
-            if path.is_file() and "checkpoints" not in path.relative_to(directory).parts
-            and path.suffix in {".npy", ".csv", ".txt", ".dat"}
-        }
-        reference_path = root / f"{label}.npz"
-        if creating:
-            if reference_path.exists():
-                raise FileExistsError(f"Refusing to overwrite {reference_path}")
-            np.savez(reference_path, **state)
-            manifest[label] = {"outputs": outputs, "state_digest": _state_digest(state)}
-        else:
-            with np.load(reference_path, allow_pickle=False) as reference:
-                assert set(reference.files) == set(state), f"State keys changed: {label}"
-                changed = [key for key in state if _array_digest(state[key]) != _array_digest(reference[key])]
-                assert not changed, f"State/energy changed: {label}: {changed}"
-            expected = manifest[label]["outputs"]
-            changed = [key for key in set(expected) | set(outputs) if expected.get(key) != outputs.get(key)]
-            allowed = {"rotational_velocity.dat", "rotation_frames.csv"} if allow_rotation_changes else set()
-            unexpected = [key for key in changed if key not in allowed]
-            assert not unexpected, f"Saved outputs changed: {label}: {unexpected}"
-        energies = state["energy_values"]
-        column = list(state["energy_columns"]).index("E_total")
-        print(f"PASS: {label}: {len(energies)} energy samples; "
-              f"E_total={energies[0, column]:.15e} -> {energies[-1, column]:.15e}; "
-              f"{len(outputs)} output files" + (" (reference saved)" if creating else
-              " (bitwise identical except approved rotation outputs)" if allow_rotation_changes else " (bitwise identical)"))
-    if creating:
-        manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    return True
-
-
 def check_solver_compatibility() -> bool:
     """Reject unsupported gas steps before output or physical state changes."""
     simulation, components = build_scenario("wave_baryons_gas")
@@ -869,8 +817,7 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "mode",
-        choices=("baseline", "compare", "restart-check", "segment-check", "compatibility-check",
-                 "diagnostics-baseline", "diagnostics-check"),
+        choices=("baseline", "compare", "restart-check", "segment-check", "compatibility-check"),
         help=(
             "Create references, compare them, verify checkpoint continuation, "
             "or verify endpoint composition."
@@ -887,10 +834,6 @@ def _parse_args() -> argparse.Namespace:
         type=Path,
         default=DEFAULT_BASELINE_DIR,
         help="Ignored directory holding reference arrays and reports.",
-    )
-    parser.add_argument(
-        "--allow-rotation-changes", action="store_true",
-        help="Allow only rotation curve/frame files to differ in diagnostics-check; grids and energies stay exact.",
     )
     parser.add_argument(
         "--overwrite",
@@ -922,8 +865,6 @@ def main() -> int:
             baseline_dir=baseline_dir,
             scenario_names=scenario_names,
         )
-    elif args.mode in ("diagnostics-baseline", "diagnostics-check"):
-        passed = check_diagnostics_outputs(args.mode, baseline_dir, args.allow_rotation_changes)
     elif args.mode == "compatibility-check":
         passed = check_solver_compatibility()
     else:

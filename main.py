@@ -9,10 +9,80 @@ from resources.Classes.Nbody_classes.Baryonic_N_body import Baryons
 a, b = -5, 5  # Domain boundaries
 N = 128 # Number of spatial points
 
-# Initialize the Wave_function instance
-
 
 '''
+# Initialize the Wave_function instance
+from examples._runtime import configure_cuda_on_windows
+
+configure_cuda_on_windows()
+
+import cupy as cp
+from resources.Classes.Simulation_Class import Simulation_Class
+from resources.Classes.Nbody_classes.NBodyGas import NBodyGas
+
+
+sim = Simulation_Class(
+    dim=3,
+    boundaries=[(-10, 10)] * 3,
+    N=128,
+    total_time=0.05,
+    h=0.0001,
+    order_of_evolution=2,
+    use_gravity=True,
+    use_units=True,
+    use_sponge=False,
+    self_int=False,
+    save_max_vals=True,
+)
+
+# Disk parameters: kpc, Msun, km/s
+disk_mass = 1.0e9
+scale_radius = 2.0
+scale_height = 0.5
+rotation_speed = 40.0
+sound_speed = 10.0
+core_radius = 0.5
+
+km_s_to_kpc_gyr = 1.022712165
+
+x, y, z = [cp.asarray(grid) for grid in sim.grids]
+
+# Height along the tilted axis, and cylindrical radius around it
+height = (x + y) / cp.sqrt(2.0)
+u = (x - y) / cp.sqrt(2.0)
+R = cp.sqrt(u**2 + z**2)
+
+rho = cp.exp(-R / scale_radius)
+rho *= cp.exp(-0.5 * (height / scale_height)**2)
+rho = cp.maximum(rho, 1e-12)
+rho *= disk_mass / (cp.sum(rho) * sim.dV)
+
+# Smooth rotation: solid-body near the center, nearly flat outside
+omega = (
+    rotation_speed * km_s_to_kpc_gyr
+    / cp.sqrt(R**2 + core_radius**2)
+)
+
+gas = NBodyGas(
+    simulation=sim,
+    rho=rho,
+    vx=omega * z / cp.sqrt(2.0),
+    vy=-omega * z / cp.sqrt(2.0),
+    vz=-omega * u,
+    cs=sound_speed * km_s_to_kpc_gyr,
+    gamma=5.0 / 3.0,
+    cfl=0.4,
+    max_substeps=100,
+    name="gas",
+)
+
+sim.add_baryons(gas)
+sim.evolve(save_every=20, diagnostics_every=20)
+
+print(sim.snapshot_directory)
+
+'''
+
 sim = Simulation_Class(
 
     dim=3, # 2D simulation
@@ -53,10 +123,10 @@ wave_vector = Wave_vector_class(
 sim.add_wave_vector(wave_vector)
 
 
-sim.evolve(save_every=50)
+sim.evolve(save_every=100)
+
+
 '''
-
-
 sim = Simulation_Class.from_checkpoint(
     "resources/data/simulation_20261002_215726_387710"
 )
@@ -64,7 +134,7 @@ sim.resume(save_every=50)
 print(sim.current_step)  # mělo by vypsat 250
 
 
-
+'''
 
 
 x_vals = cp.linspace(a, b, N, endpoint=False)

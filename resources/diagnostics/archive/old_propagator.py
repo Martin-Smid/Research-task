@@ -1,3 +1,8 @@
+
+# Historical snapshot/migration: retained for review, not for execution.
+if __name__ == "__main__":
+    raise SystemExit("Archived file; use the documented active diagnostics instead.")
+
 import cupy as cp
 import numpy as np
 #np.random.seed(1)
@@ -32,11 +37,6 @@ class Propagator_Class:
         self.static_potential_propagator = self.simulation.static_potential if self.simulation.static_potential is not None else None
         self.gravity_propagator = None
         self.gravity_potential=None
-        # Fixed grid: retain the original division order in every Poisson solve.
-        k_squared = sum(k ** 2 for k in self.k_space)
-        self._poisson_zero = k_squared == 0
-        k_squared[self._poisson_zero] = 1.0
-        self._poisson_denominator = k_squared.astype(cp.complex128)
         if not self.simulation.use_units:
             self.h_bar_tilde = 1
             self.h_bar = 1
@@ -185,8 +185,16 @@ class Propagator_Class:
             density = self.simulation.external_density
 
         density_k = cp.fft.fftn((density - cp.mean(density)).astype(cp.complex128))
-        potential_k = (-4 * cp.pi * self.G * density_k) / self._poisson_denominator
-        potential_k[self._poisson_zero] = 0.0
+        k_squared_sum = sum(k ** 2 for k in self.k_space)
+
+
+        k_squared_softened = k_squared_sum
+
+        mask_zero = k_squared_softened == 0
+        k_squared_softened[mask_zero] = 1.0
+
+        potential_k = (-4 * cp.pi * self.G * density_k) / k_squared_softened.astype(cp.complex128)
+        potential_k[mask_zero] = 0.0
 
         potential = cp.fft.ifftn(potential_k).real.astype(cp.float64)
         return potential
@@ -195,26 +203,26 @@ class Propagator_Class:
         """
         Compute acceleration grids a = -∇Phi on the simulation grid.
         Returns force components as cp.float64 grids, handling arbitrary dimensions.
-        
+
         Returns:
             tuple: (Fx, Fy, Fz) where missing dimensions are zero arrays
         """
         Phi_k = cp.fft.fftn(potential.astype(cp.complex128))
-        
+
         # Create zero arrays for all three spatial dimensions
         shape = potential.shape
         Fx = cp.zeros(shape, dtype=cp.float64)
         Fy = cp.zeros(shape, dtype=cp.float64)
         Fz = cp.zeros(shape, dtype=cp.float64)
-        
+
         # Only compute forces for dimensions that exist
         if self.dim >= 1:
             Fx = cp.fft.ifftn((-1j) * self.k_space[0] * Phi_k).real.astype(cp.float64)
-        
+
         if self.dim >= 2:
             Fy = cp.fft.ifftn((-1j) * self.k_space[1] * Phi_k).real.astype(cp.float64)
-        
+
         if self.dim >= 3:
             Fz = cp.fft.ifftn((-1j) * self.k_space[2] * Phi_k).real.astype(cp.float64)
-        
+
         return Fx, Fy, Fz

@@ -1,0 +1,9 @@
+{
+  "original_baselines_untouched": true,
+  "energy_and_grid_benchmarks": 7,
+  "energy_samples": 49,
+  "saved_outputs_identical": 148,
+  "match": "bitwise",
+  "restart_match": "bitwise",
+  "endpoint_comparisons_unchanged": true
+}

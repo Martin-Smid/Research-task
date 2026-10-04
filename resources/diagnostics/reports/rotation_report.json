@@ -1,0 +1,14 @@
+{
+  "original_baselines_untouched": true,
+  "original_grid_energy_match": "bitwise",
+  "detailed_benchmarks": 7,
+  "energy_samples": 49,
+  "approved_changed_files": [
+    "rotational_velocity.dat",
+    "rotation_frames.csv"
+  ],
+  "restart_match": "bitwise",
+  "segment_comparisons_unchanged": true,
+  "analytic_tests_passed": 8,
+  "plotting_preview_verified": true
+}

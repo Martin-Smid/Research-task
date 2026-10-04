@@ -12,3 +12,11 @@ __pycache__/
 .research-task/
 verify_spin_tensors.py
 tests
+# Frozen reference arrays and diagnostics source stay versioned.
+resources/diagnostics/runtime/
+resources/diagnostics/logs/
+resources/diagnostics/baselines/checkpoint_diagnostics/
+resources/diagnostics/baselines/**/restart_runs/
+resources/diagnostics/baselines/**/segment_runs/
+resources/diagnostics/baselines/**/latest_*.json
+resources/diagnostics/reports/*.png

@@ -15,7 +15,10 @@ def _latest_simulation_directory():
                   if p.is_dir() and (p / "rotational_velocity.dat").is_file()]
     if not candidates:
         raise FileNotFoundError(f"No saved rotation curves under {DATA_DIRECTORY}")
-    return max(candidates, key=lambda p: p.name)
+    for directory in sorted(candidates, key=lambda p: p.name, reverse=True):
+        if not pd.read_csv(directory / "rotational_velocity.dat", nrows=1).empty:
+            return directory
+    raise FileNotFoundError(f"No recorded rotation curves under {DATA_DIRECTORY}")
 
 
 def _component_kinds(directory):

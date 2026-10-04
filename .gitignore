@@ -12,3 +12,5 @@ __pycache__/
 .research-task/
 verify_spin_tensors.py
 tests
+# Developer diagnostics belong to working_with_chat, not main.
+resources/diagnostics/

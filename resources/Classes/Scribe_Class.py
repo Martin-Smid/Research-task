@@ -1,4 +1,5 @@
 import os
+import csv
 import datetime
 import json
 import subprocess
@@ -547,7 +548,7 @@ class Scribe:
         df.to_csv(self.trajectory_path, mode='a', header=False, index=False)
         self.trajectory_log = []  # Clear memory
 
-    def save_rotation_curve(self, time, component_name, R_centers, vphi_mean, vphi_std, weights):
+    def save_rotation_curve(self, time, component_name, R_centers, vphi_mean, vphi_std, weights, frame=None):
         """
         Append one component's rotation curve to rotational_velocity.dat
     
@@ -560,6 +561,24 @@ class Scribe:
         R_centers, vphi_mean, vphi_std, weights : array-like
             Rotation-curve data returned by compute_rotation_curve().
         """
+        if frame is not None:
+            path = Path(self.snapshot_directory) / "rotation_frames.csv"
+            new_file = not path.exists()
+            with path.open("a", newline="", encoding="utf-8") as handle:
+                writer = csv.writer(handle)
+                if new_file:
+                    writer.writerow(["time", "component", "center_x", "center_y", "center_z",
+                                     "bulk_vx", "bulk_vy", "bulk_vz", "axis_x", "axis_y", "axis_z",
+                                     "rmax", "zmax", "mass_fraction", "enclosed_mass_fraction", "axis_coherence",
+                                     "status", "length_unit", "velocity_unit", "mass_unit", "time_unit"])
+                length_unit = self.simulation.dUnits if self.simulation.use_units else "simulation"
+                velocity_unit = f"{length_unit}/{self.simulation.tUnits}" if self.simulation.use_units else "simulation"
+                mass_unit = self.simulation.mUnits if self.simulation.use_units else "simulation"
+                writer.writerow([time, component_name, *frame["center"], *frame["bulk_velocity"],
+                                 *frame["axis"], frame["rmax"], frame["zmax"], frame["mass_fraction"],
+                                 frame["enclosed_mass_fraction"], frame["axis_coherence"], frame["status"],
+                                 length_unit, velocity_unit, mass_unit,
+                                 self.simulation.tUnits if self.simulation.use_units else "simulation"])
         if R_centers is None or len(R_centers) == 0:
             return
     

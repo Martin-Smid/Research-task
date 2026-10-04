@@ -1,7 +1,9 @@
 import cupy as cp
 import numpy as np
 from resources.Classes.Nbody_classes.Sink_N_Body import check_and_create_gas_sinks, SinkNBody
+from resources.Classes.Nbody_classes.NBodyGas import NBodyGas
 from resources.Classes.Scribe_Class import Scribe
+from resources.Classes.Diagnostics_Class import Diagnostics
 from resources.Functions.checkpointing import save_checkpoint
 import os
 from tqdm import tqdm
@@ -28,6 +30,7 @@ class Evolution_Class:
         self.simulation = simulation
         self.propagator = propagator
         self.scribe = Scribe(self.simulation)
+        self.diagnostics = Diagnostics(simulation, propagator, self._compute_sink_potential_analytic_kspace)
         self.h = simulation.h
         self.num_steps = simulation.num_steps
         self.total_time = simulation.total_time
@@ -70,6 +73,8 @@ class Evolution_Class:
         Returns:
             list: List of wave function instances with evolved .psi attributes
         """
+        if self.order != 2 and any(isinstance(sys, NBodyGas) for sys in self.simulation.baryonic_matter):
+            raise ValueError("Gas supports order_of_evolution=2 only; orders 4 and 6 contain negative substeps.")
         save_every = max(1, save_every)
         # TODO: check this - energy diagnostics are intentionally independent of snapshots.
         diagnostics_every = max(1, int(diagnostics_every))
@@ -287,7 +292,7 @@ class Evolution_Class:
                 self._compute_and_save_rotation_curves(
                     current_time=current_time,
                     nbins=40,
-                    rmax=15.0,
+                    rmax=None,
                     zmax_gas=1.0,
                     zmax_stars=2.0
                 )
@@ -382,17 +387,18 @@ class Evolution_Class:
     def _evolve_order_2(self, wave_functions, total_density, is_first, is_last, save_step):
         """Second-order split-step evolution."""
 
+        gravity_fields = None
         if wave_functions:
             # Interior kick pairs are combined into one full kick. Only the
             # opening kick of the first step is halved here; the closing half
             # kick is applied explicitly after the final drift below.
-            self._kick_all_wave_functions(wave_functions, total_density, is_first, False)
+            gravity_fields = self._kick_all_wave_functions(wave_functions, total_density, is_first, False)
 
         # is there baryonic matter in the sim?
         if self.simulation.baryonic_matter:
-            # TODO: check this - total_density is already available; the old recomputation was unused.
-            phi_sink = self._compute_sink_potential_analytic_kspace()
-            phi_environment = self.propagator.compute_gravity_potential(total_density)
+            if gravity_fields is None:
+                gravity_fields = self._compute_gravity_fields(total_density)
+            phi_environment, phi_sink = gravity_fields
             phi_total = phi_environment + phi_sink
 
             forces_environment = self.propagator.compute_force_grids_from_potential(phi_environment)
@@ -443,15 +449,17 @@ class Evolution_Class:
                 first_op = False
                 last_op = False
 
+                gravity_fields = None
                 if wave_functions:
-                    self._kick_all_wave_functions(wave_functions, total_density, first_op, last_op, coeff_key)
+                    gravity_fields = self._kick_all_wave_functions(wave_functions, total_density, first_op, last_op, coeff_key)
 
                 # Evolve baryons at appropriate kick steps
                 if self.simulation.baryonic_matter:
-                    phi_sink = self._compute_sink_potential_analytic_kspace()
                     time_factor = self.coefficients[coeff_key]
 
-                    phi_environment = self.propagator.compute_gravity_potential(total_density)
+                    if gravity_fields is None:
+                        gravity_fields = self._compute_gravity_fields(total_density)
+                    phi_environment, phi_sink = gravity_fields
                     phi_total = phi_environment + phi_sink
 
                     forces_environment = self.propagator.compute_force_grids_from_potential(phi_environment)
@@ -495,15 +503,17 @@ class Evolution_Class:
                 first_op = False
                 last_op = False
 
+                gravity_fields = None
                 if wave_functions:
-                    self._kick_all_wave_functions(wave_functions, total_density, first_op, last_op, coeff_key)
+                    gravity_fields = self._kick_all_wave_functions(wave_functions, total_density, first_op, last_op, coeff_key)
 
                 # Evolve baryons at appropriate kick steps
                 if self.simulation.baryonic_matter:
-                    phi_sink = self._compute_sink_potential_analytic_kspace()
                     time_factor = self.coefficients[coeff_key]
 
-                    phi_environment = self.propagator.compute_gravity_potential(total_density)
+                    if gravity_fields is None:
+                        gravity_fields = self._compute_gravity_fields(total_density)
+                    phi_environment, phi_sink = gravity_fields
                     phi_total = phi_environment + phi_sink
 
                     forces_environment = self.propagator.compute_force_grids_from_potential(phi_environment)
@@ -532,15 +542,17 @@ class Evolution_Class:
 
 
 
+    def _compute_gravity_fields(self, total_density):
+        """Fresh fields for one stage; never cached across drifts or accretion."""
+        return (self.propagator.compute_gravity_potential(total_density),
+                self._compute_sink_potential_analytic_kspace())
+
     def _kick_all_wave_functions(self, wave_functions, total_density, is_first_step, is_last_step, time_factor_key='full'):
         """Apply kick step to all wave functions with shared density."""
         time_factor = self.coefficients[time_factor_key]
         edge_factor = 0.5 if (is_first_step or is_last_step) else 1.0
 
-        # TODO: check this - gravity depends on shared density, so solve Poisson once per kick.
-        gravity_potential = self.propagator.compute_gravity_potential(total_density)
-        
-        phi_sink = self._compute_sink_potential_analytic_kspace()
+        gravity_potential, phi_sink = self._compute_gravity_fields(total_density)
         
 
         dt_step = self.h * time_factor * edge_factor
@@ -564,6 +576,7 @@ class Evolution_Class:
 
             wf.psi *= full_propagator * bh_propagator
 
+        return gravity_potential, phi_sink
 
 
     def _drift_all_wave_functions(self, wave_functions, time_factor_key='full'):
@@ -603,197 +616,30 @@ class Evolution_Class:
         )
 
     def compute_total_energy(self, wave_functions, total_density, current_time):
-        """Compute all energy components (waves + baryons) and log them."""
-        K_flow, U_quantum, K_baryons = self._compute_kinetic_energy(wave_functions)
-        K_total = K_flow + U_quantum + K_baryons
-
-        W_self, W_static, W_total = self._compute_potential_energy(
-            wave_functions, total_density, current_time
+        """Calculate diagnostics and keep the existing logging/return interface."""
+        values = self.diagnostics.compute_energy(wave_functions, total_density, current_time)
+        self.K_flow, self.U_quantum, self.K_baryons = (
+            values["K_flow"], values["U_quantum"], values["K_baryons"]
         )
-
-        U_iso_total = 0.0
-        E_diss_total = 0.0
-        #E_rad_total = 0.0   might need later
-
-        if hasattr(self.simulation, 'baryonic_matter') and self.simulation.baryonic_matter:
-            for sys in self.simulation.baryonic_matter:
-                if self._is_sink_system(sys):
-                    # assume these are cumulative totals
-                    E_diss_total += float(getattr(sys, 'E_diss_kin_total', 0.0))
-                    E_diss_total += float(getattr(sys, 'E_diss_formation_total', 0.0))
-
-
-
-                for sys in self.simulation.baryonic_matter:
-                    if sys.__class__.__name__.lower().endswith("gas"):
-                        if hasattr(sys, "internal_energy"):
-                            U_iso_total += float(sys.internal_energy())
-
-                # **Optional: if you already track radiated energy on gas**
-                #if hasattr(sys, "E_radiated"):
-                #    E_rad_total += float(sys.E_radiated)
-
-        # Pass energies to scribe for logging
-        self.scribe.log_energy_detailed(
-            current_time,
-            K_total=float(K_total),
-            W=float(W_total),
-            U_iso=float(U_iso_total),
-            K_flow=float(K_flow),
-            U_quantum=float(U_quantum),
-            K_baryons=float(K_baryons),
-            W_self=float(W_self),
-            W_static=float(W_static),
-            E_diss=float(E_diss_total )  # add + E_rad_total
-        )
-
-        return K_total, W_total, K_flow, U_quantum, K_baryons, W_self, W_static
+        self.W_self, self.W_static = values["W_self"], values["W_static"]
+        self.last_kinetic_energy = self.diagnostics.last_kinetic_energy
+        self.scribe.log_energy_detailed(current_time, **{key: float(value) for key, value in values.items()})
+        return tuple(values[key] for key in
+                     ("K_total", "W", "K_flow", "U_quantum", "K_baryons", "W_self", "W_static"))
 
     def _compute_potential_energy(self, wave_functions, total_density, current_time):
-        """
-        Compute potential energy including wave self-gravity, sink analytic potential,
-        and the missing cross-terms (wave <-> sink).
-
-        W = 1/2 ∫ rho_w * phi_w dV
-          + 1/2 ∫ rho_s * phi_s dV
-          +     ∫ rho_w * phi_s dV
-          +     ∫ rho_s * phi_w dV
-          +     ∫ (rho_w + rho_s) * phi_static dV  (if any)
-        """
-        dV = float(self.simulation.dV)
-
-        rho_w = total_density
-        phi_w = self.propagator.compute_gravity_potential(rho_w)  # from wave density only
-        phi_s = self._compute_sink_potential_analytic_kspace()  # analytic sinks (all sinks)
-
-        # sinks deposited on grid (for energy integrals)
-        rho_s = cp.zeros_like(rho_w)
-        if getattr(self.simulation, "baryonic_matter", None):
-            for sys in self.simulation.baryonic_matter:
-                if self._is_sink_system(sys):
-                    rho_s += sys.deposit_to_grid()
-
-        # self terms
-        W_w_self = 0.5 * cp.sum(rho_w * phi_w) * dV
-        W_s_self = 0.5 * cp.sum(rho_s * phi_s) * dV
-
-        W_cross = 0.5 * (cp.sum(rho_w * phi_s) + cp.sum(rho_s * phi_w)) * dV
-
-        W_static = 0.0
-        if self.simulation.static_potential is not None:
-            phi_static = self.simulation.static_potential(self.simulation)
-            W_static = cp.sum((rho_w + rho_s) * cp.real(phi_static)) * dV
-
-        W_total = cp.real(W_w_self + W_s_self + W_cross + W_static)
-
-        self.W_self = cp.real(W_w_self + W_s_self + W_cross)  # pokud chceš mít "self" jako všechno bez static
-        self.W_static = cp.real(W_static)
-
-        return self.W_self, self.W_static, W_total
+        values = self.diagnostics._compute_potential_energy(wave_functions, total_density, current_time)
+        self.W_self, self.W_static = values[:2]
+        return values
 
     def _compute_kinetic_energy(self, wave_functions):
-        """Compute kinetic energy: flow + quantum (waves) + baryons."""
-        dx = np.prod(self.simulation.dx)
-        k_space = self.simulation.k_space
-
-        K_flow_total = 0.0
-        U_quantum_total = 0.0
-
-        # --- wavefunctions ---
-        for wf in wave_functions:
-            rho = wf.calculate_density()  # |ψ|²
-            sqrt_rho = cp.sqrt(rho + 1e-30)  # Add small value to avoid division by zero
-
-            # Compute gradients in Fourier space
-            psi_k = cp.fft.fftn(wf.psi)
-            sqrt_rho_k = cp.fft.fftn(sqrt_rho)
-
-            grad_psi_squared = cp.zeros_like(rho, dtype=cp.float64)
-            grad_sqrt_rho_squared = cp.zeros_like(rho, dtype=cp.float64)
-
-            # Loop over spatial dimensions to compute gradients
-            for dim in range(self.simulation.dim):
-                # Gradient of psi: ∇ψ = iFFT(ik * FFT(ψ))
-                grad_psi_dim = cp.fft.ifftn(1j * k_space[dim] * psi_k)
-                grad_psi_squared += cp.abs(grad_psi_dim) ** 2
-
-                # Gradient of sqrt(rho): ∇√ρ = iFFT(ik * FFT(√ρ))
-                grad_sqrt_rho_dim = cp.fft.ifftn(1j * k_space[dim] * sqrt_rho_k)
-                grad_sqrt_rho_squared += cp.abs(grad_sqrt_rho_dim) ** 2
-
-            # U_quantum = (ℏ²/2m) ∫ |∇√ρ|² dV
-            U_quantum = 0.5 * self.simulation.h_bar_tilde ** 2 * cp.sum(grad_sqrt_rho_squared) * dx
-
-            # K_total_this_wf = (ℏ²/2m) ∫ |∇ψ|² dV
-            K_total_this_wf = 0.5 * self.simulation.h_bar_tilde ** 2 * cp.sum(grad_psi_squared) * dx
-            K_flow = K_total_this_wf - U_quantum
-
-            K_flow_total += K_flow
-            U_quantum_total += U_quantum
-
-        # --- baryons: ½ m v² summed over ALL particles in ALL systems ---
-        K_baryons = 0.0
-        if getattr(self.simulation, 'baryonic_matter', None):
-            for baryons in self.simulation.baryonic_matter:
-                if hasattr(baryons, "kinetic_energy"):
-                    K_baryons += baryons.kinetic_energy()
-
-
-        # Store for possible simple logging
-        self.K_flow = K_flow_total
-        self.U_quantum = U_quantum_total
-        self.K_baryons = K_baryons
-        self.last_kinetic_energy = K_flow_total + U_quantum_total + K_baryons
-
-        return K_flow_total, U_quantum_total, K_baryons
+        values = self.diagnostics._compute_kinetic_energy(wave_functions)
+        self.K_flow, self.U_quantum, self.K_baryons = values
+        self.last_kinetic_energy = self.diagnostics.last_kinetic_energy
+        return values
 
     def _compute_and_save_radial_profile(self, total_density, current_time, ix, iy, iz, Nbins=250):
-        """Compute and save the spherically averaged radial density profile."""
-        dx = self.simulation.dx
-        BoxSize = [b[1] - b[0] for b in self.simulation.boundaries]
-        rho = total_density
-
-        grid_x = cp.asarray(self.simulation.grids[0])
-        grid_y = cp.asarray(self.simulation.grids[1])
-        grid_z = cp.asarray(self.simulation.grids[2])
-
-        center_x = grid_x[ix, iy, iz]
-        center_y = grid_y[ix, iy, iz]
-        center_z = grid_z[ix, iy, iz]
-
-        # Compute shifted periodic coordinates
-        Delta_x = grid_x - center_x
-        Delta_y = grid_y - center_y
-        Delta_z = grid_z - center_z
-
-        Delta_x -= cp.copysign(BoxSize[0], Delta_x) * (cp.abs(Delta_x) > BoxSize[0] / 2)
-        Delta_y -= cp.copysign(BoxSize[1], Delta_y) * (cp.abs(Delta_y) > BoxSize[1] / 2)
-        Delta_z -= cp.copysign(BoxSize[2], Delta_z) * (cp.abs(Delta_z) > BoxSize[2] / 2)
-
-        r = cp.sqrt(Delta_x ** 2 + Delta_y ** 2 + Delta_z ** 2)
-
-        # Transfer to CPU
-        r_cpu = cp.asnumpy(r).ravel()
-        rho_cpu = cp.asnumpy(rho).ravel()
-
-        # Create radial bins
-        max_radius = 0.95 * 0.5 * min(BoxSize)
-        bins = np.concatenate(([0.0], np.geomspace(0.003, max_radius, Nbins)))
-
-        # Compute mean density per bin
-        mass_in_bin = []
-        for i in range(Nbins):
-            mask = (r_cpu > bins[i]) & (r_cpu <= bins[i + 1])
-            if np.any(mask):
-                r_avg = 0.5 * (bins[i] + bins[i + 1])
-                rho_mean = rho_cpu[mask].mean()
-                mass_in_bin.append((r_avg, rho_mean))
-
-        mass_in_bin = np.array(mass_in_bin)
-        bin_centers = mass_in_bin[:, 0]
-        rho_avg = mass_in_bin[:, 1]
-
-        # Save via scribe
+        bin_centers, rho_avg = self.diagnostics.compute_radial_profile(total_density, ix, iy, iz, Nbins)
         self.scribe.save_radial_density_profile(bin_centers, rho_avg, current_time)
 
     def _calculate_coefficients_and_propagators(self):
@@ -1318,45 +1164,8 @@ class Evolution_Class:
         return phi_sink
 
     def _compute_and_save_rotation_curves(self, current_time, nbins=40, rmax=None, zmax_gas=1.0, zmax_stars=2.0):
-        """
-        Compute and save rotation curves for all baryonic components that implement
-        compute_rotation_curve().
-        """
-        if not getattr(self.simulation, "baryonic_matter", None):
-            return
-    
-        for i, sys in enumerate(self.simulation.baryonic_matter):
-            if not hasattr(sys, "compute_rotation_curve"):
-                continue
-    
-            # choose a readable component name
-            if self._is_gas_system(sys):
-                component_name = "gas"
-                zmax = zmax_gas
-            elif self._is_sink_system(sys):
-                continue   # sink does not have a meaningful rotation curve here
-            else:
-                # try to distinguish particle components
-                component_name = getattr(sys, "name", f"baryons_{i}")
-                zmax = zmax_stars
-    
-            try:
-                R, vphi, sigma, weights = sys.compute_rotation_curve(
-                    nbins=nbins,
-                    center=(0.0, 0.0, 0.0),
-                    zmax=zmax,
-                    rmax=rmax
-                )
-                self.scribe.save_rotation_curve(
-                    time=current_time,
-                    component_name=component_name,
-                    R_centers=R,
-                    vphi_mean=vphi,
-                    vphi_std=sigma,
-                    weights=weights
-                )
-            except Exception as e:
-                print(f"[Evolution] Warning: could not compute rotation curve for {component_name}: {e}")
+        for values in self.diagnostics.compute_rotation_curves(nbins, rmax, zmax_gas, zmax_stars):
+            self.scribe.save_rotation_curve(time=current_time, **values)
 
     def _is_gas_system(self, sys):
         """Check if a baryonic system is a gas system."""

@@ -311,14 +311,6 @@ class NBody:
             contribution = mass_val * w
             cupyx.scatter_add(rho_flat, flat_indices, contribution)
 
-        # optional sanity checks (you can keep these)
-        total_deposited = cp.sum(rho_grid) * cell_volume
-        expected_mass = self.N * self.m_particle
-        error = abs(total_deposited - expected_mass) / expected_mass
-
-        if error > 1e-6:
-            print(f"⚠️  MASS CONSERVATION ERROR: {error:.3e}")
-
         self._density_cache = rho_grid
         self._density_cache_valid = True
         return self._density_cache

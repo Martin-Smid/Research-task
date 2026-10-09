@@ -32,6 +32,7 @@ class Propagator_Class:
         self.static_potential_propagator = self.simulation.static_potential if self.simulation.static_potential is not None else None
         self.gravity_propagator = None
         self.gravity_potential=None
+        self._a_s_code = None  # (a_s in cm, a_s in code length units)
         # Fixed grid: retain the original division order in every Poisson solve.
         k_squared = sum(k ** 2 for k in self.k_space)
         self._poisson_zero = k_squared == 0
@@ -109,8 +110,10 @@ class Propagator_Class:
         if not self.simulation.use_self_int:
             return cp.zeros_like(psi, dtype=cp.float64)
 
-        a_s = (self.simulation.a_s * units.cm).to(f"{self.simulation.dUnits}").value
-        return self.get_self_int_potential(density, psi, a_s)
+        if self._a_s_code is None or self._a_s_code[0] != self.simulation.a_s:
+            a_s = (self.simulation.a_s * units.cm).to(f"{self.simulation.dUnits}").value
+            self._a_s_code = (self.simulation.a_s, a_s)
+        return self.get_self_int_potential(density, psi, self._a_s_code[1])
 
     def compute_sponge_potential(self):
         """Get sponge potential - computed in simulation class ."""

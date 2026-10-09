@@ -172,18 +172,14 @@ class Diagnostics:
         max_radius = 0.95 * 0.5 * min(BoxSize)
         bins = np.concatenate(([0.0], np.geomspace(0.003, max_radius, Nbins)))
 
-        # Compute mean density per bin
-        mass_in_bin = []
-        for i in range(Nbins):
-            mask = (r_cpu > bins[i]) & (r_cpu <= bins[i + 1])
-            if np.any(mask):
-                r_avg = 0.5 * (bins[i] + bins[i + 1])
-                rho_mean = rho_cpu[mask].mean()
-                mass_in_bin.append((r_avg, rho_mean))
-
-        mass_in_bin = np.array(mass_in_bin)
-        bin_centers = mass_in_bin[:, 0]
-        rho_avg = mass_in_bin[:, 1]
+        # Compute mean density per bin in one pass: bin i holds bins[i] < r <= bins[i + 1]
+        index = np.searchsorted(bins, r_cpu) - 1
+        inside = (index >= 0) & (index < Nbins)
+        counts = np.bincount(index[inside], minlength=Nbins)
+        sums = np.bincount(index[inside], weights=rho_cpu[inside], minlength=Nbins)
+        filled = counts > 0
+        bin_centers = (0.5 * (bins[:-1] + bins[1:]))[filled]
+        rho_avg = sums[filled] / counts[filled]
 
         return bin_centers, rho_avg
 

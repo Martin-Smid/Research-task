@@ -1,0 +1,32 @@
+﻿{
+    "created":  "2026-10-09",
+    "gpu":  "NVIDIA GeForce RTX 3070 Laptop GPU",
+    "generated_from_commit":  "5d75e65 (unchanged tracked code)",
+    "sha256":  {
+                   "chat_regression_baselines/manifest.json":  "82D50B8C7F194AF6813D506169307902A72A912A510B30875D243309E2809568",
+                   "chat_regression_baselines/wave.npz":  "98880DED1C0F979A6829B7A6AAA3CED64D60B71A6195F61FBB55ABA7554E938C",
+                   "chat_regression_baselines/wave_baryons.npz":  "5D1863B7D7DE9A1488DFC442B5282899F0DEDE31F1FD8EC6CFE9C0F7E986F853",
+                   "chat_regression_baselines/wave_baryons_gas.npz":  "B8606DD60B56F75C62F18998A75C32111837023D78F13E5A0CA4CC18E43E43C6",
+                   "chat_regression_baselines/wave_baryons_gas_sink.npz":  "A808CD1BAB0323173CC19A7621F85356C96BCFDED746553913401625D597CFE5",
+                   "chat_regression_baselines/diagnostics/manifest.json":  "07811E9DA1328A581D7E63DFCEE1BB8C36771AC9FF528261AB9B1256A3005A41",
+                   "chat_regression_baselines/diagnostics/wave_baryons_gas_order2.npz":  "6638306FC282A3223701A4592300FDA249470E451E01A258F6AA5CACCF92E69B",
+                   "chat_regression_baselines/diagnostics/wave_baryons_gas_sink_order2.npz":  "2ABD992DA5FCAC7B672A6FDDDD0F3786E5CC29FB70CA53B230D337BABFF69FAC",
+                   "chat_regression_baselines/diagnostics/wave_baryons_order2.npz":  "09C1EFFC7FC684F92856AF49DE8C119BE8CB2C1B2A08D3EDD4046A281D61DE28",
+                   "chat_regression_baselines/diagnostics/wave_baryons_order4.npz":  "62841B9B0728B44A026CEEBDA547292C10BFFCD11C7A62F8318B219922860BEC",
+                   "chat_regression_baselines/diagnostics/wave_baryons_order6.npz":  "8CE12C5E73816FA8E9D48D1CC033CD3BAD2E1EAD5618AC20D2FDECD4B99F614F",
+                   "chat_regression_baselines/diagnostics/wave_order2.npz":  "E9D0E38822720151571ABBA13EBE637134CBBAF40EAD3CDB40FFFD5DDED52D73",
+                   "chat_regression_baselines/diagnostics/wave_order2_static.npz":  "82E93CDD244B51329657C265258668B870EC58A118BBDF32059FF4FA55C1BBA6",
+                   "optimization_checks/baryons_only_2.npz":  "D25847C6664060D871111B490A0A452592EDB0474AF6A0D9BF6DB0490B0404D7",
+                   "optimization_checks/baryons_only_4.npz":  "E131C6ADA1FA045A97494F741D3EA6EDA746524E61DB1844569B2C6B90176CBA",
+                   "optimization_checks/baryons_only_6.npz":  "B07982767354EFEFBC8FF9479EEC07AC50D09F754536911134D06EF4F201181A",
+                   "optimization_checks/wave_2.npz":  "7AA530401E5816A640B609B6C12D7F2529E2C5F3581FF5B4B7E6AA9C04DE4F70",
+                   "optimization_checks/wave_4.npz":  "518411977CCACF6E40CD13937BEC11FBCF252AA7DA255EE806EEB8A4007F5523",
+                   "optimization_checks/wave_6.npz":  "9482DA408F7F4B6ACBFC3F99957B0936C21E717610ED28EC4CB7A524C4985248",
+                   "optimization_checks/wave_baryons_2.npz":  "DAA32E8372DD8528006FDD749D6C1807056CD3AF97AECD08F18DA948FD05CF57",
+                   "optimization_checks/wave_baryons_4.npz":  "3C29A1511A7FC648AF50E9EC7594F7451BE9AE808025530EE1CA685C548A4654",
+                   "optimization_checks/wave_baryons_6.npz":  "0DE71A8ED07062FEAE372B3CE91140375994B1824A445735B91FA1930B65FEB6",
+                   "optimization_checks/wave_baryons_sink_2.npz":  "86B05A20563C1537093BB1112F501A08A9909F407029F1DFDC476D506D7A4551",
+                   "optimization_checks/wave_baryons_sink_4.npz":  "47F959A6028DBF7CFC66AB9A2DBB8745AADFB415BCD39F8948DAF349AA54C126",
+                   "optimization_checks/wave_baryons_sink_6.npz":  "A6B5B72B3D2DB7763132031889C4000FDF8B7EF4E4EAE28412D74B367C9FA4E5"
+               }
+}

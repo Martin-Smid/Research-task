@@ -780,7 +780,8 @@ def check_endpoint_segments(
 
 
 def check_diagnostics_outputs(mode: str, baseline_dir: Path = DEFAULT_BASELINE_DIR,
-                              allow_rotation_changes: bool = False) -> bool:
+                              allow_rotation_changes: bool = False,
+                              allow_profile_changes: bool = False) -> bool:
     """Compare every energy sample, final state, and saved diagnostic/grid file exactly."""
     root = baseline_dir / "diagnostics"
     root.mkdir(parents=True, exist_ok=True)
@@ -821,6 +822,8 @@ def check_diagnostics_outputs(mode: str, baseline_dir: Path = DEFAULT_BASELINE_D
             expected = manifest[label]["outputs"]
             changed = [key for key in set(expected) | set(outputs) if expected.get(key) != outputs.get(key)]
             allowed = {"rotational_velocity.dat", "rotation_frames.csv"} if allow_rotation_changes else set()
+            if allow_profile_changes:
+                allowed |= {key for key in changed if key.startswith("density_profiles/")}
             unexpected = [key for key in changed if key not in allowed]
             assert not unexpected, f"Saved outputs changed: {label}: {unexpected}"
         energies = state["energy_values"]
@@ -828,7 +831,7 @@ def check_diagnostics_outputs(mode: str, baseline_dir: Path = DEFAULT_BASELINE_D
         print(f"PASS: {label}: {len(energies)} energy samples; "
               f"E_total={energies[0, column]:.15e} -> {energies[-1, column]:.15e}; "
               f"{len(outputs)} output files" + (" (reference saved)" if creating else
-              " (bitwise identical except approved rotation outputs)" if allow_rotation_changes else " (bitwise identical)"))
+              " (bitwise identical except approved rotation/profile outputs)" if allow_rotation_changes or allow_profile_changes else " (bitwise identical)"))
     if creating:
         manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return True
@@ -893,6 +896,10 @@ def _parse_args() -> argparse.Namespace:
         help="Allow only rotation curve/frame files to differ in diagnostics-check; grids and energies stay exact.",
     )
     parser.add_argument(
+        "--allow-profile-changes", action="store_true",
+        help="Allow only density_profiles/*.csv to differ in diagnostics-check (round-off from the one-pass profile); grids and energies stay exact.",
+    )
+    parser.add_argument(
         "--overwrite",
         action="store_true",
         help="Allow baseline mode to replace an existing reference.",
@@ -923,7 +930,8 @@ def main() -> int:
             scenario_names=scenario_names,
         )
     elif args.mode in ("diagnostics-baseline", "diagnostics-check"):
-        passed = check_diagnostics_outputs(args.mode, baseline_dir, args.allow_rotation_changes)
+        passed = check_diagnostics_outputs(args.mode, baseline_dir, args.allow_rotation_changes,
+                                           args.allow_profile_changes)
     elif args.mode == "compatibility-check":
         passed = check_solver_compatibility()
     else:

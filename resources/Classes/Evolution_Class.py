@@ -55,6 +55,8 @@ class Evolution_Class:
         self.sink_system = None
         self.sink_check_interval = 1
         self.sink_source = 'both'  #  'baryons', 'gas', or 'both'
+        self._sink_k_cache = None  # (k2, k, mask0): fixed by the grid
+        self._sink_soft_cache = {}  # Gaussian smoothing factors by softening length
 
         #values for checking conservations within gas
         self._ref_mass = None
@@ -195,8 +197,6 @@ class Evolution_Class:
         for step in tqdm(range(start_step, self.num_steps), desc="Simulation Progress", unit="step"):
             if step == 0:
                 print("starting evolution")
-            else:
-                total_density = self._compute_total_density(wave_functions)
             save_step = False
             current_time = step * self.h
 
@@ -401,7 +401,7 @@ class Evolution_Class:
             phi_environment, phi_sink = gravity_fields
             phi_total = phi_environment + phi_sink
 
-            forces_environment = self.propagator.compute_force_grids_from_potential(phi_environment)
+            forces_environment = self._sink_environment_forces(phi_environment)
             forces_total = self.propagator.compute_force_grids_from_potential(phi_total)
 
             for baryons in self.simulation.baryonic_matter:
@@ -462,7 +462,7 @@ class Evolution_Class:
                     phi_environment, phi_sink = gravity_fields
                     phi_total = phi_environment + phi_sink
 
-                    forces_environment = self.propagator.compute_force_grids_from_potential(phi_environment)
+                    forces_environment = self._sink_environment_forces(phi_environment)
                     forces_total = self.propagator.compute_force_grids_from_potential(phi_total)
 
                     for baryons in self.simulation.baryonic_matter:
@@ -516,7 +516,7 @@ class Evolution_Class:
                     phi_environment, phi_sink = gravity_fields
                     phi_total = phi_environment + phi_sink
 
-                    forces_environment = self.propagator.compute_force_grids_from_potential(phi_environment)
+                    forces_environment = self._sink_environment_forces(phi_environment)
                     forces_total = self.propagator.compute_force_grids_from_potential(phi_total)
 
                     for baryons in self.simulation.baryonic_matter:
@@ -541,6 +541,12 @@ class Evolution_Class:
         return wave_functions
 
 
+
+    def _sink_environment_forces(self, phi_environment):
+        """Forces without the sink potential; only sinks use them, so skip the FFTs otherwise."""
+        if not any(isinstance(b, SinkNBody) for b in self.simulation.baryonic_matter):
+            return None
+        return self.propagator.compute_force_grids_from_potential(phi_environment)
 
     def _compute_gravity_fields(self, total_density):
         """Fresh fields for one stage; never cached across drifts or accretion."""
@@ -1122,11 +1128,11 @@ class Evolution_Class:
             return cp.zeros(shape, dtype=cp.float64)
 
         # k-space grids from simulation (already used in your FFT Poisson)
-        kx, ky, kz = self.propagator.k_space  # cupy arrays from Simulation.create_k_space() 
-        k2 = kx*kx + ky*ky + kz*kz
-        k = cp.sqrt(k2)
-
-        mask0 = (k2 == 0)
+        kx, ky, kz = self.propagator.k_space  # cupy arrays from Simulation.create_k_space()
+        if self._sink_k_cache is None:
+            k2 = kx*kx + ky*ky + kz*kz
+            self._sink_k_cache = (k2, cp.sqrt(k2), k2 == 0)
+        k2, k, mask0 = self._sink_k_cache
 
         # cell volume for scaling: your density grid integrates with sum(rho)*dV
         #dV = float(np.prod(self.simulation.dx))
@@ -1140,8 +1146,11 @@ class Evolution_Class:
 
             #soft_bh = 1e-6
             #soft_cusp = 1
-            soft_bh = cp.exp(-0.5 * (k * eps_bh) ** 2)
-            soft_cusp = cp.exp(-0.5 * (k * eps_cusp) ** 2)
+            for eps in (eps_bh, eps_cusp):
+                if eps not in self._sink_soft_cache:
+                    self._sink_soft_cache[eps] = cp.exp(-0.5 * (k * eps) ** 2)
+            soft_bh = self._sink_soft_cache[eps_bh]
+            soft_cusp = self._sink_soft_cache[eps_cusp]
 
             for mbh, mres, pos in zip(cp.asnumpy(sink_sys.mass_bh),
                                       cp.asnumpy(sink_sys.mass_res),

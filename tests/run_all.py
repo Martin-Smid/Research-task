@@ -2,6 +2,7 @@
 
 from test_diagnostics_gas_internal_energy_once import main as test_diagnostics_gas_internal_energy_once
 from test_gas_adaptive_substeps import main as test_gas_adaptive_substeps
+from test_gas_free_fall_collapse import main as test_gas_free_fall_collapse
 from test_gas_gravity_energy import main as test_gas_gravity_energy
 from test_gas_gravity_work_conservation import main as test_gas_gravity_work_conservation
 from test_gas_internal_energy_positive import main as test_gas_internal_energy_positive
@@ -22,6 +23,7 @@ def main():
         ("emptied cells keep no momentum", test_gas_vacuum_cell_velocity),
         ("gas substeps follow the CFL estimate", test_gas_adaptive_substeps),
         ("Sod shock tube vs exact solution", test_gas_sod_shock_tube),
+        ("cold sphere free-fall collapse", test_gas_free_fall_collapse),
         ("Jeans instability vs linear theory", test_gas_jeans_instability),
         ("single-count sink gravity", test_sink_gravity_single_count),
     ]

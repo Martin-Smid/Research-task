@@ -2,6 +2,29 @@ import cupy as cp
 import numpy as np
 
 
+def free_fall_estimate(mass, radius, G=None, steps_per_t_ff=100, print_summary=True):
+    """What to expect from a cold uniform gas sphere of the given mass [Msun] and radius [kpc].
+
+    Returns a dict with the free-fall (collapse) time t_ff = sqrt(3 pi / (32 G rho0)), rho0 = 3 M / (4 pi R^3),
+    the recommended time step h = t_ff / steps_per_t_ff, and a total_time covering collapse and rebound
+    (1.3 t_ff). Times are in Gyr for G in kpc^3 / (Msun Gyr^2) (the default). The collapse reaches its
+    densest point at ~1.05 t_ff in simulations. A step much larger than t_ff / 100 makes the gas need
+    many CFL substeps, and beyond max_substeps the run stops with a FloatingPointError."""
+    if G is None:
+        from astropy import constants
+        G = constants.G.to("kpc3/(Msun Gyr2)").value
+    rho0 = 3.0 * mass / (4.0 * np.pi * radius ** 3)
+    t_ff = float(np.sqrt(3.0 * np.pi / (32.0 * G * rho0)))
+    estimate = {"rho0": rho0, "t_ff": t_ff, "h": t_ff / steps_per_t_ff, "total_time": 1.3 * t_ff,
+                "steps": int(round(1.3 * steps_per_t_ff))}
+    if print_summary:
+        print(f"M = {mass:.3g} Msun, R = {radius:g} kpc: rho0 = {rho0:.3g} Msun/kpc^3, "
+              f"t_ff = {t_ff:.5f} Gyr ({t_ff * 1e3:.2f} Myr)\n"
+              f"  recommended h = {estimate['h']:.3e} Gyr, total_time = {estimate['total_time']:.5f} Gyr "
+              f"({estimate['steps']} steps), densest point at ~{1.05 * t_ff:.5f} Gyr")
+    return estimate
+
+
 class NBodyGas:
     """
     Compressible Euler gas on a uniform periodic grid (CuPy).

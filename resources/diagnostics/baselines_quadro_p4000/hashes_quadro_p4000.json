@@ -1,0 +1,32 @@
+{
+    "created": "2026-10-16",
+    "gpu": "Quadro P4000",
+    "generated_from_commit": "45f7c82 (unchanged tracked code)",
+    "sha256": {
+        "chat_regression_baselines/diagnostics/manifest.json": "FDDB91B821E62DC1DF401B2ACB7BE63F2E95B13F7004720E710D5C21C3A4C3C3",
+        "chat_regression_baselines/diagnostics/wave_baryons_gas_order2.npz": "8C276B4322B91B40AE7285B49E00309C019EC71A204A7014A1AD0BBC1C34B9DB",
+        "chat_regression_baselines/diagnostics/wave_baryons_gas_sink_order2.npz": "55A5C239CFC8E927A1643D97D9F2E14A552F8314D9A85817BCB56E8139B34656",
+        "chat_regression_baselines/diagnostics/wave_baryons_order2.npz": "E19B44734B4379B999470BB6ABC120FB017569425C7EE51E40F34EB35742F4B7",
+        "chat_regression_baselines/diagnostics/wave_baryons_order4.npz": "0EEE394E0D8183B3076D2932E534D67325A5F5BC927EB4989CC6FCBAEB470AD6",
+        "chat_regression_baselines/diagnostics/wave_baryons_order6.npz": "B2C8DC05B0BE6A672A3EEE32DFFB484BEFCBDA9857DA4E1E9CEDAA218CD69910",
+        "chat_regression_baselines/diagnostics/wave_order2.npz": "E9D0E38822720151571ABBA13EBE637134CBBAF40EAD3CDB40FFFD5DDED52D73",
+        "chat_regression_baselines/diagnostics/wave_order2_static.npz": "82E93CDD244B51329657C265258668B870EC58A118BBDF32059FF4FA55C1BBA6",
+        "chat_regression_baselines/manifest.json": "C79FEFA0BABECFFBAD213925BE711735F8A16ADABF8BA5AD8D601544610605D4",
+        "chat_regression_baselines/wave.npz": "98880DED1C0F979A6829B7A6AAA3CED64D60B71A6195F61FBB55ABA7554E938C",
+        "chat_regression_baselines/wave_baryons.npz": "03E0CC119391E387F76928A731ED1E3DC65CFC0FC4A0B6859ED6F69501DC03B6",
+        "chat_regression_baselines/wave_baryons_gas.npz": "B8606DD60B56F75C62F18998A75C32111837023D78F13E5A0CA4CC18E43E43C6",
+        "chat_regression_baselines/wave_baryons_gas_sink.npz": "13213F88F61EF010C546A4BFD1185A777FDF81610B012507ADE927EC4B02D5DC",
+        "optimization_checks/baryons_only_2.npz": "10DB49570F28524935383E1E513C28A096C97FDB6A509B06E11772B26ED0A401",
+        "optimization_checks/baryons_only_4.npz": "0ECC3255B45FDBBBE48DF767523CA592892396D81B141E29F4BAAD2AE2596C22",
+        "optimization_checks/baryons_only_6.npz": "FA56BF540E4EAF3D137FDCF6783F9879A132BF0C87E4C12D5CDDDA2D10365869",
+        "optimization_checks/wave_2.npz": "7AA530401E5816A640B609B6C12D7F2529E2C5F3581FF5B4B7E6AA9C04DE4F70",
+        "optimization_checks/wave_4.npz": "518411977CCACF6E40CD13937BEC11FBCF252AA7DA255EE806EEB8A4007F5523",
+        "optimization_checks/wave_6.npz": "9482DA408F7F4B6ACBFC3F99957B0936C21E717610ED28EC4CB7A524C4985248",
+        "optimization_checks/wave_baryons_2.npz": "E74C76BF13D8166657CC773427454D7336999FDD745852CD0915850744342BD2",
+        "optimization_checks/wave_baryons_4.npz": "D38BDF6C4F366D8123D39A74C1635040AE68E12F784F8B874B49CCD01AEC0D1A",
+        "optimization_checks/wave_baryons_6.npz": "9D8AD4224A848A7305727CCEEA0E75324EDA77B754E71D747611F450FFE8627C",
+        "optimization_checks/wave_baryons_sink_2.npz": "AED3C9D89266790367B0C16805DB52C208073F49D6F36E3AA4739F330F8AC3B9",
+        "optimization_checks/wave_baryons_sink_4.npz": "8E74054E9B281FB91C776B311AF0D6AC9954382C3210999B96D6C6F3ED434A71",
+        "optimization_checks/wave_baryons_sink_6.npz": "94BB527F0838FCE65FFB7CFEA4103F9F624A1030553DFD8CCEC49950D5DF5C77"
+    }
+}

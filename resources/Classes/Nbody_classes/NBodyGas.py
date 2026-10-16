@@ -28,6 +28,15 @@ class NBodyGas:
       by Evolution's gravity forces unless you provide a longer force tuple).
     """
 
+    # Gravitational potential on the grid; Evolution sets it before every drift. When set,
+    # the gravity work on E uses the interface mass flux (see _sweep_axis); None = old behaviour.
+    phi_total = None
+    _face_work = None
+    # Optional callable d_rho -> (forces, phi) giving the gravity after the gas density changed by
+    # d_rho; Evolution sets it. When present, drift uses a second-order kick-drift-kick (see drift).
+    potential_update = None
+    E_guard_injected = 0.0  # cumulative energy added by the internal-energy floor guard
+
     def __init__(
         self,
         simulation,
@@ -188,12 +197,46 @@ class NBodyGas:
         nsub = max(1, need)
         dt_actual = dt_window / nsub
 
+        if self.potential_update is not None and self.phi_total is not None:
+            # Kick(dt/2, g_n) - hydro(dt) - Kick(dt/2, g_{n+1}): g_{n+1} comes from the density after
+            # the hydro, so the potential is no longer frozen over the window (second order in time).
+            rho_old, phi_old = self.rho, self.phi_total
+            kick_work = self._gravity_kick(ax, ay, az, 0.5 * dt_window)
+            face_work = 0.0
+            for _ in range(nsub):
+                self._hydro_step(dt_actual)
+                face_work = face_work + self._face_work
+                self._apply_cooling(dt_actual)
+            d_rho = self.rho - rho_old
+            (ax, ay, az), phi_new = self.potential_update(d_rho)
+            kick_work = kick_work + self._gravity_kick(ax, ay, az, 0.5 * dt_window)
+            # Interface-flux work used phi_n; the trapezoid correction -1/2 d_rho d_phi completes
+            # dW = integral of (phi_n + phi_{n+1})/2 * d_rho.
+            self._add_gravity_energy_correction(face_work - 0.5 * d_rho * (phi_new - phi_old) - kick_work)
+            return
+
         for _ in range(nsub):
             # Strang: gravity kick / hydro / (optional) cooling / gravity kick
-            self._gravity_kick(ax, ay, az, 0.5 * dt_actual)
+            kick_work = self._gravity_kick(ax, ay, az, 0.5 * dt_actual)
             self._hydro_step(dt_actual)
             self._apply_cooling(dt_actual)
-            self._gravity_kick(ax, ay, az, 0.5 * dt_actual)
+            kick_work = kick_work + self._gravity_kick(ax, ay, az, 0.5 * dt_actual)
+            if self._face_work is not None:
+                # Replace the cell-centred work rho*v.a by the interface-flux work, so that
+                # E_gas + W changes only by the (small) time variation of Phi.
+                self._add_gravity_energy_correction(self._face_work - kick_work)
+
+    def _add_gravity_energy_correction(self, correction):
+        """E += correction, but never let the internal energy E - K fall below its floor.
+        Where the correction would, only the part that keeps E - K at the floor is applied; the
+        energy this adds relative to exact conservation is summed in E_guard_injected."""
+        v2 = cp.zeros_like(self.rho)
+        for vv in self.vel:
+            v2 = v2 + vv * vv
+        eint = self.E - 0.5 * self.rho * v2
+        applied = cp.maximum(correction, self.rho * self.e_floor - eint)
+        self.E += applied
+        self.E_guard_injected += float(cp.sum(applied - correction)) * self.cell_volume
 
     # -------------------------------------------------------------------------
     # Core numerics
@@ -220,18 +263,22 @@ class NBodyGas:
         We apply them to the first three velocity components only.
         """
         a_list = [ax, ay, az]
+        work = 0.0
         for i in range(min(self.dim, len(a_list))):
             delta_v = a_list[i] * dt
             # TODO: check this - gravity must change total energy with kinetic energy.
-            self.E += self.rho * (
+            axis_work = self.rho * (
                 self.vel[i] * delta_v + 0.5 * delta_v * delta_v
             )
+            self.E += axis_work
+            work = work + axis_work
             self.vel[i] += delta_v
 
         # sync named components
         self.vx = self.vel[0]
         self.vy = self.vel[1] if self.dim >= 2 else cp.zeros_like(self.vx)
         self.vz = self.vel[2] if self.dim >= 3 else cp.zeros_like(self.vx)
+        return work
 
     def _hydro_step(self, dt):
         """N-D hydro update via directional splitting."""
@@ -258,6 +305,7 @@ class NBodyGas:
         E = self.E
 
         # Dimensionally split update (Lie splitting). For many comparisons (esp. 1D) this is enough.
+        self._face_work = None  # filled by _sweep_axis when self.phi_total is set
         for axis in range(self.dim):
             # TODO: check this - each directional operator advances the full dt.
             rho, moms, E = self._sweep_axis(rho, moms, E, axis, dt, self.dx_list[axis])
@@ -367,6 +415,14 @@ class NBodyGas:
         rho1 = rho0 - fac * (flux_rho - cp.roll(flux_rho, 1, axis=0))
         m1 = [m - fac * (f - cp.roll(f, 1, axis=0)) for m, f in zip(moms0, flux_m)]
         E1 = E0 - fac * (flux_E - cp.roll(flux_E, 1, axis=0))
+
+        if self.phi_total is not None:
+            # Gravity work done by the mass flux across each interface, F_rho*(Phi_{i+1}-Phi_i),
+            # shared equally by the two neighbouring cells. Summed over cells it equals -dW exactly.
+            phi0 = mv(self.phi_total)
+            interface_work = flux_rho * (cp.roll(phi0, -1, axis=0) - phi0)
+            work = imv(-0.5 * fac * (interface_work + cp.roll(interface_work, 1, axis=0)))
+            self._face_work = work if self._face_work is None else self._face_work + work
 
         return imv(rho1), [imv(mi) for mi in m1], imv(E1)
 

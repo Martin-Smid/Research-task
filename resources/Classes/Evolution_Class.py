@@ -403,6 +403,7 @@ class Evolution_Class:
 
             forces_environment = self._sink_environment_forces(phi_environment)
             forces_total = self.propagator.compute_force_grids_from_potential(phi_total)
+            self._set_gas_potential(phi_total, total_density, phi_sink)
 
             for baryons in self.simulation.baryonic_matter:
                 if isinstance(baryons, SinkNBody):
@@ -464,6 +465,7 @@ class Evolution_Class:
 
                     forces_environment = self._sink_environment_forces(phi_environment)
                     forces_total = self.propagator.compute_force_grids_from_potential(phi_total)
+                    self._set_gas_potential(phi_total, total_density, phi_sink)
 
                     for baryons in self.simulation.baryonic_matter:
                         if isinstance(baryons, SinkNBody):
@@ -518,6 +520,7 @@ class Evolution_Class:
 
                     forces_environment = self._sink_environment_forces(phi_environment)
                     forces_total = self.propagator.compute_force_grids_from_potential(phi_total)
+                    self._set_gas_potential(phi_total, total_density, phi_sink)
 
                     for baryons in self.simulation.baryonic_matter:
                         if isinstance(baryons, SinkNBody):
@@ -1179,3 +1182,15 @@ class Evolution_Class:
     def _is_gas_system(self, sys):
         """Check if a baryonic system is a gas system."""
         return sys.__class__.__name__.lower() == "nbodygas"
+
+    def _set_gas_potential(self, phi_total, total_density, phi_sink):
+        """Give gas the potential its drift uses (so its gravity work matches its mass flux) and a
+        way to refresh it after the gas density has changed (so the potential is not frozen)."""
+        def potential_update(d_rho):
+            phi = self.propagator.compute_gravity_potential(total_density + d_rho) + phi_sink
+            return self.propagator.compute_force_grids_from_potential(phi), phi
+
+        for sys in self.simulation.baryonic_matter:
+            if self._is_gas_system(sys):
+                sys.phi_total = phi_total
+                sys.potential_update = potential_update

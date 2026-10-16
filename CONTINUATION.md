@@ -1,6 +1,6 @@
 # Pokračování práce — working_with_chat
 
-**Nejdřív zjistit, co je problém u CFL v NBodyGas.** Zatím není určena příčina ani ověřená oprava. Reprodukovat konkrétní běh, zkontrolovat odhad stabilního kroku, subcycling a limit max_substeps; neměnit fyziku naslepo.
+**CFL v NBodyGas: příčina stále neurčena, ale máme reproduktor.** Běhy z main.py (disk, sink, soliton, plyn 1e6–5e10, N=64–128) CFL nerozbily. Spadne ale main.py konfigurace s hustotou i rychlostí disku vynásobenou okrajovým oknem cos²(πx/20)·cos²(πy/20)·cos²(πz/20) (N=128, h=1e-3, gravitace zapnutá): FloatingPointError, požadováno ~1e66 substepů, **stejně ve starém i novém kódu**. Podezření (neověřeno): vakuové buňky na rho_floor, kde v = m/rho_floor exploduje (viz Known issues v CLAUDE.md). Dalším krokem je zjistit první krok a buňku, kde signální rychlost exploduje; fyziku neměnit naslepo.
 
 ## Cíl a pravidla
 
@@ -11,14 +11,19 @@ Zjednodušit simulátor, omezit zbytečné výpočty a závislosti a připravit 
 ## Co už je hotové
 
 - Gravitace: stejný potenciál pro wave kick a baryon kick se znovu použije pouze v rámci stejného integračního stavu. Konstantní jmenovatel Poissonova výpočtu se připraví jednou v Propagator; pořadí kroků a aktualizace hustoty se zachovaly. Autor naměřil přibližně 40–45 -> 50–55 FPS.
-- Diagnostics_Class.py: Evolution předává aktuální stav a poskytovatel sink potenciálu, Diagnostics počítá energie/profily a organizuje rotace; výsledky jdou přes Evolution do Scribe. Historická vnořená akumulace plynové energie byla záměrně zachována; případnou opravu řešit samostatně jako změnu fyzikálních výsledků.
+- Diagnostics_Class.py: Evolution předává aktuální stav a poskytovatel sink potenciálu, Diagnostics počítá energie/profily a organizuje rotace; výsledky jdou přes Evolution do Scribe. Vnořená smyčka, která počítala vnitřní energii plynu jednou za každý baryonový systém (s plynem a sinkem 2×), byla opravena: U_iso plynu se počítá jednou. Mění to jen logované energie, ne vývoj.
 - Rotation_Curve_Class.py: společný GPU výpočet pro plyn a částice, periodický hmotnostní střed, odečtení pohybu těžiště a osa z celkového momentu hybnosti. Výchozí cutoff je válcový poloměr obsahující 50 % hmotnosti, ne 50 % maximální hustoty; neurčená osa vrací stav místo smyšlené křivky. NBody/NBodyGas volají společnou třídu, Diagnostics vrací malé profily a metadata do Evolution, Scribe zapisuje rotational_velocity.dat a rotation_frames.csv.
 - plot_rot_curves.py: bez argumentů poslední běh a oba typy komponent; -g/-N filtr, více adresářů překryje více běhů, --no-show pouze uloží. examples/plot_rotation_curves.py sdílí implementaci.
+- Vazba plynu na gravitaci (NBodyGas.py, Evolution_Class.py, 2026-10-16): (1) energie z gravitace se plynu dává jako tok hmoty přes stěnu buňky × rozdíl potenciálu (`_sweep_axis`, `phi_total`), takže součet přes buňky přesně odpovídá změně W; (2) kick–hydro–kick s potenciálem obnoveným po hydru (`potential_update`, jedno Poissonovo řešení navíc na okno, +3–6 % času okna); (3) pojistka vnitřní energie `_add_gravity_energy_correction` drží E−K nad floorem, dodanou energii sčítá `E_guard_injected`. Evolution plyn zásobuje přes `_set_gas_potential`. Bez `phi_total`/`potential_update` zůstává původní chování (bitově).
+- Energie v main.py konfiguraci (N=64, t=0,06 Gyr): drift +3,6 |E0| → +0,1 %; N=128: −1,5 %. Pojistka dodala ~1,5 % |E0|. Výsledky plynu se změnily: hustota/rychlosti o ~1e-3 % v regresním případu, vnitřní energie studeného plynu v nerozlišeném potenciálu o desítky %. Starý kód nekonvergoval s rozlišením (hmota do 1 kpc, N=64→160), nový ano. Ramena („kříž") v řezech main.py vznikají na hranicích boxu z neperiodické počáteční podmínky (rotace a hustota se na stěnách nespojují), jsou i ve starém kódu.
+- tests/ už není v .gitignore. Nové testy: práce gravitace vs. změna W, kladná vnitřní energie, U_iso jednou, Sodova trubice, Jeansova nestabilita (obě proti analytice, tolerance v souborech). Pouštět `tests/run_all.py`.
 - Úklid: odstraněno 188 simulací před 2026-10-04 (1,86 GiB); dnešní běhy a reference zachovány. Jednorázové migrační skripty jsou v diagnostickém archivu a nelze je přímo znovu spustit.
 
 ## Ověření a omezení
 
 Původní čtyři případy měly bitově shodné mřížky a energie; rozšířené porovnání optimalizace zahrnovalo 12 případů. Oddělení diagnostik a rotace ověřeno v sedmi případech s 49 energetickými vzorky. Restart bitově shodný; drobné segmentové rozdíly existovaly už ve starém kódu. Osm analytických testů rotací prošlo i po úklidu. Povolené změny uložených výstupů po nové rotaci jsou pouze rotational_velocity.dat a rotation_frames.csv.
+
+Neuzavřeno po změnách plynu: (a) referenční NPZ plynových případů (`wave_baryons_gas*`, diagnostické plynové) jsou z kódu před změnami a nové kód se jim záměrně neshoduje; nový referenční set pro Quadro P4000 (`resources/diagnostics/baselines_quadro_p4000`, z commitu 45f7c82) je zatím jen lokální a plynové případy je nutné přegenerovat; (b) tepelná energie studeného plynu v nerozlišeném potenciálu je slabé místo (rozdíl práce přes stěny a ve středu buňky padá do E−K); (c) zbytek driftu energie při N=128 (−1,5 %) není vysvětlen; (d) chybí validace volného pádu koule, orders 4/6 pro plyn zůstávají odmítnuté.
 
 NBodyGas podporuje řád evoluce 2; řády 4/6 mají záporné podkroky a jsou odmítnuty. Plynový dt musí být konečný a nezáporný. Nezaměňovat tato omezení s dosud nevyšetřeným problémem CFL. Nakloněný disk N=128 se správnou osou není důkazem fyzikální rovnováhy.
 

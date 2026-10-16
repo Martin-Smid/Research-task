@@ -32,11 +32,10 @@ class Diagnostics:
                     E_diss_total += float(getattr(sys, 'E_diss_kin_total', 0.0))
                     E_diss_total += float(getattr(sys, 'E_diss_formation_total', 0.0))
 
-                # Preserve the legacy gas accumulation during this extraction.
-                for sys in self.simulation.baryonic_matter:
-                    if sys.__class__.__name__.lower().endswith("gas"):
-                        if hasattr(sys, "internal_energy"):
-                            U_iso_total += float(sys.internal_energy())
+            for sys in self.simulation.baryonic_matter:
+                if sys.__class__.__name__.lower().endswith("gas"):
+                    if hasattr(sys, "internal_energy"):
+                        U_iso_total += float(sys.internal_energy())
 
         return {
             "K_total": K_total, "W": W_total, "U_iso": U_iso_total,

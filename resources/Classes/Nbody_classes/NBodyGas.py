@@ -186,24 +186,13 @@ class NBodyGas:
         # Get acceleration grids (Fx,Fy,Fz) as provided by Evolution (3-tuple)
         ax, ay, az = self._get_acceleration_grids(potential_grid)
 
-        dt_sub = self._compute_cfl_timestep()
-        need = int(np.ceil(dt_window / dt_sub))
-        
-        if need > self.max_substeps:
-            raise FloatingPointError(
-                f"[Gas] CFL requires {need} substeps but max_substeps={self.max_substeps}. "
-                f"Reduce global h or increase max_substeps."
-            )
-        nsub = max(1, need)
-        dt_actual = dt_window / nsub
-
         if self.potential_update is not None and self.phi_total is not None:
             # Kick(dt/2, g_n) - hydro(dt) - Kick(dt/2, g_{n+1}): g_{n+1} comes from the density after
             # the hydro, so the potential is no longer frozen over the window (second order in time).
             rho_old, phi_old = self.rho, self.phi_total
             kick_work = self._gravity_kick(ax, ay, az, 0.5 * dt_window)
             face_work = 0.0
-            for _ in range(nsub):
+            for dt_actual in self._substeps(dt_window):
                 self._hydro_step(dt_actual)
                 face_work = face_work + self._face_work
                 self._apply_cooling(dt_actual)
@@ -215,7 +204,7 @@ class NBodyGas:
             self._add_gravity_energy_correction(face_work - 0.5 * d_rho * (phi_new - phi_old) - kick_work)
             return
 
-        for _ in range(nsub):
+        for dt_actual in self._substeps(dt_window):
             # Strang: gravity kick / hydro / (optional) cooling / gravity kick
             kick_work = self._gravity_kick(ax, ay, az, 0.5 * dt_actual)
             self._hydro_step(dt_actual)
@@ -225,6 +214,28 @@ class NBodyGas:
                 # Replace the cell-centred work rho*v.a by the interface-flux work, so that
                 # E_gas + W changes only by the (small) time variation of Phi.
                 self._add_gravity_energy_correction(self._face_work - kick_work)
+
+    def _substeps(self, dt_window):
+        """Yield CFL-limited substeps that add up to dt_window. The CFL step is re-evaluated from the
+        current state before every substep (a flow that accelerates inside the window, e.g. after a
+        collapse, would otherwise outrun a step computed once at the start); the remaining time is
+        split evenly into as many steps as the current estimate needs."""
+        remaining = dt_window
+        done = 0
+        while remaining > 0:
+            dt_cfl = self._compute_cfl_timestep()
+            if not np.isfinite(dt_cfl) or dt_cfl <= 0:
+                raise FloatingPointError("[Gas] non-finite CFL time step: the gas state contains NaN/inf.")
+            need = max(1, int(np.ceil(remaining / dt_cfl)))
+            if done + need > self.max_substeps:
+                raise FloatingPointError(
+                    f"[Gas] CFL requires {done + need} substeps but max_substeps={self.max_substeps}. "
+                    f"Reduce global h or increase max_substeps."
+                )
+            dt_actual = remaining / need
+            remaining -= dt_actual
+            done += 1
+            yield dt_actual
 
     def _add_gravity_energy_correction(self, correction):
         """E += correction, but never let the internal energy E - K fall below its floor.
@@ -298,6 +309,15 @@ class NBodyGas:
         eint = cp.maximum(eint, rho_safe * self.e_floor)
         return (self.gamma - 1.0) * eint
 
+    def _reset_emptied_cells(self, rho, moms, E):
+        """Cells the update emptied below rho_floor: clamp the density and drop their momentum and
+        energy. Keeping them gave v = m / rho_floor (1e12 and more), which later overflowed to NaN."""
+        emptied = rho < self.rho_floor
+        rho = cp.maximum(rho, self.rho_floor)
+        moms = [cp.where(emptied, 0.0, m) for m in moms]
+        E = cp.where(emptied, rho * self.e_floor, E)
+        return rho, moms, E
+
     def _hydro_step_nd(self, dt):
         # Build conserved variables
         rho = self.rho
@@ -309,6 +329,7 @@ class NBodyGas:
         for axis in range(self.dim):
             # TODO: check this - each directional operator advances the full dt.
             rho, moms, E = self._sweep_axis(rho, moms, E, axis, dt, self.dx_list[axis])
+            rho, moms, E = self._reset_emptied_cells(rho, moms, E)
 
         # Back to primitive
         rho = cp.maximum(rho, self.rho_floor)

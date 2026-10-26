@@ -24,6 +24,12 @@
 7. Přegenerovat reference na ostatních GPU; commit (zatím nic nebylo commitnuto).
 8. Úklid balíčkování a dokumentace, licence a citace (viz seznam níže).
 
+## Doplněk 2026-10-26 (večer)
+
+- **Přesnost ψ:** vlnová funkce byla v `complex64`, takže každý krok zaokrouhloval na float32 a norma ψ klesala úměrně počtu kroků (−0,3 % za Gyr při h = 1,25e-4; drift energie 0,28 % → 1,2 % při 4× menším kroku, nezávisle na N). Opraveno na `complex128` (2 řádky, `Wave_function_class.py`, `Wave_Packet_Class.py`). Změna výsledků ~1e-7, `tests/run_all.py` prochází, sada `baselines_koios_p100` přegenerována (bitově reprodukovatelná). Sady Quadro/RTX/GTX jsou zastaralé pro všechny případy.
+- **Konvergence (complex64, fáze 2, 1 Gyr):** soliton a vnitřní plyn konvergují (128 vs 256 do 1–2 %), ztráta momentu hybnosti plynu −31/−18/−10 % pro N = 64/128/256 (numerická viskozita). Bude se opakovat s `complex128` pro N = 32/64/128/256.
+- **Částice a sinky:** nové testy `test_particle_kepler_orbit.py` (integrátor je učebnicové DKD, skutečný krok určuje kritérium podkroků), `test_sink_force_vs_analytic.py` (pole sinku sedí na analytiku, použitelné do r ≤ L/4, dál anizotropie periodické mříže), `test_particle_breathing_soliton.py` (proměnný zdroj: první řád v h kvůli zamrzlému potenciálu, chyba ~1e-3 r0, přijato). Kruhová dráha se Keplerovou rychlostí `sqrt(GM/r)` v periodickém boxu není kruhová (síla je při r = L/4 o ~6,5 % slabší); použít r0 ≲ L/10 nebo rychlost z mřížky. Minimální skript: `testing_baryons.py`.
+
 ## Cíl a pravidla
 
 Zjednodušit simulátor, omezit zbytečné výpočty a závislosti a připravit dokumentaci pro publikování. Zachovat strukturu autorova kódu a malé, čitelné změny. Při každé úpravě numerického výpočtu porovnat mřížky, částice a energie s původními referencemi; změna výsledků znamená zastavit a vyšetřit příčinu. Referenční data nepřepisovat jako způsob opravy testu.

@@ -11,7 +11,10 @@ from test_gas_multidim_timestep import main as test_gas_multidim_timestep
 from test_gas_vacuum_cell_velocity import main as test_gas_vacuum_cell_velocity
 from test_gas_vacuum_hole_between_flows import main as test_gas_vacuum_hole_between_flows
 from test_gas_sod_shock_tube import main as test_gas_sod_shock_tube
+from test_particle_breathing_soliton import main as test_particle_breathing_soliton
+from test_particle_kepler_orbit import main as test_particle_kepler_orbit
 from test_sink_gas_accretion_energy import main as test_sink_gas_accretion_energy
+from test_sink_force_vs_analytic import main as test_sink_force_vs_analytic
 from test_sink_gravity_single_count import main as test_sink_gravity_single_count
 from test_sink_potential_position import main as test_sink_potential_position
 
@@ -32,6 +35,9 @@ def main():
         ("single-count sink gravity", test_sink_gravity_single_count),
         ("sink potential centred on the sink", test_sink_potential_position),
         ("accretion removes energy with mass", test_sink_gas_accretion_energy),
+        ("particle integrator on a circular orbit around a sink", test_particle_kepler_orbit),
+        ("sink force on the grid vs analytic formula", test_sink_force_vs_analytic),
+        ("particle in a breathing soliton converges in h", test_particle_breathing_soliton),
     ]
 
     for name, check in checks:

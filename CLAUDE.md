@@ -92,6 +92,24 @@
    Bondi accretion uses the constant `gas.cs`; the code's `W` (periodic Poisson) is ~17 % off the isolated value in a
    20 kpc box, so use an isolated `W` for virial checks (isolated soliton: 2K/|W| = 1.004).
 
+7. Wave-function precision (fixed 2026-10-26): psi was kept in complex64 (created as complex64, the in-place `*=` keeps
+   the dtype), so every kick and drift rounded to float32 and the norm of psi drifted proportionally to the number of
+   steps (about -4e-5 % per step; -0.3 % per Gyr at h=1.25e-4, N=256; energy drift +0.28 % -> +1.2 % when h shrank 4x).
+   Now `complex128` (`Wave_function_class.py`, `Wave_Packet_Class.py`): the norm is conserved to rounding and the results no
+   longer depend on h. Results changed by ~1e-7 (relative). Only `baselines_koios_p100/` was regenerated; the Quadro, RTX
+   and GTX sets are stale for ALL cases (psi dtype). psi snapshots/checkpoints are twice as big; old complex64 checkpoints
+   stay complex64 on restart.
+8. Particle tests (2026-10-26, `tests/`): `test_particle_kepler_orbit.py` (NBody.drift with one substep is the textbook DKD,
+   mean order 2.06; the real step is set by the substep criterion 0.25*dx/v, not by h; production error <1e-3 r0 after 3
+   orbits), `test_sink_force_vs_analytic.py` (sink force on the grid vs the Gaussian + periodic-box formula: mean error ~1e-4;
+   the max error grows as (r/L)^4 above ~4 kpc = cubic lattice anisotropy, so the sink field is usable up to r <= L/4),
+   `test_particle_breathing_soliton.py` (time-varying source: first order in h because the force is frozen at the start of
+   the step; error ~1e-3 r0 for a source that changes 3x; accepted).
+9. A circular orbit started with the analytic v = sqrt(GM/r) is NOT circular in a periodic box: at r = L/4 the force is ~6.5 %
+   weaker (background term -(4 pi/3) G M r / L^3) plus 1-3 % axis anisotropy. Use r0 <~ L/10 or the speed from the grid force
+   (`circular_velocity` in `test_particle_kepler_orbit.py`). `testing_baryons.py` is the minimal orbit script; the old orbit
+   figure of the thesis (r0 = 20 kpc) shows exactly this effect.
+
 ## Accepted limitations (decided by the user, 2026-10-16)
 - The internal (thermal) energy of **cold gas in an unresolved potential** is not reliable: the difference between
   the face-flux gravity work and the cell-centred work lands in `E−K`; a guard keeps it above the floor and
@@ -136,3 +154,10 @@
   with gas and sink. Plain relaxation does not damp the soliton breathing (+-13 %, period ~0.75 Gyr); slow switching-on does.
 - `plot_energies.py` / `plot_density.py` / `Plot_max_vals.py` / `plot_from_snapshots.py` save images into the simulation directory.
 - Nothing is committed.
+
+## Session log — 2026-10-26 (evening)
+- Convergence runs N=64/128/256 (phase 2, 1 Gyr, complex64): soliton profile and inner gas rotation converge (128 vs 256
+  within 1-2 %), gas angular momentum loss -31/-18/-10 %. Energy drift and psi mass loss grew with the NUMBER OF STEPS, not
+  with N: cause = complex64 psi (issue 7). Fixed with complex128; `tests/run_all.py` passes; P100 reference set regenerated.
+- New tests for particles and the sink field (issue 8); minimal orbit script `testing_baryons.py` (analytic Kepler speed).
+- Next: convergence N=32/64/128/256 with complex128; sink oscillation test in the soliton; open points 2 and 3 above.

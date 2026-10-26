@@ -217,6 +217,10 @@ class Evolution_Class:
             if (step + 1) % save_every == 0:
                 save_step = True
 
+            if getattr(self.simulation, "sink_accretion", False):
+                self._perform_sink_accretion()
+                total_density = self._compute_total_density(wave_functions)  # accretion changed the gas density
+
             #checking if BH appeared
             '''
             #off right now
@@ -1158,7 +1162,9 @@ class Evolution_Class:
             for mbh, mres, pos in zip(cp.asnumpy(sink_sys.mass_bh),
                                       cp.asnumpy(sink_sys.mass_res),
                                       cp.asnumpy(sink_sys.positions)):
-                xs, ys, zs = float(pos[0]), float(pos[1]), float(pos[2])
+                # FFT index 0 is the lower box boundary, not x = 0: measure the sink position from it.
+                lo = [float(b[0]) for b in self.simulation.boundaries]
+                xs, ys, zs = float(pos[0]) - lo[0], float(pos[1]) - lo[1], float(pos[2]) - lo[2]
                 phase = cp.exp(-1j * (kx * xs + ky * ys + kz * zs))
 
                 # BH component

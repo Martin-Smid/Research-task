@@ -9,8 +9,11 @@ from test_gas_internal_energy_positive import main as test_gas_internal_energy_p
 from test_gas_jeans_instability import main as test_gas_jeans_instability
 from test_gas_multidim_timestep import main as test_gas_multidim_timestep
 from test_gas_vacuum_cell_velocity import main as test_gas_vacuum_cell_velocity
+from test_gas_vacuum_hole_between_flows import main as test_gas_vacuum_hole_between_flows
 from test_gas_sod_shock_tube import main as test_gas_sod_shock_tube
+from test_sink_gas_accretion_energy import main as test_sink_gas_accretion_energy
 from test_sink_gravity_single_count import main as test_sink_gravity_single_count
+from test_sink_potential_position import main as test_sink_potential_position
 
 
 def main():
@@ -21,11 +24,14 @@ def main():
         ("gas internal energy stays positive", test_gas_internal_energy_positive),
         ("multidimensional gas timestep", test_gas_multidim_timestep),
         ("emptied cells keep no momentum", test_gas_vacuum_cell_velocity),
+        ("vacuum hole between diverging flows", test_gas_vacuum_hole_between_flows),
         ("gas substeps follow the CFL estimate", test_gas_adaptive_substeps),
         ("Sod shock tube vs exact solution", test_gas_sod_shock_tube),
         ("cold sphere free-fall collapse", test_gas_free_fall_collapse),
         ("Jeans instability vs linear theory", test_gas_jeans_instability),
         ("single-count sink gravity", test_sink_gravity_single_count),
+        ("sink potential centred on the sink", test_sink_potential_position),
+        ("accretion removes energy with mass", test_sink_gas_accretion_energy),
     ]
 
     for name, check in checks:

@@ -437,6 +437,8 @@ class SinkNBody(NBody):
         dM_scaled = cp.zeros(self.N, dtype=cp.float64)
         dP_scaled = cp.zeros((self.N, 3), dtype=cp.float64)
 
+        rho_before = rho.copy()
+
         # --- Second pass: apply scaled removal to gas and accumulate momentum gain ---
         for bits in corners:
             inds = []
@@ -478,6 +480,12 @@ class SinkNBody(NBody):
         # Enforce rho floor after all removals
         if rho_floor > 0:
             gas_system.rho = cp.maximum(gas_system.rho, rho_floor)
+
+        # The accreted gas takes its energy with it: scale E like rho, so the specific energy (and the velocity) of
+        # the touched cells stays the same. Otherwise a cell drained to the floor keeps its whole energy in almost
+        # no mass and its sound speed explodes.
+        if hasattr(gas_system, "E"):
+            gas_system.E *= gas_system.rho / rho_before
 
         # --- Update sinks (mass + momentum) ---
         total_dm = float(cp.sum(dM_scaled).get())

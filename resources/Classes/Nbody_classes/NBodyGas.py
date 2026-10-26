@@ -410,6 +410,23 @@ class NBodyGas:
         E_L = E0 + 0.5 * s_E
         E_R = cp.roll(E0, -1, axis=0) - 0.5 * cp.roll(s_E, -1, axis=0)
 
+        # Near-vacuum guard: limiting rho and m independently can leave a face with finite momentum but
+        # (floored) tiny density, i.e. a face velocity of 1e10 and more (a vacuum cell between two
+        # diverging flows). Where a face velocity exceeds 10x (|v| + c) of the two adjacent cells, fall
+        # back to their first-order (cell-centred) states for that face.
+        rho_cell = cp.maximum(rho0, self.rho_floor)
+        c_cell = cp.sqrt(self.gamma * self._pressure_from_conserved(rho0, moms0, E0) / rho_cell)
+        s_cell = cp.abs(moms0[axis] / rho_cell) + c_cell
+        s_face = 10.0 * cp.maximum(s_cell, cp.roll(s_cell, -1, axis=0))
+        bad = (cp.abs(m_L[axis] / cp.maximum(rho_L, self.rho_floor)) > s_face) | \
+              (cp.abs(m_R[axis] / cp.maximum(rho_R, self.rho_floor)) > s_face)
+        rho_L = cp.where(bad, rho0, rho_L)
+        rho_R = cp.where(bad, cp.roll(rho0, -1, axis=0), rho_R)
+        m_L = [cp.where(bad, m, mL) for m, mL in zip(moms0, m_L)]
+        m_R = [cp.where(bad, cp.roll(m, -1, axis=0), mR) for m, mR in zip(moms0, m_R)]
+        E_L = cp.where(bad, E0, E_L)
+        E_R = cp.where(bad, cp.roll(E0, -1, axis=0), E_R)
+
         # Floors
         rho_L = cp.maximum(rho_L, self.rho_floor)
         rho_R = cp.maximum(rho_R, self.rho_floor)

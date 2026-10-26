@@ -89,6 +89,9 @@ class Simulation_Class:
     separate classes.
     """
 
+    # Set to True before evolve() to let sinks accrete baryons and gas (Bondi) before every step.
+    sink_accretion = False
+
     @parameter_check(int, list, int, (int, float), (int, float),int, float, float,bool, bool, object, (str, type(None)), bool,(type(None),dict), dict,bool,bool,float)
     def __init__(self, dim, boundaries, N, total_time, h,order_of_evolution = 2, m_s=2.5e-22, sponge_V0 =0.6 ,use_sponge=True, use_gravity=True,
                  static_potential=None, baryonic_model = None, save_max_vals=False, sink_formation=None,
@@ -619,7 +622,7 @@ class Simulation_Class:
         Check if the time step satisfies the stability criteria.
 
         Returns:
-            bool: True if time step is valid or user chooses to continue
+            bool: always True; a too large time step only prints a warning
         """
         # Get the minimum Δx (most restrictive)
         min_dx = min(self.dx)
@@ -649,15 +652,8 @@ class Simulation_Class:
             print(f"  - From dispersion relation: {float(first_constraint)}")
             print(f"  - From potential term: {float(second_constraint)}")
 
-            # Ask user what to do
-            user_choice = input("Do you want to continue with the current time step anyway? (y/n): ")
-
-            if user_choice.lower() != 'y':
-                print("Simulation aborted due to time step restriction.")
-                sys.exit(0)
-                return False
-            else:
-                print("Continuing with user-specified time step despite stability concerns.")
+            print(f"WARNING: time step is too large, advised time step is {max_allowed_dt}. "
+                  f"Continuing with the given h = {self.h}.")
 
         else:
             print(f"Time step h = {self.h} satisfies stability criterion (max allowed: {max_allowed_dt}).")

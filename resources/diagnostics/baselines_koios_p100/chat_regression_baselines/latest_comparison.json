@@ -7,8 +7,8 @@
     "cuda_path": null,
     "cuda_runtime": 12060,
     "gpu": "Tesla P100-SXM2-16GB",
-    "git_commit": "d19ad64fdbe412b5dc2044a5ee277c7875160740",
-    "source_digest": "73be8e86ada9e481cba95b15987b5f2f91be913766cd8a1297057bf224a2daf6"
+    "git_commit": "9ffb767f0080d440c9bec3b004f00915a305d4e3",
+    "source_digest": "36bb517575f11f231abfb180fa0cf9eb7fd1cccf35f52b57abef34cca95d1df8"
   },
   "current_environment": {
     "python": "3.12.3",
@@ -18,8 +18,8 @@
     "cuda_path": null,
     "cuda_runtime": 12060,
     "gpu": "Tesla P100-SXM2-16GB",
-    "git_commit": "d19ad64fdbe412b5dc2044a5ee277c7875160740",
-    "source_digest": "73be8e86ada9e481cba95b15987b5f2f91be913766cd8a1297057bf224a2daf6"
+    "git_commit": "9ffb767f0080d440c9bec3b004f00915a305d4e3",
+    "source_digest": "36bb517575f11f231abfb180fa0cf9eb7fd1cccf35f52b57abef34cca95d1df8"
   },
   "scenarios": {
     "wave": {

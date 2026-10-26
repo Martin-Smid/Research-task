@@ -169,7 +169,7 @@ class Packet():
         # Interpolate φ at each grid point
         psi_0 = interp_phi(r_distance)
 
-        return psi_0.astype(np.complex64)
+        return psi_0.astype(np.complex128)
 
     def read_ground_state_data(self, file_path):
         """

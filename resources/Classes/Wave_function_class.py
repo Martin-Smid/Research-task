@@ -186,7 +186,7 @@ class Wave_function():
         # Interpolate φ at each grid point
         psi = interp_phi(r_distance)
 
-        return psi.astype(np.complex64)
+        return psi.astype(np.complex128)
 
 
 

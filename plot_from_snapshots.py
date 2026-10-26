@@ -218,8 +218,8 @@ import glob
 import numpy as np
 import matplotlib.pyplot as plt
 
-snapshot_dir = r"resources/data/simulation_20260810_174154"
-times_to_plot = [0,0.5,1,1.5,2,2.5,3]
+snapshot_dir = r"/home/smidmar9/projects/research_task/resources/data/simulation_20261026_114100_528827"
+times_to_plot = [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]  # times to plot
 
 L_full = 25   # full physical half-size of the simulation box
 L = 20         # half-size of the region to actually plot
@@ -272,6 +272,9 @@ for t in times_to_plot:
     plt.xlabel("x")
     plt.ylabel("y")
     plt.tight_layout()
+    output = os.path.join(snapshot_dir, f"total_density_t{actual_time:.3f}.png")  # no display on a cluster
+    plt.savefig(output, dpi=150)
+    print(f"Saved {output}")
     plt.show()
 
     

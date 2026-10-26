@@ -1,18 +1,24 @@
 import os
+import sys
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
-# 🔧 MANUALLY SET YOUR DIRECTORIES HERE
-simulation_dirs = [
+# Složky simulací: zadej je při spuštění (python plot_energies.py resources/data/simulation_...),
+# bez argumentu se použije nejnovější simulace v resources/data.
+def _latest_simulation_dir():
+    candidates = [os.path.join("resources/data", d) for d in os.listdir("resources/data")
+                  if d.startswith("simulation_") and os.path.isfile(os.path.join("resources/data", d, "energy.csv"))]
+    return max(candidates) if candidates else None
 
-    "resources/data/simulation_20260415_194133",
+simulation_dirs = sys.argv[1:] or [d for d in [_latest_simulation_dir()] if d]
 
 
-
-
-
-]
+def save_figure(name, paths):
+    """Uloží aktuální obrázek do složky simulace (při více simulacích do poslední) a vypíše cestu."""
+    out = os.path.join(paths[-1], name)
+    plt.savefig(out, dpi=150)
+    print(f"Saved {out}")
 
 def plot_energy_ratio(paths):
     plt.figure(figsize=(8, 4))
@@ -25,7 +31,7 @@ def plot_energy_ratio(paths):
         try:
             df = pd.read_csv(energy_file)
             time = df["time"]
-            ratio = df["W/|E|"]
+            ratio = df["W_over_E"] if "W_over_E" in df.columns else df["W/|E|"]
         except Exception as e:
             print(f"[!] Failed to read {energy_file}: {e}")
             continue
@@ -39,6 +45,7 @@ def plot_energy_ratio(paths):
     plt.grid(True)
     plt.legend()
     plt.tight_layout()
+    save_figure("energy_ratio.png", paths)
     plt.show()
 
 def plot_total_energy(paths):
@@ -75,6 +82,7 @@ def plot_total_energy(paths):
     plt.legend()
     plt.tight_layout()
     #plt.savefig("plots/energy_conservation/orders.png",dpi=300)
+    save_figure("energy_conservation.png", paths)
     plt.show()
 
 
@@ -121,6 +129,7 @@ def plot_kinetic_energy_components(paths):
     plt.ylabel("Energy [units?]")
     plt.legend(fontsize=8)
     plt.tight_layout()
+    save_figure("kinetic_energy_components.png", paths)
     plt.show()
 
 
@@ -180,6 +189,7 @@ def plot_virial_check(paths):
     plt.grid(True, alpha=0.3)
     plt.legend(fontsize=8)
     plt.tight_layout()
+    save_figure("virial_ratio.png", paths)
     plt.show()
 
     # Optional: plot normalized residuals as a second figure
@@ -208,6 +218,7 @@ def plot_virial_check(paths):
     plt.grid(True, alpha=0.3)
     plt.legend(fontsize=8)
     plt.tight_layout()
+    save_figure("virial_residual.png", paths)
     plt.show()
 
 
@@ -249,6 +260,7 @@ def plot_kinetic_energy_components_1(paths):
     plt.ylabel("Energy")
     plt.legend(fontsize=8)
     plt.tight_layout()
+    save_figure("kinetic_energy_components_1.png", paths)
     plt.show()
 
 

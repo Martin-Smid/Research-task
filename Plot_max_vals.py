@@ -56,6 +56,9 @@ def plot_max_values(*simulation_directories):
     plt.xticks(fontsize=14)
     plt.yticks(fontsize=14)
     plt.tight_layout()
+    output = directories[-1] / "max_values.png"  # no display on a cluster: always keep the figure as a file
+    plt.savefig(output, dpi=150)
+    print(f"Saved {output}")
     plt.show()
 
 

@@ -1,8 +1,28 @@
 # Pokračování práce — working_with_chat
 
-**CFL v NBodyGas: jedna příčina nalezena a opravena, druhý případ zůstává otevřený.**
+**CFL v NBodyGas: obě příčiny nalezeny a opraveny (2026-10-16 a 2026-10-26).**
 - *Opraveno:* těžká studená koule (1e12 Msun, Rs=5 kpc, h=1e-3, N=128) končila NaN. Příčina: `dt_sub` se počítal jednou na okno, takže skutečné Courantovo číslo během ~80 substepů vyrostlo z 0,5 na 2,95 (vmax 3e3 → 2,4e4), schéma se rozkmitalo a `v = m/rho_floor` přetekla do NaN. Teď se CFL krok přepočítává před každým substepem (`_substeps` v NBodyGas.py); okna s jedním substepem jsou bitově beze změny, cena ~2–6 % jednoho substepu navíc. Při příliš velkém `h` vyhodí `FloatingPointError` s počtem potřebných substepů místo NaN (pro 1e12 a h=1e-3 je to 112 > max_substeps=100). Doporučení pro kolaps: `h = t_ff/100`, t_ff = √(3π/(32Gρ0)) (1e12: 5,85 Myr), `max_substeps` zvýšit.
-- *Stále otevřené:* main.py konfigurace s hustotou i rychlostí disku vynásobenou okrajovým oknem cos²(πx/20)·cos²(πy/20)·cos²(πz/20) (N=128, h=1e-3, gravitace zapnutá) pořád padá (nově požadováno ~4e75 substepů), ve starém i novém kódu, tedy **to není stejná příčina jako u koule**. Podezření (neověřeno): rozsáhlé vakuum na rho_floor. Dalším krokem je zjistit první krok a buňku, kde signální rychlost exploduje; fyziku neměnit naslepo.
+- *Druhý případ (okno, 2026-10-26) vyřešen:* příčina nebyla CFL ani vakuum samo o sobě, ale nezávislé omezování ρ a hybnosti v MUSCL. Ve vakuové buňce mezi dvěma rozbíhajícími se toky (ρ lokální minimum, hybnost monotónní) vznikl povrch s konečnou hybností a ρ = rho_floor, tedy rychlost ~1e11; Rusanovovy toky ~1e10 daly záporné hustoty a jejich ořez vytvořil hmotu. Oprava (volba B): na plochách, kde je povrchová rychlost větší než 10× (|v|+c) sousedních buněk, se použijí stavy prvního řádu. Referenční sady zůstávají bitově shodné; test `test_gas_vacuum_hole_between_flows.py`, reproducer `resources/diagnostics/cfl_disk_repro.py`.
+
+## Stav k 2026-10-26 (Koios, P100)
+
+**Hotovo**
+- Běh na Koios: `KOIOS.md` (ssh-agent, venv, sbatch), reference `baselines_koios_p100/` (bitově reprodukovatelná), srovnání sad `compare_baseline_sets.py`. Quadro vs P100: baryonové případy 1e-14 %, vlnová část ~1e-4 %, sink ~1–3 %.
+- Sink: potenciál byl středěný v rohu boxu (ignoroval dolní hranici) a akrece plynu neodebírala energii. Obojí opraveno, testy `test_sink_potential_position.py` a `test_sink_gas_accretion_energy.py`. Akrece se zapíná `sim.sink_accretion = True` (výchozí False). Změnilo se 5 referenčních souborů s sinkem v každé sadě; přegenerována jen sada P100, sady Quadro, RTX 3070 a GTX 1050 Ti jsou pro sink zastaralé.
+- Plyn kolem černé díry: 13/13 kontrol (zachování hmoty, energie, rotační křivka = Kepler do 2 %). Ztráta momentu hybnosti 3,6 % za oběh je numerická viskozita Rusanova schématu. **Stabilitu plynu bereme jako hotovou, jak bude** (vnitřní kroužky do 4 kpc ±10 %, vnější 5–8 kpc ~−30 % za Gyr, tam je plyn s cs = 8 pro mělký potenciál příliš horký).
+- `main.py`: zjednodušená trpasličí galaxie (soliton 5,3e7 Msun, hvězdy 10 %, plyn 10 %, černá díra 0,4 % hmotnosti solitonu), dvě fáze: relaxace s pomalu zapínanými hvězdami, pak `from_checkpoint` + `start_new_segment` a přidání plynu a černé díry. Čistá relaxace dýchání solitonu (±13 %, perioda ~0,75 Gyr) neutlumí; pomalé zapínání ano (rozkmit 0,4 %). Po přidání plynu naráz se dýchání vrací s poloviční amplitudou (13 %), což bereme jako přijatelné.
+- Energie: skok při t=0 zmizel, drift +0,28 % za Gyr. Virial s izolovaným W: soliton sám 1,004, celek −0,2 % z |W| na začátku.
+- Obrázky z `plot_energies.py`, `plot_density.py`, `Plot_max_vals.py`, `plot_from_snapshots.py` se ukládají do složky simulace.
+
+**Co dál**
+1. Konvergence: stejné metriky pro N = 64, 96, 128, 192 a poloviční h (hlavně ztráta momentu hybnosti plynu).
+2. Volitelně zapínat plyn postupně (jako hvězdy), případně relaxovat rovnou s plynem.
+3. Dohledat únik hmotnosti vlnové funkce (0,04–0,09 % za Gyr).
+4. Částice a sinky pořád používají zamrzlý potenciál v čase; podezřelý potenciál samointerakce (viz CLAUDE.md, body 2 a 3).
+5. Bondiho akrece používá konstantní `gas.cs`; rychlost akrece bereme jako numerický test, ne fyzikální predikci.
+6. Zkontrolovat starší simulace s černou dírou v boxech, které nezačínají v 0.
+7. Přegenerovat reference na ostatních GPU; commit (zatím nic nebylo commitnuto).
+8. Úklid balíčkování a dokumentace, licence a citace (viz seznam níže).
 
 ## Cíl a pravidla
 
@@ -47,3 +67,7 @@ Pro porovnání rotací použít podporovaný přepínač --allow-rotation-chang
 3. **Document the verified behavior.** Replace the README's development diary with installation, a minimal runnable example, units, boundary conditions, supported components, and restart instructions. Add numerical-method documentation, checkpoint-format documentation, and reproducible validation cases with stated tolerances. Before release, settle licensing and citation information with the author.
 
 Postupovat po malých změnách, nejprve měřit a porovnávat výsledky. Vývojové experimenty držet v working_with_chat; do main přenášet ověřený kód, příklady a uživatelskou dokumentaci.
+
+## Pravidlo pro commity
+
+Commity jsou pouze na jméno autora (Martin-Smid). Do commit zpráv ani popisů PR nepřidávat `Co-Authored-By` ani jiné řádky s Claude/Anthropic, aby GitHub nezobrazoval Clauda jako přispěvatele. Platí i pro Claude Code běžící na Koios.

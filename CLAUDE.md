@@ -11,6 +11,8 @@
 - The user writes Czech. Reply in Czech, short and concrete; the user gets tired of long reports.
   When asked a yes/no question, start with yes or no. Read `CONTINUATION.md` first (Czech, work log).
 
+- Running on the Koios cluster (connection, venv, sbatch, P100 reference set): see `KOIOS.md`.
+
 ## Git workflow
 - `working_with_chat` = development/testing branch. Do all work here.
 - `main` = finished, tested code. Never commit or merge to `main` unless I explicitly ask.
@@ -65,17 +67,30 @@
    - **Fixed 2026-10-16:** `dt_sub` was computed once per window; in a collapse the true Courant number grew
      from 0.5 to ~3 and the run ended in NaN. Now `_substeps` re-evaluates it before every substep.
      Emptied cells (below `rho_floor`) also lose their momentum/energy (`_reset_emptied_cells`).
-   - **Still open (reproducer):** `main.py` disk IC with density and velocity both multiplied by the window
-     `cos²(πx/20)·cos²(πy/20)·cos²(πz/20)` (N=128, h=1e-3, gravity on) still stops with a FloatingPointError
-     (~4e75 substeps) in old and new code. Different cause than the collapse (suspect: large vacuum regions
-     at `rho_floor`). Next step: log the first step/cell where the signal speed explodes. Do not change physics blindly.
+   - **Fixed 2026-10-26 (the window disk case):** independent limiting of rho and momentum left a vacuum cell
+     between two diverging flows with finite momentum but floored density, i.e. a face velocity ~1e11; Rusanov
+     fluxes of 1e10 made negative densities, whose clamp *created* mass. `_sweep_axis` now falls back to the
+     first-order cell states on faces whose velocity exceeds 10x (|v|+c) of the two adjacent cells. Regression
+     baselines stay bitwise identical; test `tests/test_gas_vacuum_hole_between_flows.py`. Reproducer:
+     `resources/diagnostics/cfl_disk_repro.py`.
    - MUSCL with a single forward-Euler stage is untouched (limits time accuracy of the hydro).
 2. Baryon coupling in time: gas now uses a kick–drift–kick with a refreshed potential (second order for the
    gas); **particles and sinks still use the frozen potential**; orders 4/6 call particle drift with kick
    coefficients; gas supports order 2 only.
 3. Self-interaction potential `pref*(psi^2 + 2 rho psi)` looks complex/non-unitary; expected `g|psi|^2`. Not touched.
-4. Then: cleanup/packaging (requirements.txt is UTF-16 and lacks tqdm; `.idea` tracked; duplicate
+4. Then: cleanup/packaging (requirements.txt is UTF-16 (tqdm added 2026-10-26); `.idea` tracked; duplicate
    `system_fucntions.py`) → docs → settle licence/citation with me.
+
+5. Sinks (fixed 2026-10-26): (a) the analytic sink potential ignored the box's lower boundary, so in a [-L, L] box
+   a sink at the centre pulled towards the corner (-L, -L, -L); (b) `accrete_from_gas` removed density but not the
+   energy of the cell (specific energy and CFL exploded). Both fixed with tests; accretion is off unless
+   `sim.sink_accretion = True` (the call in the main loop was commented out). 5 sink reference files per set
+   changed; only `baselines_koios_p100/` was regenerated, the Quadro/RTX/GTX sets are stale for sink cases.
+   Older BH runs in boxes that do not start at 0 were affected.
+6. Open observations: the ULDM wave function loses 0.04-0.09 % of its mass per Gyr (unexplained); gas loses ~3.6 %
+   of its angular momentum per orbit at N=128 (numerical viscosity of Rusanov, should fall with resolution);
+   Bondi accretion uses the constant `gas.cs`; the code's `W` (periodic Poisson) is ~17 % off the isolated value in a
+   20 kpc box, so use an isolated `W` for virial checks (isolated soliton: 2K/|W| = 1.004).
 
 ## Accepted limitations (decided by the user, 2026-10-16)
 - The internal (thermal) energy of **cold gas in an unresolved potential** is not reliable: the difference between
@@ -110,3 +125,14 @@
 - Periodic box: a rotating disk IC is not periodic; the "cross/arms" in density slices come from box faces.
 - Collapse planning: t_ff = sqrt(3π/(32 G ρ0)); use h ≈ t_ff/100; `max_substeps` may need raising.
 - Do not leave simulation output behind; `resources/data` fills the disk (8 GB removed today).
+
+## Session log — 2026-10-26 (Koios, details in `CONTINUATION.md`)
+- Running on the Koios cluster: see `KOIOS.md` (ssh-agent, venv, sbatch). P100 reference set `baselines_koios_p100/`
+  is bitwise reproducible; `compare_baseline_sets.py` compares two sets.
+- Fixed: window-disk CFL case (see issue 1), sink potential offset and accretion energy (issue 5). New tests in
+  `tests/` for all three; `run_all.py` passes.
+- `main.py` is now a simplified dwarf galaxy (soliton 5.3e7 Msun + stars + gas + black hole, masses as fractions of
+  the soliton) in two phases: relaxation with stars switched on slowly, then `from_checkpoint` + `start_new_segment`
+  with gas and sink. Plain relaxation does not damp the soliton breathing (+-13 %, period ~0.75 Gyr); slow switching-on does.
+- `plot_energies.py` / `plot_density.py` / `Plot_max_vals.py` / `plot_from_snapshots.py` save images into the simulation directory.
+- Nothing is committed.

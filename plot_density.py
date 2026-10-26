@@ -1,20 +1,27 @@
 import os
+import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 
 
+# Složky simulací: zadej je při spuštění (python plot_density.py resources/data/simulation_...),
+# bez argumentu se použije nejnovější simulace v resources/data.
+def _latest_simulation_dir():
+    candidates = [os.path.join("resources/data", d) for d in os.listdir("resources/data")
+                  if d.startswith("simulation_") and os.path.isdir(os.path.join("resources/data", d, "density_profiles"))]
+    return max(candidates) if candidates else None
+
+simulation_dirs = sys.argv[1:] or [d for d in [_latest_simulation_dir()] if d]
 
 
-simulation_dirs = [
+def save_figure(name, simulation_dirs):
+    """Uloží aktuální obrázek do složky simulace (při více simulacích do poslední) a vypíše cestu."""
+    out = os.path.join(simulation_dirs[-1], name)
+    plt.savefig(out, dpi=150)
+    print(f"Saved {out}")
 
-"resources/data/simulation_20260405_103710"
-
-
-
-
-]
 
 specific_times = [0,0.997,1.993000,3.985000,5]
 
@@ -143,6 +150,7 @@ def plot_density_profiles(simulation_dirs, times=None):
 
         plt.legend()
         plt.tight_layout()
+        save_figure(f"density_profile_t{current_time:.3f}.png", simulation_dirs)
         plt.show()
 
     plot_normalized_profiles(time_data)
@@ -274,6 +282,7 @@ def plot_normalized_profiles(time_data):
         plt.legend(fontsize=14)
         plt.tight_layout()
 
+        save_figure(f"density_normalized_t{current_time:.3f}.png", simulation_dirs)
         plt.show()
 
 def plot_normalized_fit_profiles(time_data, n_points=300):
@@ -330,6 +339,7 @@ def plot_normalized_fit_profiles(time_data, n_points=300):
         #plt.title(f"Normalized Fitted Profiles at t = {current_time:.2f}")
         plt.legend(fontsize=14)
         plt.tight_layout()
+        save_figure(f"density_normalized_fit_t{current_time:.3f}.png", simulation_dirs)
         plt.show()
 
 

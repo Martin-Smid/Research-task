@@ -19,3 +19,4 @@ resources/diagnostics/baselines/**/restart_runs/
 resources/diagnostics/baselines/**/segment_runs/
 resources/diagnostics/baselines/**/latest_*.json
 resources/diagnostics/reports/*.png
+slurm/*.out

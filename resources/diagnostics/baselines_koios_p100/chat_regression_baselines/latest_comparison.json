@@ -1,0 +1,46 @@
+{
+  "baseline_environment": {
+    "python": "3.12.3",
+    "platform": "Linux-6.12.0-211.67.1.el10_2.x86_64-x86_64-Intel-R-_Xeon-R-_Gold_6130_CPU_@_2.10GHz-with-glibc2.41",
+    "numpy": "1.26.4",
+    "cupy": "13.3.0",
+    "cuda_path": null,
+    "cuda_runtime": 12060,
+    "gpu": "Tesla P100-SXM2-16GB",
+    "git_commit": "d19ad64fdbe412b5dc2044a5ee277c7875160740",
+    "source_digest": "73be8e86ada9e481cba95b15987b5f2f91be913766cd8a1297057bf224a2daf6"
+  },
+  "current_environment": {
+    "python": "3.12.3",
+    "platform": "Linux-6.12.0-211.67.1.el10_2.x86_64-x86_64-Intel-R-_Xeon-R-_Gold_6130_CPU_@_2.10GHz-with-glibc2.41",
+    "numpy": "1.26.4",
+    "cupy": "13.3.0",
+    "cuda_path": null,
+    "cuda_runtime": 12060,
+    "gpu": "Tesla P100-SXM2-16GB",
+    "git_commit": "d19ad64fdbe412b5dc2044a5ee277c7875160740",
+    "source_digest": "73be8e86ada9e481cba95b15987b5f2f91be913766cd8a1297057bf224a2daf6"
+  },
+  "scenarios": {
+    "wave": {
+      "passed": true,
+      "bitwise_state_match": true,
+      "differences": []
+    },
+    "wave_baryons": {
+      "passed": true,
+      "bitwise_state_match": true,
+      "differences": []
+    },
+    "wave_baryons_gas": {
+      "passed": true,
+      "bitwise_state_match": true,
+      "differences": []
+    },
+    "wave_baryons_gas_sink": {
+      "passed": true,
+      "bitwise_state_match": true,
+      "differences": []
+    }
+  }
+}

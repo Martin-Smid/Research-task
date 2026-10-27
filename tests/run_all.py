@@ -15,6 +15,8 @@ from test_particle_breathing_soliton import main as test_particle_breathing_soli
 from test_particle_kepler_orbit import main as test_particle_kepler_orbit
 from test_sink_gas_accretion_energy import main as test_sink_gas_accretion_energy
 from test_sink_force_vs_analytic import main as test_sink_force_vs_analytic
+from test_sink_oscillation_in_soliton import main as test_sink_oscillation_in_soliton
+from test_sink_binary_kepler import main as test_sink_binary_kepler
 from test_sink_gravity_single_count import main as test_sink_gravity_single_count
 from test_sink_potential_position import main as test_sink_potential_position
 
@@ -38,6 +40,8 @@ def main():
         ("particle integrator on a circular orbit around a sink", test_particle_kepler_orbit),
         ("sink force on the grid vs analytic formula", test_sink_force_vs_analytic),
         ("particle in a breathing soliton converges in h", test_particle_breathing_soliton),
+        ("sink oscillates through a soliton", test_sink_oscillation_in_soliton),
+        ("two sinks attract each other (circular binary)", test_sink_binary_kepler),
     ]
 
     for name, check in checks:

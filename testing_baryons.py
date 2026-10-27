@@ -28,13 +28,16 @@ SAVE_EVERY = 100                    # how often (in steps) density snapshots are
 
 
 def kepler_circular_velocity(sim, sink_mass, particle_position, sink_position=(0.0, 0.0, 0.0)):
-    """Circular-orbit velocity vector v = sqrt(G M / r) of a particle around a point mass.
+    """Circular-orbit velocity vector of a particle around a point mass in the periodic box.
 
+    v^2 = G M / r - (4 pi / 3) G M r^2 / L^3: the periodic Poisson solver removes the mean density, which
+    weakens the force by (4 pi / 3) G M r / L^3 (6.5 % at r = L/4). The 1-3 % axis anisotropy of the lattice remains.
     The direction is tangential (counter-clockwise in the xy plane, z component is zero)."""
 
     offset = np.array(particle_position, dtype=float) - np.array(sink_position, dtype=float)
     r = np.linalg.norm(offset)
-    speed = np.sqrt(float(sim.G) * sink_mass / r)
+    box_length = sim.boundaries[0][1] - sim.boundaries[0][0]
+    speed = np.sqrt(float(sim.G) * sink_mass * (1.0 / r - 4.0 * np.pi / 3.0 * r ** 2 / box_length ** 3))
     tangent = np.array([-offset[1], offset[0], 0.0]) / np.hypot(offset[0], offset[1])
     return speed * tangent
 

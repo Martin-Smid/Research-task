@@ -31,6 +31,7 @@ class Diagnostics:
                     # assume these are cumulative totals
                     E_diss_total += float(getattr(sys, 'E_diss_kin_total', 0.0))
                     E_diss_total += float(getattr(sys, 'E_diss_formation_total', 0.0))
+                    E_diss_total += float(getattr(sys, 'E_diss_merge_total', 0.0))
 
             for sys in self.simulation.baryonic_matter:
                 if sys.__class__.__name__.lower().endswith("gas"):

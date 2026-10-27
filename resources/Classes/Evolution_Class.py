@@ -221,6 +221,9 @@ class Evolution_Class:
                 self._perform_sink_accretion()
                 total_density = self._compute_total_density(wave_functions)  # accretion changed the gas density
 
+            if getattr(self.simulation, "sink_merging", False):
+                self._perform_sink_merging()
+
             #checking if BH appeared
             '''
             #off right now
@@ -945,6 +948,15 @@ class Evolution_Class:
                             print(f"  [SINK MERGE] merged {n_merge} pairs, dE_diss={dE:.3e}")
 
         return new_sink_created
+
+    def _perform_sink_merging(self):
+        """Merge bound sinks closer than sim.sink_merge_radius (sinks are not in the density, nothing else changes)."""
+        r_merge = getattr(self.simulation, "sink_merge_radius", None)
+        for system in self.simulation.baryonic_matter:
+            if isinstance(system, SinkNBody) and system.N > 1:
+                n_merged, dE = system.merge_close_sinks(r_merge=r_merge)
+                if n_merged:
+                    print(f"  [SINK MERGE] merged {n_merged} pair(s), {system.N} sink(s) left, E_diss = {dE:.3e}")
 
     def _perform_sink_accretion(self):
         """

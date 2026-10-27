@@ -5,8 +5,8 @@ field of the environment).
 
 Set-up
     Two equal sinks of mass M at distance R0, each orbiting the centre of mass with speed v (a circle). The
-    acceleration is computed INDEPENDENTLY of the code: Gaussian-smoothed force (s^2 = 2 eps^2) plus the mean-density
-    term of the periodic Poisson solver, -(4 pi / 3) G M r / V (the same term as in the Kepler test in the periodic box).
+    acceleration is computed INDEPENDENTLY of the code: force of a Gaussian source of width eps (point receiver) plus the
+    mean-density term of the periodic Poisson solver, -(4 pi / 3) G M r / V (the same term as in the Kepler test in the periodic box).
 
 Checks after N_ORBITS revolutions
     1) the centre of mass does not move and the total momentum is conserved (the force is symmetric),
@@ -15,6 +15,7 @@ Checks after N_ORBITS revolutions
     4) the angular velocity matches the analytic value within MAX_OMEGA_ERROR."""
 
 from pathlib import Path
+import shutil
 import sys
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -46,8 +47,7 @@ MAX_OMEGA_ERROR = 5.0e-3            # relative error of the angular velocity
 
 def expected_acceleration(G, softening, volume):
     """Acceleration of one sink due to the other at separation R0 (analytic, independent of the code)."""
-    s = np.sqrt(2.0) * softening
-    x = R0 / s
+    x = R0 / softening
     enclosed = erf(x / np.sqrt(2.0)) - np.sqrt(2.0 / np.pi) * x * np.exp(-0.5 * x * x)
     return G * M_SINK * enclosed / R0 ** 2 - 4.0 * np.pi / 3.0 * G * M_SINK * R0 / volume
 
@@ -105,6 +105,7 @@ def main():
     sim.evolution._perform_evolution_step = recorded_step
     sim.evolution.evolve(sim.wave_functions, save_every=10 ** 9, diagnostics_every=10 ** 9)
     traj, vel = np.array(traj), np.array(vel)
+    shutil.rmtree(sim.evolution.scribe.snapshot_directory, ignore_errors=True)      # the test leaves no output behind
 
     rel = traj[:, 1] - traj[:, 0]
     separation = np.linalg.norm(rel, axis=1)

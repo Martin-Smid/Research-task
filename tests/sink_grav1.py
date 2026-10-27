@@ -20,8 +20,8 @@ from resources.Classes.Nbody_classes.Sink_N_Body import SinkNBody
 # TWO SINKS (BLACK HOLES) FALL TOWARDS EACH OTHER FROM REST (units: kpc, Msun, Gyr)
 #
 # No soliton, gas or stars - just two sinks attracting each other in an empty box. The sinks start at rest, so
-# they move along a straight line, and once they get closer than MERGE_RADIUS they merge (mass and momentum are
-# conserved). The script plots x(t) of both sinks and their separation against the expectation (Newton + periodic box).
+# they move along a straight line, and once they get closer than MERGE_RADIUS they merge (sim.sink_merging; mass and
+# momentum are conserved). The script plots x(t) of both sinks and their separation against the expectation (Newton + periodic box).
 # =====================================================================================================
 
 # ---------------------------------------------------- sinks
@@ -30,7 +30,7 @@ SEPARATION = 10.0                 # initial separation [kpc]
 
 # ---------------------------------------------------- simulation
 BOX = 15.0                        # the box is [-BOX, BOX]^3, i.e. 30 kpc
-N = 128                            # grid resolution (the sink-sink force does not depend on it; cell = 0.47 kpc)
+N = 64                            # grid resolution (the sink-sink force does not depend on it; cell = 0.47 kpc)
 H = 1.0e-3                        # time step [Gyr]
 TOTAL_TIME = 4.5                  # how long to simulate [Gyr] (the fall takes ~3.9 Gyr, see the printout below)
 MERGE_CELLS = 2                   # sinks merge when they are closer than this many cells (and are bound)
@@ -63,6 +63,8 @@ sink = SinkNBody(
 
 )
 sim.add_baryons(sink)
+sim.sink_merging = True # bound sinks closer than the merge radius merge (done in Evolution before every step)
+sim.sink_merge_radius = MERGE_RADIUS
 sim.initialize_simulation()
 
 
@@ -75,9 +77,8 @@ volume = (2.0 * BOX) ** 3
 
 
 def acceleration(r):
-    """Acceleration of one sink towards the other at distance r (Gaussian-smoothed mass + periodic box)."""
-    s = np.sqrt(2.0) * softening
-    x = r / s
+    """Acceleration of one sink towards the other at distance r (Gaussian-smoothed source + periodic box)."""
+    x = r / softening
     enclosed = erf(x / np.sqrt(2.0)) - np.sqrt(2.0 / np.pi) * x * np.exp(-0.5 * x * x)
     return G * M_SINK * enclosed / r ** 2 - 4.0 * np.pi / 3.0 * G * M_SINK * r / volume
 
@@ -104,25 +105,25 @@ if t_expected > TOTAL_TIME:
 n_steps = sim.num_steps
 trajectory = np.full((n_steps + 1, 2, 3), np.nan)       # [step, sink, xyz]; after a merge only sink 0 is left
 trajectory[0] = cp.asnumpy(sink.positions)
-merges = []                                             # (time, released kinetic energy)
+merges = []                                             # (time of the merge, energy lost in it)
 original_step = sim.evolution._perform_evolution_step
+sinks_before = [sink.N]
 
 
-def step_with_merging(wave_functions, total_density, step, save_step):
+def step_and_record(wave_functions, total_density, step, save_step):
+    if sink.N < sinks_before[0]:                        # the merge happened in Evolution just before this step
+        merges.append((step * H, float(sink.E_diss_merge_total)))
+        print(f"\nMERGE at t = {step * H:.3f} Gyr, mass {float(sink.masses.sum()):.4e} Msun, "
+              f"energy lost in the merge {merges[-1][1]:.3e}")
+    sinks_before[0] = sink.N
     result = original_step(wave_functions, total_density, step, save_step)
-    if sink.N > 1:
-        n_merged, dE = sink.merge_close_sinks(r_merge=MERGE_RADIUS, bound_check=True)
-        if n_merged:
-            merges.append(((step + 1) * H, dE))
-            print(f"\nMERGE at t = {(step + 1) * H:.3f} Gyr, mass {float(sink.masses.sum()):.4e} Msun, "
-                  f"released kinetic energy {dE:.3e}")
     positions = cp.asnumpy(sink.positions)
     trajectory[step + 1, :len(positions)] = positions
     return result
 
 
-sim.evolution._perform_evolution_step = step_with_merging
-sim.evolution.evolve(sim.wave_functions, save_every=500, diagnostics_every=500)
+sim.evolution._perform_evolution_step = step_and_record
+sim.evolution.evolve(sim.wave_functions, save_every=10 ** 9, diagnostics_every=10 ** 9)
 
 time = np.arange(n_steps + 1) * H
 separation = np.linalg.norm(trajectory[:, 1] - trajectory[:, 0], axis=1)    # NaN after the merge

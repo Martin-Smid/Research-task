@@ -41,43 +41,37 @@ class SinkNBody(NBody):
         self.accretion_history = []
         self.E_diss_kin_total = 0.0
         self.E_diss_kin_last = 0.0
+        self.E_diss_merge_total = 0.0
 
     def _pair_accelerations(self):
         """Acceleration of every sink from all the other sinks (the grid forces leave the sink potential out, so a
         sink does not pull on itself, but then it does not feel the others either).
 
-        Each sink is a Gaussian-smoothed mass like in the analytic sink potential: the BH part with softening_bh,
-        the reservoir part with softening_cusp. Two Gaussians of widths s_a, s_b attract like point masses
-        smoothed with s^2 = s_a^2 + s_b^2, which keeps the force symmetric (momentum is conserved). The distance
-        is the periodic minimum image; the mean-density term -(4 pi / 3) G m r / V of the periodic Poisson
-        solver is added, so the far field matches the grid field (valid up to r ~ L/4)."""
+        Every sink is a Gaussian-smoothed source like in the analytic sink potential (BH part width softening_bh,
+        reservoir part width softening_cusp) and feels the others as a point mass, so the force is the gradient of the
+        potential energy that Diagnostics logs. For equal softenings (no reservoir mass) it is symmetric and conserves
+        momentum. The distance is the periodic minimum image; the mean-density term -(4 pi / 3) G m r / V of the
+        periodic Poisson solver is added, so the far field matches the grid field (valid up to r ~ L/4)."""
         from cupyx.scipy.special import erf
 
         G = float(self.simulation.G)
         widths = [float(b[1] - b[0]) for b in self.simulation.boundaries]
         volume = float(np.prod(widths))
         box = cp.asarray(widths)
-        parts = ((self.mass_bh, self.softening_bh), (self.mass_res, self.softening_cusp))
 
         d = self.positions[None, :, :] - self.positions[:, None, :]           # d[i, j] = x_j - x_i
         d -= box * cp.round(d / box)
-        r2 = cp.sum(d * d, axis=2)
-        r = cp.sqrt(r2)
+        r = cp.sqrt(cp.sum(d * d, axis=2))
         r_safe = cp.where(r > 0.0, r, 1.0)
 
-        acc_per_mass = cp.zeros_like(r)                                         # sum over parts of m_i^a m_j^b g(r) / m_i
-        for m_i, s_i in parts:
-            for m_j, s_j in parts:
-                s = np.sqrt(s_i ** 2 + s_j ** 2)
-                x = r_safe / s
-                g = (erf(x / np.sqrt(2.0)) - np.sqrt(2.0 / np.pi) * x * cp.exp(-0.5 * x * x)) / r_safe ** 2
-                acc_per_mass += m_i[:, None] * m_j[None, :] * g
-        # a_i = G / m_i * sum_j (...) * (x_j - x_i) / r ; the mean-density term uses m_j alone
-        total_i = cp.where(self.masses > 0.0, self.masses, 1.0)
-        weight = G * acc_per_mass / total_i[:, None] / r_safe
-        weight = cp.where(r > 0.0, weight, 0.0)
+        field = cp.zeros_like(r)                                                # field[i, j]: |a_i| / G from sink j
+        for mass_j, eps in ((self.mass_bh, self.softening_bh), (self.mass_res, self.softening_cusp)):
+            x = r_safe / eps
+            g = (erf(x / np.sqrt(2.0)) - np.sqrt(2.0 / np.pi) * x * cp.exp(-0.5 * x * x)) / r_safe ** 2
+            field += mass_j[None, :] * g
+        weight = cp.where(r > 0.0, G * field / r_safe, 0.0)
         acc = cp.sum(weight[:, :, None] * d, axis=1)
-        acc -= (4.0 * np.pi / 3.0) * G / volume * (cp.sum(self.masses[None, :, None] * d, axis=1))
+        acc -= (4.0 * np.pi / 3.0) * G / volume * cp.sum(self.masses[None, :, None] * d, axis=1)
         return acc
 
     def _interpolate_force_trilinear(self, Fx_grid, Fy_grid, Fz_grid):
@@ -650,7 +644,8 @@ class SinkNBody(NBody):
         -------
         n_merged : int
         dE_diss : float
-            Dissipated kinetic energy from inelastic merging (COM frame).
+            Energy lost in the merges: kinetic energy plus the change of the sink potential energy
+            (softened, as logged by Diagnostics); it is added to E_diss_merge_total.
         """
         if self.N < 2:
             return 0, 0.0
@@ -683,6 +678,11 @@ class SinkNBody(NBody):
         n_merged = 0
         dE_diss_total = 0.0
 
+        from scipy.special import erf
+        eps_bh = float(self.softening_bh)
+        eps_cusp = float(self.softening_cusp)
+        lower = np.array([sim.boundaries[k][0] for k in range(3)], dtype=np.float64)
+
         # helper: minimum-image displacement
         def min_image(d):
             # d shape (...,3)
@@ -692,6 +692,20 @@ class SinkNBody(NBody):
                 if L[k] > 0:
                     out[..., k] -= L[k] * np.round(out[..., k] / L[k])
             return out
+
+        def sink_energy():
+            """Kinetic + softened potential energy of the sinks, the same model as Diagnostics (Gaussian sources of
+            width eps, point receivers, W = 1/2 sum_i m_i phi(x_i), self term included)."""
+            m = mbh + mres
+            K = 0.5 * float(np.sum(m * np.sum(vel * vel, axis=1)))
+            r = np.sqrt(np.sum(min_image(pos[:, None, :] - pos[None, :, :]) ** 2, axis=-1))
+            U = 0.0
+            for m_part, eps in ((mbh, eps_bh), (mres, eps_cusp)):
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    phi = np.where(r > 0.0, -G * erf(r / (np.sqrt(2.0) * eps)) / np.where(r > 0.0, r, 1.0),
+                                   -G * np.sqrt(2.0 / np.pi) / eps)
+                U += 0.5 * float(np.sum(m[:, None] * m_part[None, :] * phi))
+            return K + U
 
         while True:
             N = mbh.size
@@ -718,10 +732,10 @@ class SinkNBody(NBody):
                 v2 = np.sum(dv * dv, axis=-1)
 
                 mtot = (mbh + mres)
-                # v_esc^2 = 2 G (m_i+m_j) / r
-                # avoid division by inf/0
+                # v_esc^2 = -2 * potential of the softened pair = 2 G (m_i+m_j) erf(r / (sqrt(2) eps)) / r
+                # (inside eps the well is shallower than the point-mass one); avoid division by inf/0
                 with np.errstate(divide="ignore", invalid="ignore"):
-                    vesc2 = 2.0 * G * (mtot[:, None] + mtot[None, :]) / dist
+                    vesc2 = 2.0 * G * (mtot[:, None] + mtot[None, :]) * erf(dist / (np.sqrt(2.0) * eps_bh)) / dist
                 bound = v2 < (v_factor * vesc2)
                 cand &= bound
 
@@ -743,14 +757,12 @@ class SinkNBody(NBody):
             m2 = mtot[j]
             mnew = m1 + m2
 
-            # dissipated kinetic energy (inelastic merge, COM frame)
-            vrel = vel[i] - vel[j]
-            mu = (m1 * m2) / mnew
-            dE = 0.5 * mu * float(np.dot(vrel, vrel))
-            dE_diss_total += dE
+            E_before = sink_energy()
 
-            # merge state (mass + momentum conserved)
-            pos[i] = (m1 * pos[i] + m2 * pos[j]) / mnew
+            # merge state (mass + momentum conserved); the centre of mass is taken along the minimum-image
+            # displacement, so a pair across the box edge merges at the edge, not in the middle of the box
+            pos[i] = pos[i] + (m2 / mnew) * min_image(pos[j] - pos[i])
+            pos[i] = lower + np.mod(pos[i] - lower, L)
             vel[i] = (m1 * vel[i] + m2 * vel[j]) / mnew
             mbh[i] = mbh[i] + mbh[j]
             mres[i] = mres[i] + mres[j]
@@ -760,6 +772,9 @@ class SinkNBody(NBody):
             vel = np.delete(vel, j, axis=0)
             mbh = np.delete(mbh, j)
             mres = np.delete(mres, j)
+
+            # energy lost in this merge (kinetic + softened potential), counted in E_diss like accretion
+            dE_diss_total += E_before - sink_energy()
 
             n_merged += 1
             if (max_merges_per_call is not None) and (n_merged >= int(max_merges_per_call)):

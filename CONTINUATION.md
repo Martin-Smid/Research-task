@@ -81,3 +81,68 @@ Postupovat po malých změnách, nejprve měřit a porovnávat výsledky. Vývoj
 ## Pravidlo pro commity
 
 Commity jsou pouze na jméno autora (Martin-Smid). Do commit zpráv ani popisů PR nepřidávat `Co-Authored-By` ani jiné řádky s Claude/Anthropic, aby GitHub nezobrazoval Clauda jako přispěvatele. Platí i pro Claude Code běžící na Koios.
+
+
+## Dva články a nástroje pro soliton s černou dírou (2026-10-29)
+
+### Nástroje (hotové, necommitnuté; testy v `tests/test_dressed_soliton.py`, mimo `run_all`, ~5 min na GPU)
+- `DressedSoliton.py` (1D, CPU/scipy): radiální základní stav SP s centrální černou dírou, Gaussovskou (šířka `eps` = `softening_bh` běhu) nebo bodovou. Shooting v jednom vlastním čísle.
+  `python DressedSoliton.py --selftest` (volný soliton = `GroundState(1).dat` na 7 míst, vodíkový limit), `python DressedSoliton.py --m 1e-21 --M_sol 5.57e7 --M_bh 4e6 --eps 0.005 --out profil.dat`
+  zapíše profil (`r phi U`) pro `Wave_vector_class` (`packet_type=profil.dat`, `desired_soliton_mass` = vypsaná hmotnost, faktor ≠ 1 platí jen bez BH). Z Python: `solve_physical(m_ev, M_bh, M_sol, eps)`.
+- `DressedSoliton3D.py` (3D, GPU): imaginary-time Strang na stejné periodické mřížce jako simulace (stejná Poissonova rovnice se zrušenou střední hustotou, analytický Gaussovský potenciál sinku),
+  hmotnost se renormalizuje na `m_sol`. `relax(sim, m_sol, m_bh, bh_position, eps, pin_centroid=None)`, `save(...)`, `load_into(wave_function, soubor.npz)` po `initialize_simulation()`.
+  Časový krok se zmenšuje po úrovních (pevný bod rozděleného kroku je vlastní stav lehce změněného H, reziduum klesá ~tau^1,3-2); cíl rezidua 3e-4. CLI: `python DressedSoliton3D.py --N 192 --half_box 1.0 --M_bh 4e6 --eps 0.005 --out dressed.npz`.
+  `pin_centroid`: bez něj se stav s BH mimo střed usadí na BH; s ním je to soliton držený v bodě a zdeformovaný slapem BH (vázaný stav, ne stacionární).
+- Ověření: 3D (BH ve středu, N=128, box 1,5 kpc) vs 1D: centrální hustota 1,1575e11 vs 1,1584e11 (0,08 %), max rozdíl profilu 8e-4 ρ_c, reziduum 1e-4; vodíkový limit hmotnosti přesně (1e-8).
+- Neplatí: profily z `ModosFinder.py` / `ModosDbscan*.ipynb` mají φ(0)=1 (pevná centrální hustota), přeškálování hmotností je u profilu s BH neplatné, hledání je náhodné.
+
+### Článek A: otestovaný kód pro ostatní (software + validace)
+Cíl: SP s Fourierovým split-step, baryony (částice, plyn) a sink částice; srovnatelné s PyUltraLight, s testy a návodem. Možná místa: JOSS (software), Astronomy & Computing, RNAAS (krátké).
+Co už máme: regrese bitově na P100 (`baselines_koios_p100`), testy (Kepler, binárka sinků, slučování, `smooth_force`, energie sink-sink, Sod, Jeans, volný pád...), exaktní lineární benchmark v boxu
+(`tests/sink_friction.py`), mapa C(M_Q, ε/λ) a konvergence (`tests/sink_friction_scan.py`, `t2_aggregate.py`), complex128, řešiče solitonu 1D/3D.
+Co chybí (pořadí): (1) README se skutečným návodem (instalace, minimální příklad, jednotky, okrajové podmínky, restart), `requirements.txt` v UTF-8 a bez zbytečných balíků, licence, CITATION, `.idea` pryč, sloučit `system_fucntions.py`;
+(2) výchozí hodnota `smooth_force` (rozhodnutí; zatím False), popis všech parametrů sinku a doporučené rozsahy (ε/λ ≲ 0,15, λ ≥ 3 buňky); (3) výkon a paměť (P100: N=384 nejde, ~5 min / případ N=256) tabulka a škálování;
+(4) srovnání s nezávislým kódem na stejném testu (PyUltraLight, po ověření, že umí uniformní pozadí) a na pár bodech literatury (T5); (5) jednotná mapa platnosti (viz B); (6) regenerace referenčních sad pro další GPU (Quadro/RTX/GTX jsou po complex128 zastaralé);
+(7) dokument „known limitations": periodický box (zbytková gravitace obrazů, střední hustota -(4π/3)G m r/V platí do r ≈ L/4), sponge je complex64, bodový/Gaussovský BH, gas nepatří do jádra článku.
+Poctivě: článek A je software + validace, ne nový fyzikální výsledek.
+
+### Článek B: dynamické tření sinku v homogenním a solitonovém FDM pozadí (rozšíření 2403.09038)
+Na čem stojí (už máme, ověřeno, čísla v `plans.md` sekce 7): (i) exaktní lineární teorie pro konečný periodický box s Gaussovským sinkem (diskrétní součet módů) souhlasí se simulací na 0,5-1 % pro M_Q ≥ 10;
+(ii) limita ε → 0 souhlasí s Lancasterem 4.21 (C 3,276 vs 3,268 při M_Q 17,4; M_Q = 1: +2 %; M_Q = 0,3: +7-9 %, ještě konverguje); (iii) bodový přijímač porušuje hybnost a energii úměrně (ε/λ)², `smooth_force` ji obnoví (~N^-2);
+(iv) konvergence v N a H pod 0,5 %; oscilace při M_Q ≤ 1 jsou fyzikální; (v) čtení 2403.09038: jejich setup má λ ≈ 2,3 buňky a ε/λ ≈ 0,2 při špičkové rychlosti, což je v oblasti našich několika procent.
+Tvrzení, která by článek mohl nést (každé jen po splnění uvedených kroků): (a) mapa C a chyb hybnosti/energie v (M_Q, ε/λ, N) s pravidlem platnosti; (b) exaktní benchmark jako veřejný test pro ostatní kódy; (c) odhad systematiky publikovaných t_stop a dalších veličin
+vůči ε/dx, N, boxu a okrajům (sponge vs periodické); (d) chování BH v solitonu: čas zastavení, reheating, poloha vůči těžišti solitonu, stacionarita dressed stavu, adiabatický růst, kick. Novost nelze tvrdit před přečtením celých validačních částí Boey+2024, Wang & Easther 2021,
+Boey+2025 (2504.16348), Buehler & Desjacques (2207.13740), Lancaster+2020; z druhé ruky: 2504.16348 a podobné.
+Kroky (nejlevnější a nejvíc rozhodující první):
+1. Dokončit T2: N=320 pro M_Q 1 a 0,3 (běží), případně menší box při N=256 pro ε/λ < 0,07; rozhodnout o výchozí `smooth_force`. [hodiny]
+2. Test A (stacionarita): `DressedSoliton3D` + BH ve středu, pustit real-time, měřit drift hustoty/polohy BH vs ε/dx, M_BH/M_sol, N. [minuty až desítky minut] Tím se ověří i `Sink_N_Body` v solitonu.
+3. T5: přečíst 2403.09038 stránky 12-13, postavit jejich setup (soliton 5,57e7 z Eq. 4, BH 4e6 v klidu na (0,125, 0,125, 0), box 2 kpc, N = 192, ε = 0,5 dx), t_stop a reheating; ověřit proti A/M + B (A = 1,38e8 Msun Myr, B = 12,4 Myr). [hodiny na běh]
+4. T6: citlivost na ε/dx ∈ {0,25, 0,5, 1, 1,5}, N ∈ {128, 192, 256}, bodový přijímač vs `smooth_force`, zmrazený soliton (kontrola), sponge vs periodické okraje (`use_sponge`, V0 = 0,6, zkontrolovat jednotky a complex64). [desítky běhů, 1-2 dny GPU; prioritizovat]
+5. Adiabatický růst (dM = (M_f - M_i) / N_steps, doba růstu ≫ dynamická doba solitonu ~ Myr; ověřit konvergenci s dobou růstu), porovnání s dressed stavem z ODE; potom kick (rychlost BH ve středu) a měřit tlumení vs M_Q. [hodiny]
+6. Mapa M_Q v solitonu: M_Q,eff ≈ M_sol/M_BH × O(1) (z profilu spočítat přesně), kdy přestává lineární režim platit; srovnat s uniformním pozadím.
+7. Nezávislé ověření (druhý kód) aspoň na jednom bodě uniformního testu a na T5; bez něj zůstane „kód reprodukuje sebe".
+8. Teprve potom text: čísla z `plans.md`, grafy `resources/data/sink_friction_t2_summary`, tabulky, veřejné skripty.
+Rizika: mřížkové artefakty diagnostik (viz energie sinku: analytický self-term), `smooth_force` při ε < 0,5 buňky (hybnost +3,9 % při M_Q = 0,3, příčina neověřena), N = 384 nejde na P100, jedna volná GPU, diplomka neslouží jako zdroj čísel.
+
+## Handover 2026-10-29 (večer) — kde jsme, co dál
+
+**Stav repa (`working_with_chat`, Koios).** Commity `9c2ad17` (smooth_force), `b1de09e` (párová síla s² = ε_a²+ε_b², analytická energie sink-sink v Diagnostics, test A), `c135f14` (`max_values.csv` průběžně s energií, odstraněn starý check `Deviation`/`mass diff`, nahrazen hlášením hmotností). Nepushnuto je 9 commitů (6 starých + 3 z dneška); push dělá uživatel přes VS Code.
+Necommitnuté (moje): `DressedSoliton.py`, `DressedSoliton3D.py`, `tests/test_dressed_soliton.py`, `tests/README.md`, tato sekce, `tests/sink_friction_scan.py` (řízení přes env proměnné, T2), `tests/t2_aggregate.py`, `slurm/koios_t2.sbatch`, `slurm/koios_dressed_test.sbatch`, `correct_params.py` (nový). Uživatelovo (nesahat): `testing.py`, `plot_from_snapshots.py`, `latest_comparison.json`.
+Joby: `3649545` (cpu_int, zaseklý pending; zrušit jen se souhlasem), `3649691` (`bh320_check`: diagnostika runawaye, viz níže; výsledek v `slurm/bh320_check-3649691.out`, běhy v `resources/data/simulation_20261029_21*`; skripty `~/conv/bh320_smooth.py`, `~/conv/bh320_eps125.py`, profil `resources/solitons/Dressed_..._eps0.0125.dat` jsou moje, smazat jen po souhlasu).
+
+**Nové od posledního zápisu (podrobnosti a čísla v `plans.md`, sekce 8).**
+- Nástroje na soliton s BH: 1D `DressedSoliton.py` (CLI ukládá do `resources/solitons/`, G z astropy jako Simulation_Class; ModosFinder má G o 3e-5 vyšší), 3D `DressedSoliton3D.py`, `correct_params.py` (z N, M_sol, m, M_bh vyplní box, ε, H, čas, kontroly). Ověřená ruční simulace (stacionární běh i kick) je v `plans.md`.
+- Běhy uživatele (`testing.py`): N=256 box ±2 s H = 1,5e-4 je 5,7× nad limitem (kód jen varuje); N=256 s ε = 0,96 buňky pulzuje 1,0-1,29× ρ0; **N=320 s ε = 0,36 buňky a r_B = 1,4 buňky: exponenciální runaway** (hybnost ψ+BH roste 10× za 1,7 Myr, BH uteče po úhlopříčce, E +17 %). Hypotéza: nereciproční bodový přijímač (`smooth_force=False`) při ε < 1 buňka; alternativa: mřížková anizotropie / Nyquist. Neověřeno, kontrolní běhy `3649691` (A: smooth_force=True, B: ε = 1 buňka).
+
+**Co dělat dál (pořadí).**
+1. Vyhodnotit `3649691` (BH poloha, ρ_max/ρ0, E_total, hybnost ψ+BH ze snapshotů `wf_0`), zapsat do `plans.md`. Z toho rozhodnout o výchozí hodnotě `smooth_force` (důkazy: T2/T3 hybnost a energie, test A, runaway).
+2. Ověřit doporučení `correct_params.py` na případu uživatele (N=320, M_sol 1e8, M_bh 5e7: box ±0,389, ε = 0,00243, H = 5,8e-7, 7400 kroků) jako stacionární kontrolu; tím se potvrdí/vyvrátí pravidla (r_B ≥ 4 buňky, ε = 1 buňka, fáze potenciálu < 0,1 je jen odhad).
+3. Zvážit, aby `Simulation_Class` při H nad limitem stability skončila chybou (nebo to šlo vypnout); teď jen varuje a běh je tichý nesmysl.
+4. Vyhodnotit N=320, M_Q=0,3 (`slurm/t2n320q03_*`, joby 3649676-79; zatím nikde nezapsáno) a doplnit tabulku ε→0.
+5. T5: přečíst `2403.09038` str. 12-13, postavit setup (soliton 5,57e7, BH 4e6 v klidu na (0,125, 0,125, 0)), použít `correct_params.py` pro box/ε/H (u 192³ vychází box ±0,81, ε = 8,4 pc, H = 6,9e-6), t_stop a reheating; pak T6 (ε/dx, N, smooth_force, sponge vs periodické okraje, zmrazený soliton).
+6. Adiabatický růst BH (dM = (M_f−M_i)/N_steps), kick, 3D `pin_centroid` v simulaci (zatím jen v testu mimo simulaci).
+7. Sponge: `use_sponge`, `sponge_V0` = 0,6 (jednotky nejasné), pole je complex64; ověřit před použitím.
+8. Commitnout nástroje (po souhlasu), uklidit; kód-článek (A) a článek B podle sekce výše.
+
+**Pasti, které jsme potkali (aby se neopakovaly).** `wave_function.psi` je do `evolve()` numpy; loader profilů čte float32, interpoluje lineárně a mimo tabulku dává 0 (proto první řádek profilu r = 0); `--export=…MQ_LIST=1,0.3` v sbatch rozdělí hodnotu čárkou; `/tmp` je lokální na uzlu; N=384 přeteče 16 GB P100; PowerShell kazí uvozovky v `ssh … "…"` (skripty psát do souboru a `scp`); jedna volná GPU, joby čekají za sebou; diplomka obsahuje chyby, jen inspirace.
+**Aktualizace (noc 2026-10-29).** Kontrolní běhy `3649691` (zrušeny uživatelem v 20,3 Myr běhu B) vyvrátily hypotézu o nereciprocitě: runaway hybnosti nastává i se `smooth_force=True` (jen o ~5 Myr později) a i s ε = 1 buňka (B). Nejlépe podporovaná hypotéza: kusp s r_B = 1,4 buňky není rozlišený a schéma pak nezachovává hybnost interakce ψ-BH (netestováno). Nejdůležitější další krok: spustit doporučený případ z `correct_params.py` (N=320, box ±0,389, ε=0,00243, H=5,8e-7). Podrobnosti v `plans.md` sekce 8. Test `tests/test_dressed_soliton.py` je obnovený z mé kopie (po obnovení znovu nespuštěn).

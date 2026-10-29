@@ -34,30 +34,34 @@ from resources.Classes.Nbody_classes.Sink_N_Body import SinkNBody
 # Output: a table, and plots in resources/data/sink_friction_scan_<SCAN>/ (the output of the single runs is deleted).
 # =====================================================================================================
 
-SCAN = "mq"                       # "mq" or "softening"
-SMOOTH_FORCE = False              # SinkNBody smooth_force: the sink feels the environment force smoothed with the Gaussian of
+SCAN = os.environ.get("SCAN", "mq")   # "mq", "softening" or "t2" (T2 convergence: fixed physical softening, M_Q list from MQ_LIST)
+SMOOTH_FORCE = os.environ.get("SMOOTH_FORCE", "0") == "1"   # SinkNBody smooth_force: the sink feels the environment force smoothed with the Gaussian of
                                   # its own potential (action = reaction); the linear theory then has the Gaussian squared
 
 # ---------------------------------------------------- common settings
 V_SINK = 30.0                     # speed of the sink [kpc/Gyr]
 BOX = 9.6                         # the box is [-BOX, BOX]^3, i.e. 19.2 kpc
-N = 128                           # grid resolution (cell 0.15 kpc)
-H = 4.0e-4                        # time step [Gyr] (stability limit 6.1e-4 for this grid)
+N = int(os.environ.get("N", 128))             # grid resolution (cell 0.15 kpc at 128)
+H = float(os.environ.get("H", 4.0e-4))        # time step [Gyr] (stability limit 6.1e-4 at N = 128, scales as 1 / N^2)
 M_S = 2.5e-22                     # ULDM particle mass [eV]
-TRAVEL_FRACTION = 0.5             # the sink travels this fraction of the box length
-RECORD_EVERY = 4                  # the theory and the momentum are evaluated every this many steps
+TRAVEL_FRACTION = float(os.environ.get("TRAVEL_FRACTION", 0.5))   # the sink travels this fraction of the box length
+RECORD_EVERY = max(1, round(1.6e-3 / H))     # the theory and the momentum are evaluated every this many steps (1.6e-3 Gyr)
+EPS_PHYS = float(os.environ.get("EPS_PHYS", 0.075))                  # T2: softening_bh in kpc, the same physical value for every N (0.29 lambda at v = 30)
+TAG = os.environ.get("TAG", "")   # T2: suffix of the output folder
 FIT_FROM_B = 7.0                  # averages are taken for v t / lambda above this
 RHO_MAX = 3.0e5                   # density of the background [Msun/kpc^3] (lowered for heavy sinks, see below)
 RHO_M_MAX = 3.0e12                # upper limit of rho * M, which keeps the speed change of the sink at a few per cent
 
 if SCAN == "mq":
     CASES = [dict(mach_q=q, softening_cells=0.5) for q in (100.0, 30.0, 10.0, 3.0, 1.0, 0.3)]
+elif SCAN == "t2":
+    CASES = [dict(mach_q=float(q), softening_cells=EPS_PHYS / (2.0 * BOX / N)) for q in os.environ.get("MQ_LIST", "17.4,1,0.3").split(",")]
 else:
     CASES = [dict(mach_q=17.4, softening_cells=c) for c in (3.0, 1.5, 1.0, 0.5, 0.25)]
 
 L_BOX = 2.0 * BOX
 TOTAL_TIME = TRAVEL_FRACTION * L_BOX / V_SINK
-OUTPUT_DIR = os.path.join("resources", "data", f"sink_friction_scan_{SCAN}" + ("_smooth" if SMOOTH_FORCE else ""))
+OUTPUT_DIR = os.path.join("resources", "data", f"sink_friction_scan_{SCAN}" + ("_smooth" if SMOOTH_FORCE else "") + TAG)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
@@ -180,7 +184,11 @@ def run_case(mach_q, softening_cells):
         return result
 
     sim.evolution._perform_evolution_step = step_and_record
-    sim.evolution.evolve(sim.wave_functions, save_every=10 ** 9, diagnostics_every=10 ** 9)
+    sim.evolution.diagnostics.analytic_sink_energy = True            # analytic sink-sink energy (no grid artefact)
+    sim.evolution.evolve(sim.wave_functions, save_every=10 ** 9, diagnostics_every=max(1, n_steps // 10))
+    energy_total = np.loadtxt(os.path.join(sim.evolution.scribe.snapshot_directory, "energy.csv"), delimiter=",", skiprows=1,
+                              usecols=4)                              # E_total column
+    energy_drift = float(np.abs(energy_total - energy_total[0]).max() / (0.5 * m_sink * (V_SINK ** 2 - velocity[-1] ** 2)))
 
     time = np.arange(n_steps + 1) * H
     half = RECORD_EVERY
@@ -207,11 +215,12 @@ def run_case(mach_q, softening_cells):
         c_exact=c_exact, mean_sim=float(np.mean(c_sim[window])), mean_theory=float(np.mean(c_theory_at_sim[window])),
         mean_exact=float(np.mean(c_exact[window])), t_momentum=t_momentum, momentum_error=momentum_error,
         momentum_error_late=float(np.nanmean(momentum_error[late])),
-        momentum_offset=float((momentum_psi[-1] - impulse[-1]) / (m_sink * V_SINK)))
+        energy_drift=energy_drift, momentum_offset=float((momentum_psi[-1] - impulse[-1]) / (m_sink * V_SINK)))
     print(f"speed {V_SINK:.3f} -> {velocity[-1]:.4f} kpc/Gyr ({100 * result['slowdown']:.2f} % slower); mean C for b > {FIT_FROM_B}: "
           f"simulation {result['mean_sim']:.3f}, linear theory {result['mean_theory']:.3f}, exact steady state {result['mean_exact']:.3f}; "
           f"momentum of psi / momentum lost by the sink - 1 = {100 * result['momentum_error_late']:+.2f} % (late half of the run)")
 
+    np.savez(os.path.join(OUTPUT_DIR, f"case_MQ{mach_q:g}_N{N}_H{H:.1e}.npz"), **{k: v for k, v in result.items()})
     shutil.rmtree(sim.evolution.scribe.snapshot_directory, ignore_errors=True)    # keep only the plots (the folder exists after evolve)
     del sim, sink, wave_function, kx, ky, kz, k2, gauss, omega_sq, omega_k, kappa, denominator, weight
     cp.get_default_memory_pool().free_all_blocks()

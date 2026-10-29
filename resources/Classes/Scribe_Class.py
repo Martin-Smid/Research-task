@@ -454,6 +454,20 @@ class Scribe:
         """
         self.max_wave_vals_during_evolution[step] = float(max_value)
 
+    def flush_max_values(self, resolution, spin):
+        """Append the max values recorded since the last call to max_values.csv (same format as save_max_values, readable at any moment).
+        The first call (also after a restart from a checkpoint) writes the whole file; save_max_values at the end rewrites it identically."""
+        items = list(self.max_wave_vals_during_evolution.items())
+        written = getattr(self, "_max_vals_written", 0)
+        if written == 0 or written > len(items):
+            with open(self.max_vals_filename, "w") as f:
+                f.write(f",N{resolution}\n,s={spin}\n")
+            written = 0
+        with open(self.max_vals_filename, "a") as f:
+            for step, value in items[written:]:
+                f.write(f"{step},{value!r}\n")
+        self._max_vals_written = len(items)
+
     def save_max_values(self, resolution, spin):
         """
         Save maximum values during evolution to CSV.

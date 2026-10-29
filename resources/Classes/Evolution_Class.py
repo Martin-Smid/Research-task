@@ -157,10 +157,9 @@ class Evolution_Class:
                 total_density=initial_density_to_save
             )
         
-            mass_total = cp.sum(total_density) * self.simulation.dV
-            print("Mass:", mass_total)
-            print("Deviation [%]:", 100 * (mass_total / 1e8 - 1))
-        
+            mass_total = float(cp.sum(total_density) * self.simulation.dV)
+            print(f"Mass on the grid (waves + baryons): {mass_total:.6e}")
+
             current_time = start_step * self.h
             if self.simulation.dim == 3:
                 ix, iy, iz = self._density_max_location(total_density)
@@ -173,21 +172,18 @@ class Evolution_Class:
                 self.scribe.track_max_value(0, float(abs(total_density).max()))
         
             if wave_functions:
-                try:
-                    mass_diff = (
-                        (abs(total_density).sum() * (self.simulation.dV ** 3))
-                        / wave_functions[0].soliton_mass
-                    ) - self.simulation.num_of_w_vects_in_sim
-                except AttributeError:
-                    mass_diff = 0
+                wave_mass = sum(float(cp.sum(cp.abs(cp.asarray(wf.psi)) ** 2)) for wf in wave_functions) * self.simulation.dV
+                print(f"Mass of the wave functions: {wave_mass:.6e}")
+                # a profile read from a file is rescaled to desired_soliton_mass (scaling_lambda exists only then); the mass on the grid
+                # differs from it when the grid does not resolve the profile
+                requested = getattr(wave_functions[0], "desired_soliton_mass", None) if (
+                    len(wave_functions) == 1 and hasattr(wave_functions[0], "scaling_lambda")) else None
+                if requested:
+                    deviation = wave_mass / requested - 1.0
+                    note = "  (more than 1 %, the grid may be too coarse for this profile)" if abs(deviation) > 1e-2 else ""
+                    print(f"Requested soliton mass {requested:.6e}, deviation {100 * deviation:+.4f} %{note}")
             else:
-                mass_diff = 0
                 print("no wave functions detected")
-        
-            if mass_diff > 1e-2:
-                print(f"mass diff {mass_diff} is greater than 1e-2, might want to increase the resolution")
-            else:
-                print(f"mass diff is {mass_diff:.6f} Msun")
         else:
             total_density = self._compute_total_density(wave_functions)
 
@@ -640,6 +636,11 @@ class Evolution_Class:
         self.W_self, self.W_static = values["W_self"], values["W_static"]
         self.last_kinetic_energy = self.diagnostics.last_kinetic_energy
         self.scribe.log_energy_detailed(current_time, **{key: float(value) for key, value in values.items()})
+        if self.save_max_vals:                                  # max values go to disk with every energy record, not only at the end
+            self.scribe.flush_max_values(
+                resolution=int(self.simulation.N),
+                spin=self.simulation.spin if getattr(self.simulation, "spin", None) else None,
+            )
         return tuple(values[key] for key in
                      ("K_total", "W", "K_flow", "U_quantum", "K_baryons", "W_self", "W_static"))
 

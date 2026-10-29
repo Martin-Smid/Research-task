@@ -35,6 +35,8 @@ from resources.Classes.Nbody_classes.Sink_N_Body import SinkNBody
 # =====================================================================================================
 
 SCAN = "mq"                       # "mq" or "softening"
+SMOOTH_FORCE = False              # SinkNBody smooth_force: the sink feels the environment force smoothed with the Gaussian of
+                                  # its own potential (action = reaction); the linear theory then has the Gaussian squared
 
 # ---------------------------------------------------- common settings
 V_SINK = 30.0                     # speed of the sink [kpc/Gyr]
@@ -51,11 +53,11 @@ RHO_M_MAX = 3.0e12                # upper limit of rho * M, which keeps the spee
 if SCAN == "mq":
     CASES = [dict(mach_q=q, softening_cells=0.5) for q in (100.0, 30.0, 10.0, 3.0, 1.0, 0.3)]
 else:
-    CASES = [dict(mach_q=17.4, softening_cells=c) for c in (1.5, 1.0, 0.5, 0.25)]
+    CASES = [dict(mach_q=17.4, softening_cells=c) for c in (3.0, 1.5, 1.0, 0.5, 0.25)]
 
 L_BOX = 2.0 * BOX
 TOTAL_TIME = TRAVEL_FRACTION * L_BOX / V_SINK
-OUTPUT_DIR = os.path.join("resources", "data", f"sink_friction_scan_{SCAN}")
+OUTPUT_DIR = os.path.join("resources", "data", f"sink_friction_scan_{SCAN}" + ("_smooth" if SMOOTH_FORCE else ""))
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
@@ -104,7 +106,7 @@ DX = min(probe.dx)
 del probe
 LAMBDA = HBAR / V_SINK                            # lambda = hbar / (m v) of the paper [kpc]
 H_MAX = 4.0 / (3.0 * np.pi) * DX ** 2 / HBAR * 0.5
-print(f"scan '{SCAN}': {len(CASES)} cases, box {L_BOX} kpc, N = {N} (cell {DX:.3f} kpc), v = {V_SINK} kpc/Gyr, hbar/m = {HBAR:.3f}, "
+print(f"scan '{SCAN}' (smooth_force = {SMOOTH_FORCE}): {len(CASES)} cases, box {L_BOX} kpc, N = {N} (cell {DX:.3f} kpc), v = {V_SINK} kpc/Gyr, hbar/m = {HBAR:.3f}, "
       f"lambda = {LAMBDA:.3f} kpc ({LAMBDA / DX:.1f} cells), step {H} (limit {H_MAX:.2e}), {round(TOTAL_TIME / H)} steps per case")
 if H > H_MAX:
     print("WARNING: H is above the stability limit of the split-step scheme")
@@ -129,7 +131,7 @@ def run_case(mach_q, softening_cells):
     sim.add_wave_vector(wave_vector)
     x_start = -TRAVEL_FRACTION * L_BOX / 2.0
     sink = SinkNBody(simulation=sim, N_sinks=1, initial_masses=[m_sink], initial_positions=[[x_start, 0.0, 0.0]],
-                     initial_velocities=[[V_SINK, 0.0, 0.0]], softening_bh=eps)
+                     initial_velocities=[[V_SINK, 0.0, 0.0]], softening_bh=eps, smooth_force=SMOOTH_FORCE)
     sim.add_baryons(sink)
     sim.initialize_simulation()
     wave_function = sim.wave_functions[0]
@@ -147,7 +149,8 @@ def run_case(mach_q, softening_cells):
     near_resonance = cp.abs(denominator) < 1.0e-9 * (cp.abs(omega_sq) + kappa ** 2 + 1.0)
     kappa = cp.where(near_resonance, kappa * (1.0 + 1.0e-6) + 1.0e-9, kappa)
     denominator = omega_sq - kappa ** 2
-    weight = cp.where(nonzero, 1j * kx * gauss / cp.where(nonzero, k2, 1.0), 0.0)
+    kernel = gauss ** 2 if SMOOTH_FORCE else gauss                 # the sink acts through gauss, and feels through gauss if smoothed
+    weight = cp.where(nonzero, 1j * kx * kernel / cp.where(nonzero, k2, 1.0), 0.0)
 
     def linear_theory_force(t):
         response = ((1j * kappa * cp.sin(omega_k * t) - omega_k * cp.cos(omega_k * t)) * cp.exp(1j * kappa * t)

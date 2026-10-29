@@ -16,9 +16,17 @@ class SinkNBody(NBody):
     def __init__(self, simulation, N_sinks, initial_masses,
                  initial_positions, initial_velocities,
                  capture_radius=None, softening_bh=None, softening_cusp=None, softening_length=None,
-                 reservoir_tau=10):
-        """Initialize sink particle system."""
+                 reservoir_tau=10, smooth_force=False):
+        """Initialize sink particle system.
+
+        smooth_force: if True the force from the environment (psi, particles, gas) is smoothed with the same Gaussian as
+        the sink potential (width softening_bh) before the sink feels it, i.e. the sink is a Gaussian-extended body that
+        both acts on and feels the environment through the same kernel. Then the momentum that the sink gains is exactly
+        the momentum that psi loses (action = reaction). With False (default) the sink feels the force at a point while
+        psi feels the smoothed sink, which breaks the balance when softening_bh is not much smaller than the de Broglie
+        wavelength."""
         super().__init__(simulation, N_sinks, total_mass=1.0)
+        self.smooth_force = bool(smooth_force)
 
         self.positions = cp.asarray(initial_positions, dtype=cp.float64)
         self.velocities = cp.asarray(initial_velocities, dtype=cp.float64)
@@ -42,6 +50,18 @@ class SinkNBody(NBody):
         self.E_diss_kin_total = 0.0
         self.E_diss_kin_last = 0.0
         self.E_diss_merge_total = 0.0
+
+    def _smooth_force_grids(self, force_grids):
+        """Force grids (Fx, Fy, Fz) convolved with the Gaussian of the sink potential, exp(-k^2 softening_bh^2 / 2) in k-space."""
+        kx, ky, kz = self.simulation.k_space
+        gaussian = cp.exp(-0.5 * (kx * kx + ky * ky + kz * kz) * float(self.softening_bh) ** 2)
+        return tuple(cp.fft.ifftn(cp.fft.fftn(grid) * gaussian).real for grid in force_grids)
+
+    def drift(self, dt, potential_grid, first_step=False, last_step=False):
+        """NBody.drift, with the environment force smoothed first if smooth_force is set (once per call, not per substep)."""
+        if self.smooth_force and isinstance(potential_grid, (tuple, list)) and len(potential_grid) == 3:
+            potential_grid = self._smooth_force_grids(potential_grid)
+        return super().drift(dt, potential_grid, first_step=first_step, last_step=last_step)
 
     def _pair_accelerations(self):
         """Acceleration of every sink from all the other sinks (the grid forces leave the sink potential out, so a

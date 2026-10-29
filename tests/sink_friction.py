@@ -47,6 +47,8 @@ M_S = 2.5e-22                     # ULDM particle mass [eV]
 SOFTENING_CELLS = 0.25             # width of the Gaussian sink potential (softening_bh) in cells; smaller = closer to a point mass
                                   # (the literature curve is for a point source), but at some point the grid no longer resolves it
                                   # (the default of SinkNBody is 1.5 cells; 1.5 / 1.0 / 0.5 gave a mean C of 2.70 / 2.95 / 3.17)
+SMOOTH_FORCE = False              # SinkNBody smooth_force: the sink feels the environment force smoothed with the Gaussian of its
+                                  # own potential (action = reaction); the linear theory below then has the Gaussian squared
 TRAVEL_FRACTION = 0.5             # the sink travels this fraction of the box length (more would meet its own wake)
 RECORD_EVERY = 4                  # the theory is evaluated every this many steps
 FIT_FROM_B = 7.0                  # the agreement is judged for v t / lambda above this (as in the paper)
@@ -94,6 +96,7 @@ sink = SinkNBody(
     initial_positions=[[x_start, 0.0, 0.0]], # starts on the x axis
     initial_velocities=[[V_SINK, 0.0, 0.0]], # moving along +x
     softening_bh=SOFTENING_CELLS * 2.0 * BOX / N, # smoothing length of the sink potential [kpc]
+    smooth_force=SMOOTH_FORCE, # smooth the force the sink feels with the same Gaussian
 
 )
 sim.add_baryons(sink)
@@ -135,7 +138,8 @@ denominator = omega_sq - kappa ** 2
 near_resonance = cp.abs(denominator) < 1.0e-9 * (cp.abs(omega_sq) + kappa ** 2 + 1.0)
 kappa = cp.where(near_resonance, kappa * (1.0 + 1.0e-6) + 1.0e-9, kappa)    # removable singularity, nudge it
 denominator = omega_sq - kappa ** 2
-weight = cp.where(nonzero, 1j * kx * gauss / k2_safe, 0.0)
+kernel = gauss ** 2 if SMOOTH_FORCE else gauss                        # the sink acts through gauss, and feels through gauss if smoothed
+weight = cp.where(nonzero, 1j * kx * kernel / k2_safe, 0.0)
 
 
 def linear_theory_force(t):

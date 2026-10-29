@@ -168,7 +168,9 @@
    3.267, 3.271, 3.275, 3.216, 2.783, 1.923. Simulation = linear theory within 0.8 % for M_Q >= 3; at M_Q <= 1 the coefficient oscillates
    strongly (mean equals the steady state at M_Q = 1, 15 % above it at 0.3). T3: the momentum gained by psi differs from the momentum lost by
    the sink by -13.0 / -8.0 / -1.9 / +0.3 % for softening 0.86 / 0.57 / 0.29 / 0.14 lambda (the sink feels the wake at a point, psi feels the
-   Gaussian sink); fix idea: filter the force on the sink with the same Gaussian (not implemented, needs the user's OK). Details in `plans.md`.
+   Gaussian sink). Fix implemented 2026-10-29 (uncommitted): `SinkNBody(smooth_force=True)` filters the force on the sink with the same Gaussian,
+   momentum balance error drops to +0.3...+2 % for all softening and M_Q (test `tests/test_sink_force_smoothing.py`, 4.6e-1 -> 2e-15); default False;
+   friction at finite softening is lower (Gaussian squared in the linear theory), same point-source limit. Details and caveats in `plans.md`.
 
 ## Accepted limitations (decided by the user, 2026-10-16)
 - The internal (thermal) energy of **cold gas in an unresolved potential** is not reliable: the difference between

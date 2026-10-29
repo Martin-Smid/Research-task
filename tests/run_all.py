@@ -18,6 +18,7 @@ from test_sink_force_vs_analytic import main as test_sink_force_vs_analytic
 from test_sink_oscillation_in_soliton import main as test_sink_oscillation_in_soliton
 from test_sink_binary_kepler import main as test_sink_binary_kepler
 from test_sink_merging import main as test_sink_merging
+from test_sink_force_smoothing import main as test_sink_force_smoothing
 from test_sink_gravity_single_count import main as test_sink_gravity_single_count
 from test_sink_potential_position import main as test_sink_potential_position
 
@@ -44,6 +45,7 @@ def main():
         ("sink oscillates through a soliton", test_sink_oscillation_in_soliton),
         ("two sinks attract each other (circular binary)", test_sink_binary_kepler),
         ("sink merging (periodic edge, softened bound check, energy, flag)", test_sink_merging),
+        ("sink force smoothing gives action = reaction with psi", test_sink_force_smoothing),
     ]
 
     for name, check in checks:

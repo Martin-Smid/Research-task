@@ -201,6 +201,7 @@ def _save_component(directory: Path, index: int, component: Any) -> dict[str, An
             "E_diss_merge_total": getattr(component, "E_diss_merge_total", 0.0),
             "total_accreted_mass": component.total_accreted_mass,
             "accretion_history": component.accretion_history,
+            "smooth_force": bool(getattr(component, "smooth_force", False)),
         }
     else:
         raise TypeError(f"Unsupported checkpoint component: {component_type}")
@@ -425,6 +426,7 @@ def _restore_component(
                 "accretion_history",
             ):
                 setattr(component, name, metadata[name])
+            component.smooth_force = bool(metadata.get("smooth_force", False))     # absent in older checkpoints
             return component
 
     raise ValueError(f"Unsupported checkpoint component: {component_type}")

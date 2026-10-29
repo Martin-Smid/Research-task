@@ -161,6 +161,14 @@
    softening_bh <~ 0.3 lambda (lambda = hbar / (m v)) and lambda >= 3 cells. Not covered: the nonlinear regime M_Q <~ 1,
    a soliton background, conservation of the total momentum sink + psi (the sink feels the wake at a point, psi feels the
    Gaussian sink). The N = 256 run used H = 4e-4, above the printed stability limit (1.5e-4), with no visible harm.
+14. Friction scans (2026-10-29): `tests/sink_friction_scan.py` (SCAN = "mq" or "softening", N = 128, plots in
+   `resources/data/sink_friction_scan_<SCAN>/`). T1: mean drag coefficient for v t / lambda > 7 at M_Q = 100, 30, 10, 3, 1, 0.3
+   (softening 0.29 lambda): simulation 3.148, 3.159, 3.185, 3.130, 2.788, 2.222; exact linear theory for the box 3.174, 3.174, 3.174,
+   3.152, 3.132, 3.125; exact steady-state point-source formula (Lancaster Eq. 4.21, own implementation, tends to Eq. 4.26 for large M_Q)
+   3.267, 3.271, 3.275, 3.216, 2.783, 1.923. Simulation = linear theory within 0.8 % for M_Q >= 3; at M_Q <= 1 the coefficient oscillates
+   strongly (mean equals the steady state at M_Q = 1, 15 % above it at 0.3). T3: the momentum gained by psi differs from the momentum lost by
+   the sink by -13.0 / -8.0 / -1.9 / +0.3 % for softening 0.86 / 0.57 / 0.29 / 0.14 lambda (the sink feels the wake at a point, psi feels the
+   Gaussian sink); fix idea: filter the force on the sink with the same Gaussian (not implemented, needs the user's OK). Details in `plans.md`.
 
 ## Accepted limitations (decided by the user, 2026-10-16)
 - The internal (thermal) energy of **cold gas in an unresolved potential** is not reliable: the difference between

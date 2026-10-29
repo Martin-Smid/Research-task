@@ -68,7 +68,6 @@ def build(masses, positions, velocities, total_time=0.01, h=1.0e-3):
     )
     sim.add_baryons(sink)
     sim.initialize_simulation()
-    output_dirs.append(sim.evolution.scribe.snapshot_directory)
     return sim, sink
 
 
@@ -148,7 +147,8 @@ def check_flag():
         sim.sink_merging = flag
         sim.sink_merge_radius = 0.6
         sim.evolution.evolve(sim.wave_functions, save_every=10 ** 9, diagnostics_every=10 ** 9)
-        result[flag] = (sink.N, float(sink.masses.sum()), float(sink.E_diss_merge_total))
+        output_dirs.append(sim.evolution.scribe.snapshot_directory)      # the folder exists only once the run has started
+        result[flag] =(sink.N, float(sink.masses.sum()), float(sink.E_diss_merge_total))
     print(f"4) flag: on -> {result[True][0]} sink(s), mass {result[True][1]:.3e}, E_diss {result[True][2]:.3e}; "
           f"off -> {result[False][0]} sink(s)")
     assert result[True][0] == 1, "sink_merging = True did not merge the falling sinks"

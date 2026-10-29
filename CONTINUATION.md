@@ -15,9 +15,9 @@
 - Obrázky z `plot_energies.py`, `plot_density.py`, `Plot_max_vals.py`, `plot_from_snapshots.py` se ukládají do složky simulace.
 
 **Co dál**
-1. Konvergence: stejné metriky pro N = 64, 96, 128, 192 a poloviční h (hlavně ztráta momentu hybnosti plynu).
+1. Konvergence: hotová pro N = 64/128/256 s `complex128` (viz Doplněk); zbývá numerická viskozita plynu (RK2 v čase pro MUSCL?).
 2. Volitelně zapínat plyn postupně (jako hvězdy), případně relaxovat rovnou s plynem.
-3. Dohledat únik hmotnosti vlnové funkce (0,04–0,09 % za Gyr).
+3. ~~Dohledat únik hmotnosti vlnové funkce (0,04–0,09 % za Gyr)~~ vyřešeno: byl to `complex64`, viz Doplněk 2026-10-26.
 4. Částice a sinky pořád používají zamrzlý potenciál v čase; podezřelý potenciál samointerakce (viz CLAUDE.md, body 2 a 3).
 5. Bondiho akrece používá konstantní `gas.cs`; rychlost akrece bereme jako numerický test, ne fyzikální predikci.
 6. Zkontrolovat starší simulace s černou dírou v boxech, které nezačínají v 0.
@@ -27,8 +27,12 @@
 ## Doplněk 2026-10-26 (večer)
 
 - **Přesnost ψ:** vlnová funkce byla v `complex64`, takže každý krok zaokrouhloval na float32 a norma ψ klesala úměrně počtu kroků (−0,3 % za Gyr při h = 1,25e-4; drift energie 0,28 % → 1,2 % při 4× menším kroku, nezávisle na N). Opraveno na `complex128` (2 řádky, `Wave_function_class.py`, `Wave_Packet_Class.py`). Změna výsledků ~1e-7, `tests/run_all.py` prochází, sada `baselines_koios_p100` přegenerována (bitově reprodukovatelná). Sady Quadro/RTX/GTX jsou zastaralé pro všechny případy.
-- **Konvergence (complex64, fáze 2, 1 Gyr):** soliton a vnitřní plyn konvergují (128 vs 256 do 1–2 %), ztráta momentu hybnosti plynu −31/−18/−10 % pro N = 64/128/256 (numerická viskozita). Bude se opakovat s `complex128` pro N = 32/64/128/256.
+- **Konvergence (fáze 2, 1 Gyr, N = 64/128/256):** s `complex128` zmizel drift energie (−0,036 / −0,024 / −0,015 % místo +0,25 / +0,28 / +1,16 %) i ztráta hmotnosti ψ (~1e-10 %); `complex128` nestojí měřitelný čas (N = 256: 2 h 46 vs 2 h 42). Soliton konverguje (ρ_max 1,500 / 1,508 / 1,511e7; profil pro r ≥ 1 kpc mezi 128 a 256 do 1 %, pod ~0,5 kpc pomaleji), dýchání ρ_max (10,3 / 12,2 / 13,4 %) je fyzikální (soliton kmitá po zapnutí baryonů); jeho růst s N je hlavně lépe rozlišený vrchol (max 1,662 / 1,704 / 1,727e7, přírůstky 0,042 / 0,023), ne jiná fyzika. Plyn: ztráta momentu hybnosti −30,9 / −18,2 / −9,9 % (klesá pomalu, zdánlivý řád ~0,6 ze tří bodů), vφ v 1–3 kpc 5,28 / 6,34 / 6,55, vnější plyn 3–6 kpc nekonverguje. N = 32 spadne ve fázi 2 na NaN plynu (příliš hrubé). Zbývající nekonvergovaná část je numerická viskozita plynu (jedna Eulerova fáze MUSCL).
 - **Částice a sinky:** nové testy `test_particle_kepler_orbit.py` (integrátor je učebnicové DKD, skutečný krok určuje kritérium podkroků), `test_sink_force_vs_analytic.py` (pole sinku sedí na analytiku, použitelné do r ≤ L/4, dál anizotropie periodické mříže), `test_particle_breathing_soliton.py` (proměnný zdroj: první řád v h kvůli zamrzlému potenciálu, chyba ~1e-3 r0, přijato). Kruhová dráha se Keplerovou rychlostí `sqrt(GM/r)` v periodickém boxu není kruhová (síla je při r = L/4 o ~6,5 % slabší); použít r0 ≲ L/10 nebo rychlost z mřížky. Minimální skript: `testing_baryons.py`.
+
+## Handoff 2026-10-27
+
+Další fáze: kolize černých děr v solitonu (bez plynu). **Blokátor: sinky se navzájem nepřitahují** (dva sinky 4 kpc od sebe zůstanou po 0,1 Gyr přesně 4,0000 kpc; sink se hýbe jen v `forces_environment`). Plán a stav repa/dat: viz sekce „Handoff 2026-10-27“ na konci `CLAUDE.md`.
 
 ## Cíl a pravidla
 

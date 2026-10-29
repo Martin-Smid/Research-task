@@ -85,10 +85,21 @@ class SinkNBody(NBody):
         r_safe = cp.where(r > 0.0, r, 1.0)
 
         field = cp.zeros_like(r)                                                # field[i, j]: |a_i| / G from sink j
-        for mass_j, eps in ((self.mass_bh, self.softening_bh), (self.mass_res, self.softening_cusp)):
-            x = r_safe / eps
-            g = (erf(x / np.sqrt(2.0)) - np.sqrt(2.0 / np.pi) * x * cp.exp(-0.5 * x * x)) / r_safe ** 2
-            field += mass_j[None, :] * g
+        if self.smooth_force:
+            # extended receiver: component a (width e_a) of sink i feels component b (width e_b) of sink j with the
+            # effective Gaussian width s^2 = e_a^2 + e_b^2 (s^2 = 2 eps^2 for equal widths), weighted by m_a,i / m_i
+            parts = ((self.mass_bh, float(self.softening_bh)), (self.mass_res, float(self.softening_cusp)))
+            m_safe = cp.where(self.masses > 0.0, self.masses, 1.0)
+            for mass_i, eps_i in parts:
+                for mass_j, eps_j in parts:
+                    x = r_safe / np.sqrt(eps_i ** 2 + eps_j ** 2)
+                    g = (erf(x / np.sqrt(2.0)) - np.sqrt(2.0 / np.pi) * x * cp.exp(-0.5 * x * x)) / r_safe ** 2
+                    field += (mass_i / m_safe)[:, None] * mass_j[None, :] * g
+        else:
+            for mass_j, eps in ((self.mass_bh, self.softening_bh), (self.mass_res, self.softening_cusp)):
+                x = r_safe / eps
+                g = (erf(x / np.sqrt(2.0)) - np.sqrt(2.0 / np.pi) * x * cp.exp(-0.5 * x * x)) / r_safe ** 2
+                field += mass_j[None, :] * g
         weight = cp.where(r > 0.0, G * field / r_safe, 0.0)
         acc = cp.sum(weight[:, :, None] * d, axis=1)
         acc -= (4.0 * np.pi / 3.0) * G / volume * cp.sum(self.masses[None, :, None] * d, axis=1)
@@ -100,9 +111,50 @@ class SinkNBody(NBody):
         if self.N > 1:
             forces = forces + self._pair_accelerations()
         return forces
-    def deposit_to_grid(self):
-        """Deposit sink masses to grid using CIC."""
+
+    def potential_energy_analytic(self):
+        """Sink-sink potential energy, 1/2 sum_ij sum_ab m_a,i m_b,j phi(r_ij; s_ab) with the self terms (r = 0) included, as the
+        analytic counterpart of the grid integral in Diagnostics (which depends on the sub-cell position of a sink). Component
+        widths e_a, e_b; s^2 = e_a^2 + e_b^2 with smooth_force, s = e_b for a point receiver. Minimum-image distance plus the
+        periodic mean-density term -2 pi G m_i m_j r^2 / (3 V) of every pair (like _pair_accelerations)."""
+        from cupyx.scipy.special import erf
+
+        G = float(self.simulation.G)
+        widths = [float(b[1] - b[0]) for b in self.simulation.boundaries]
+        volume = float(np.prod(widths))
+        box = cp.asarray(widths)
+        d = self.positions[None, :, :] - self.positions[:, None, :]
+        d -= box * cp.round(d / box)
+        r = cp.sqrt(cp.sum(d * d, axis=2))
+        r_safe = cp.where(r > 0.0, r, 1.0)
+        parts = ((self.mass_bh, float(self.softening_bh)), (self.mass_res, float(self.softening_cusp)))
+        receivers = parts if self.smooth_force else ((self.masses, 0.0),)
+        energy = 0.0
+        for m_rec, e_rec in receivers:
+            for m_src, e_src in parts:
+                s = e_src if e_rec == 0.0 else np.sqrt(e_rec ** 2 + e_src ** 2)
+                phi = cp.where(r > 0.0, -G * erf(r_safe / (np.sqrt(2.0) * s)) / r_safe, -G * np.sqrt(2.0 / np.pi) / s)
+                energy += 0.5 * float(cp.sum(m_rec[:, None] * m_src[None, :] * phi))
+        energy -= 0.5 * (2.0 * np.pi / 3.0) * G / volume * float(cp.sum(self.masses[:, None] * self.masses[None, :] * r * r))
+        return energy
+
+    def deposit_to_grid_smoothed(self):
+        """CIC deposit of the sink masses convolved with the sink Gaussians (BH part width softening_bh, reservoir
+        part width softening_cusp): the density the sink acts with when it is an extended body (smooth_force).
+        Used by Diagnostics, so that the logged sink-sink and sink-psi energies use the same kernel as the forces."""
+        kx, ky, kz = self.simulation.k_space
+        k2 = kx * kx + ky * ky + kz * kz
+        rho = cp.zeros((self.simulation.N,) * self.simulation.dim, dtype=cp.float64)
+        for masses, eps in ((self.mass_bh, self.softening_bh), (self.mass_res, self.softening_cusp)):
+            rho += cp.fft.ifftn(cp.fft.fftn(self.deposit_to_grid(masses)) * cp.exp(-0.5 * k2 * float(eps) ** 2)).real
+        return rho
+
+    def deposit_to_grid(self, masses=None):
+        """Deposit sink masses (default: all of them) to grid using CIC."""
         import cupyx
+
+        if masses is None:
+            masses = self.masses
 
         sim = self.simulation
         N = sim.N
@@ -151,7 +203,7 @@ class SinkNBody(NBody):
 
         for w, ii, jj, kk in corners_weights:
             flat_indices = ii * N_sq + jj * N + kk
-            contribution = (self.masses / cell_volume) * w
+            contribution = (masses / cell_volume) * w
             cupyx.scatter_add(rho_flat, flat_indices, contribution)
 
         return rho_grid
@@ -720,11 +772,18 @@ class SinkNBody(NBody):
             K = 0.5 * float(np.sum(m * np.sum(vel * vel, axis=1)))
             r = np.sqrt(np.sum(min_image(pos[:, None, :] - pos[None, :, :]) ** 2, axis=-1))
             U = 0.0
-            for m_part, eps in ((mbh, eps_bh), (mres, eps_cusp)):
-                with np.errstate(divide="ignore", invalid="ignore"):
-                    phi = np.where(r > 0.0, -G * erf(r / (np.sqrt(2.0) * eps)) / np.where(r > 0.0, r, 1.0),
-                                   -G * np.sqrt(2.0 / np.pi) / eps)
-                U += 0.5 * float(np.sum(m[:, None] * m_part[None, :] * phi))
+            # point receivers (width 0, total mass) or, with smooth_force, extended receivers (BH and reservoir parts)
+            if self.smooth_force:
+                receivers = ((mbh, eps_bh), (mres, eps_cusp))
+            else:
+                receivers = ((m, 0.0),)
+            for m_rec, eps_rec in receivers:
+                for m_part, eps in ((mbh, eps_bh), (mres, eps_cusp)):
+                    s = eps if eps_rec == 0.0 else np.sqrt(eps_rec ** 2 + eps ** 2)
+                    with np.errstate(divide="ignore", invalid="ignore"):
+                        phi = np.where(r > 0.0, -G * erf(r / (np.sqrt(2.0) * s)) / np.where(r > 0.0, r, 1.0),
+                                       -G * np.sqrt(2.0 / np.pi) / s)
+                    U += 0.5 * float(np.sum(m_rec[:, None] * m_part[None, :] * phi))
             return K + U
 
         while True:

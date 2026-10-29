@@ -11,6 +11,9 @@ class Diagnostics:
         self.propagator = propagator
         self.sink_potential = sink_potential
         self.last_kinetic_energy = 0
+        # True: the sink-sink energy W_s_self is the analytic Gaussian pair sum (SinkNBody.potential_energy_analytic) instead of
+        # the grid integral, which depends on the sub-cell position of the sinks (CIC deposit). Always used with smooth_force.
+        self.analytic_sink_energy = False
         self.rotation_curves = RotationCurves(simulation)
 
     def compute_energy(self, wave_functions, total_density, current_time):
@@ -65,11 +68,19 @@ class Diagnostics:
         if getattr(self.simulation, "baryonic_matter", None):
             for sys in self.simulation.baryonic_matter:
                 if self._is_sink_system(sys):
-                    rho_s += sys.deposit_to_grid()
+                    # a Gaussian-extended sink (smooth_force) acts with its smoothed density, so the sink-sink energy
+                    # uses s^2 = 2 eps^2 and the sink-psi term the filtered potential, as the forces do
+                    if getattr(sys, "smooth_force", False):
+                        rho_s += sys.deposit_to_grid_smoothed()
+                    else:
+                        rho_s += sys.deposit_to_grid()
 
         # self terms
         W_w_self = 0.5 * cp.sum(rho_w * phi_w) * dV
         W_s_self = 0.5 * cp.sum(rho_s * phi_s) * dV
+        sink_systems = [s for s in (getattr(self.simulation, "baryonic_matter", None) or []) if self._is_sink_system(s)]
+        if sink_systems and (self.analytic_sink_energy or any(getattr(s, "smooth_force", False) for s in sink_systems)):
+            W_s_self = sum(s.potential_energy_analytic() for s in sink_systems)
 
         W_cross = 0.5 * (cp.sum(rho_w * phi_s) + cp.sum(rho_s * phi_w)) * dV
 

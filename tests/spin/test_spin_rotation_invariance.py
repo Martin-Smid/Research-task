@@ -49,17 +49,17 @@ MIN_EVOLUTION = 1.0e-2              # relative change of rho during the run
 MIN_CONTROL_DIFFERENCE = 1.0e-2     # relative density difference of the uncoupled control
 
 
-def build_sim(spin, **vector_kwargs):
+def build_sim(spin, n_grid=N_GRID, use_gravity=True, **vector_kwargs):
     """Small self-gravitating ULDM simulation with one Wave_vector of the given spin."""
     sim = Simulation_Class(
 
         dim=3,
         boundaries=[(-BOX, BOX)] * 3,
-        N=N_GRID,
+        N=n_grid,
         total_time=NUM_STEPS * H,
         h=H,
         order_of_evolution=2,
-        use_gravity=True,
+        use_gravity=use_gravity,
         use_units=True,
         use_sponge=False,
         self_int=False,

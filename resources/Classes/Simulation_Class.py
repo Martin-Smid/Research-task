@@ -134,6 +134,8 @@ class Simulation_Class:
         self.static_potential = static_potential
 
         self.save_max_vals = save_max_vals
+        # if True, a time step above the stability limit raises ValueError instead of printing a warning
+        self.strict_time_step = False
 
         # Initialize spatial grids
         self.dx = []
@@ -627,7 +629,7 @@ class Simulation_Class:
         Check if the time step satisfies the stability criteria.
 
         Returns:
-            bool: always True; a too large time step only prints a warning
+            bool: always True; a too large time step only prints a warning (raises ValueError if sim.strict_time_step)
         """
         # Get the minimum Δx (most restrictive)
         min_dx = min(self.dx)
@@ -657,6 +659,9 @@ class Simulation_Class:
             print(f"  - From dispersion relation: {float(first_constraint)}")
             print(f"  - From potential term: {float(second_constraint)}")
 
+            if self.strict_time_step:
+                raise ValueError(f"time step h = {self.h} exceeds the stability limit {max_allowed_dt}; "
+                                 f"use h <= {max_allowed_dt} or set sim.strict_time_step = False")
             print(f"WARNING: time step is too large, advised time step is {max_allowed_dt}. "
                   f"Continuing with the given h = {self.h}.")
 

@@ -15,6 +15,8 @@ class Wave_vector_class:
         polarization_coefficients=None,
         polarization_phases=None,
         random_seed=None,
+        independent_fields=False,
+        power_spectrum=None,
         **wave_function_kwargs,
     ):
         self._validate_spin(spin)
@@ -33,6 +35,28 @@ class Wave_vector_class:
         )
 
         self.wave_blueprint = Wave_function(**wave_function_kwargs)
+        if independent_fields:
+            # Opt-in: every polarization gets its own Gaussian random field (see _create_independent_wave_functions).
+            # The seed is stored so that Simulation.wave_vector_seeds records it; the coefficients are equal mass
+            # fractions unless given, and the phases are irrelevant for a complex Gaussian field.
+            if random_seed is None:
+                random_seed = int(np.random.randint(2**32))
+            self.random_seed = random_seed
+            self.polarization_coefficients = (
+                np.full(self.num_components, 1.0 / np.sqrt(self.num_components))
+                if polarization_coefficients is None
+                else self._prepare_coefficients(polarization_coefficients, None)
+            )
+            self.polarization_phases = (
+                np.zeros(self.num_components)
+                if polarization_phases is None
+                else self._prepare_phases(polarization_phases, None)
+            )
+            self.polarization_bases = self.generate_spin_basis(spin)
+            self.wave_vector = self._create_independent_wave_functions(
+                np.random.default_rng(random_seed), power_spectrum
+            )
+            return
         # Preserve compatibility with existing scripts that call
         # np.random.seed(...), while also allowing a per-vector seed.
         rng = (
@@ -171,6 +195,44 @@ class Wave_vector_class:
             result.append(
                 self.wave_blueprint.softcopy_psi(
                     psi_m, multiplicity=1
+                )
+            )
+        return result
+
+    def _create_independent_wave_functions(self, rng, power_spectrum):
+        """psi_m = a_m exp(-i phase_m) g_m with independent Gaussian random fields g_m.
+
+        Each g_m has the power spectrum power_spectrum(|k|) (flat if None) and the mass M of the blueprint (the scalar
+        case), so component m has the mass a_m^2 M and the total mass is M. The blueprint's own profile is only used for M;
+        the momentum factor is applied exactly once, here."""
+        blueprint = self.wave_blueprint
+        shape = blueprint.psi.shape
+        dV = np.prod(blueprint.dx)
+        mass = np.sum(np.abs(blueprint.psi) ** 2) * dV
+        amplitude = None
+        if power_spectrum is not None:
+            k = np.sqrt(sum(
+                k_axis ** 2
+                for k_axis in np.meshgrid(
+                    *[2.0 * np.pi * np.fft.fftfreq(n, d=dx) for n, dx in zip(shape, blueprint.dx)],
+                    indexing="ij",
+                )
+            ))
+            amplitude = np.sqrt(power_spectrum(k))
+        momentum_factor = blueprint.packet_creator.momentum_propagator
+
+        result = []
+        for coefficient, phase in zip(
+            self.polarization_coefficients, self.polarization_phases
+        ):
+            field = rng.normal(size=shape) + 1j * rng.normal(size=shape)
+            if amplitude is not None:
+                field = np.fft.ifftn(np.fft.fftn(field) * amplitude)
+            field *= np.sqrt(mass / (np.sum(np.abs(field) ** 2) * dV))
+            result.append(
+                blueprint.softcopy_psi(
+                    coefficient * np.exp(-1j * phase) * field * momentum_factor,
+                    multiplicity=1,
                 )
             )
         return result

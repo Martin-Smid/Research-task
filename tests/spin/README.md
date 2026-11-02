@@ -83,3 +83,26 @@ applied once (error 2.9e-16, mean k_x shift 2.000000 fundamentals); default path
 
 Windows note: if a test stops with `PermissionError` in `Scribe.save_run_config` (`os.replace` of `run_config.json`),
 another process (editor/indexer) is holding the file for a moment; it is not a test failure. Run the test again.
+
+## Measurement: scalar vs spin 1 and 2 under gravity (`spin_gravity_comparison.py`)
+
+Not a pass/fail test but a measurement; it prints a table (mean +- scatter over seeds) and saves plots and one `.npz` per case in
+`resources/data/spin_gravity_comparison<TAG>/` (outside git). The reusable analysis functions (spin density, power spectrum,
+core, collapse time, potential phase) are in `resources/Functions/spin_analysis.py`.
+
+Run it yourself (repository root, project venv; sequential,):
+
+```
+python tests/spin/spin_gravity_comparison.py main      # spins 0, 1, 2 x seeds, N = 64 (about 15 min)
+python tests/spin/spin_gravity_comparison.py conv      # spin 1 at N = 48, 64, 96 (about 15 min)
+python tests/spin/spin_gravity_comparison.py report    # table and plots from the saved cases, no GPU
+```
+
+Parameters are the constants at the top of the file (N, BOX, RHO_MEAN, H, TOTAL_TIME, SAVE_EVERY, SEEDS, SPINS, K_MAX); any of
+them can be overridden without editing the file, e.g. in PowerShell
+`$env:RHO_MEAN='1e6'; $env:SEEDS='1,2'; $env:TAG='_mytest'; python tests/spin/spin_gravity_comparison.py main`.
+Cases already saved under the same TAG are skipped, so an interrupted run can be continued. The `simulation_*` folders of the runs
+(snapshots) are not deleted; their names are listed in `run_folders.txt` next to the results.
+
+Plots: `spin_gravity_comparison.png` (variance of rho/rho_mean vs time, rho_max/rho_mean vs time, P_rho(k) at the end; mean and
+scatter over seeds) and `convergence.png` (the same for N = 48, 64, 96).

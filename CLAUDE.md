@@ -172,6 +172,14 @@
    momentum balance error drops to +0.3...+2 % for all softening and M_Q (test `tests/test_sink_force_smoothing.py`, 4.6e-1 -> 2e-15); default False;
    friction at finite softening is lower (Gaussian squared in the linear theory), same point-source limit. Details and caveats in `plans.md`.
 
+15. Time-step check (2026-10-30, commit 1513a21): `Simulation_Class.check_time_step_restriction` only printed a warning above 0.5 x the stability limit
+   (4 / (3 pi) dx^2 / hbar_tilde); `sim.strict_time_step = True` now raises ValueError instead (off by default, test `tests/test_time_step_strict.py`, registered
+   in `run_all.py`). The criterion ignores the potential of a black hole (static_potential only); the BH phase H V_BH(0) / hbar_tilde < 0.1 is checked only in `correct_params.py`.
+16. Black hole in a soliton and cross-code checks (2026-10-29..11-02; numbers and caveats in `plans.md` sections 8-11): T5 (`tests/t5_bh_soliton.py`, `tests/t5_analyze.py`,
+   `slurm/koios_t5.sbatch`) reproduces the stopping time of arXiv:2403.09038 to ~2 % (45.9 vs 46.9 Myr, one run) but shows E_total drift 0.6-0.8 % and a growing psi + BH momentum (cause open);
+   a quiet stationary BH needs r_B >= ~4-6 cells (rule of `correct_params.py`, not yet confirmed by a long run); the point receiver breaks down below ~0.5 cell; jaxion and our code
+   agree on the drag to 0.2-2.6 % (`docs/crosscode_comparison/`, agent-written scripts are not reviewed); spin tests (`tests/spin/`, 5 scripts, not in `run_all.py`) pass on the P100.
+
 ## Accepted limitations (decided by the user, 2026-10-16)
 - The internal (thermal) energy of **cold gas in an unresolved potential** is not reliable: the difference between
   the face-flux gravity work and the cell-centred work lands in `E−K`; a guard keeps it above the floor and
@@ -224,7 +232,7 @@
 - New tests for particles and the sink field (issue 8); minimal orbit script `testing_baryons.py` (analytic Kepler speed).
 - Next: convergence N=32/64/128/256 with complex128; sink oscillation test in the soliton; open points 2 and 3 above.
 
-## Research plan (paper idea, literature numbers, test list): `plans.md` (git-ignored, exists only on Koios)
+## Research plan (paper idea, literature numbers, test list, results, conclusions): `plans.md` (git-ignored on purpose, the repository is public: it exists only on Koios, keep a backup; sections 11.x = conclusions and open work)
 
 ## Handoff 2026-10-27 — next tasks (read this first in a new session)
 Goal of the next phase: **black-hole collisions inside a soliton** (ULDM soliton 5.3e7 Msun, sinks as black holes). Gas is NOT

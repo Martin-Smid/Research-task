@@ -21,8 +21,6 @@ resources/diagnostics/baselines/**/latest_*.json
 resources/diagnostics/reports/*.png
 slurm/*.out
 
-# local research plan / handoff notes (not for the repository)
-plans.md
 # one-off convergence scripts of 2026-10-26
 slurm/koios_compare_c128.sbatch
 slurm/koios_convergence_c128.sbatch
@@ -41,3 +39,6 @@ plots/*.pdf
 
 # built documentation
 docs/_build/
+
+# local research plan / handoff notes (not for the repository; the GitHub repository is public)
+plans.md

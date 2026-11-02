@@ -106,3 +106,15 @@ Cases already saved under the same TAG are skipped, so an interrupted run can be
 
 Plots: `spin_gravity_comparison.png` (variance of rho/rho_mean vs time, rho_max/rho_mean vs time, P_rho(k) at the end; mean and
 scatter over seeds) and `convergence.png` (the same for N = 48, 64, 96).
+
+### Unequal polarization fractions and the soliton onset time
+`FRACTIONS=0.8,0.1,0.1` (environment variable of `spin_gravity_comparison.py`) sets the mass fractions f_m of the polarizations;
+the density variance at t = 0 is then sum f_m^2 and n_eff = 1 / sum f_m^2 is the effective number of independent components
+(equal fractions give n_eff = n, `1,0,0` gives n_eff = 1, i.e. the scalar field). The run folders now also contain
+`max_values.csv` (`save_max_vals=True`).
+
+The onset time of the soliton is read from the time series of `rho_max/rho_mean`: the baseline is the median of this quantity in
+2-6 Gyr, the onset is the first time after 6 Gyr at which it exceeds k times the baseline (k = 3 or 5). It is a proxy, not the
+soliton criterion of the literature, and only the onset time (not the values after it) is reliable at N = 64.
+Spin 1, N = 64, 25 or 50 Gyr: n_eff = 1 (f = 1,0,0): 9.2 +- 1.7 Gyr (k = 3) and 9.7 +- 1.4 Gyr (k = 5), 3 seeds;
+n_eff = 3 (equal fractions): 31.7 +- 5.2 Gyr and 39.6 +- 3.2 Gyr, 3 seeds; n_eff = 1.5 and 2.3 (one seed): 10.4 and 14.4 Gyr.

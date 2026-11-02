@@ -23,7 +23,7 @@ Usage (repository root, project venv; the runs are sequential):
     python tests/spin/spin_gravity_comparison.py main      # spins SPINS x SEEDS at N
     python tests/spin/spin_gravity_comparison.py conv      # spin CONV_SPIN x SEEDS at the N in CONV_NS (cases already done are skipped)
     python tests/spin/spin_gravity_comparison.py report    # table and plots from the saved cases
-Constants can be overridden by environment variables of the same name (e.g. RHO_MEAN=2e6 SEEDS=1,2). Output (not in the
+Constants can be overridden by environment variables of the same name (e.g. RHO_MEAN=2e6 SEEDS=1,2); FRACTIONS=0.8,0.1,0.1 sets unequal mass fractions of the polarizations. Output (not in the
 repository): resources/data/spin_gravity_comparison<TAG>/ holds one .npz per case, the table, the plots and run_folders.txt, the
 list of the simulation_* folders created by the runs (they hold the snapshots and are NOT deleted by this script)."""
 
@@ -77,6 +77,8 @@ SPINS = _env("SPINS", (0, 1, 2))
 K_MAX = _env("K_MAX", 8.0)                # spectral cut, in fundamental modes 2 pi / (2 BOX)
 COLLAPSE_THRESHOLDS = _env("COLLAPSE_THRESHOLDS", (10.0, 50.0))   # rho_max / rho_mean
 COMPARE_TIME = _env("COMPARE_TIME", 0.0)  # if > 0 the "end" values of the table and of the resolution study are taken at this time [Gyr]
+FRACTIONS = tuple(float(v) for v in os.environ.get("FRACTIONS", "").split(",") if v)   # mass fractions of the polarizations (empty = equal);
+                                          # the density variance is then sum f_m^2, n_eff = 1 / sum f_m^2
 CORE_FACTOR = 100.0                       # a core is "clearly present" if rho_max / rho_mean > this and its half radius > 1.5 cells
 CONV_SPIN = _env("CONV_SPIN", 1)
 CONV_NS = _env("CONV_NS", (48, 64, 96))
@@ -101,6 +103,7 @@ def build_sim(spin, n_grid, **vector_kwargs):
         use_sponge=False,
         self_int=False,
         m_s=M_S,
+        save_max_vals=True,                  # max_values.csv in the run folder: rho_max etc. at every step
 
     )
     sim.strict_time_step = True
@@ -140,7 +143,8 @@ def crop(psi, n):
 def initial_fields(spin, seed, n_grid):
     """Independent Gaussian fields of the code's generator, generated at N_FINE, cut to n_grid, scaled to the total mass."""
     with redirect_stdout(io.StringIO()):
-        _, vector = build_sim(spin, N_FINE, independent_fields=True, random_seed=seed + 1000 * spin, power_spectrum=spectrum_cut)
+        _, vector = build_sim(spin, N_FINE, independent_fields=True, random_seed=seed + 1000 * spin, power_spectrum=spectrum_cut,
+                              **({"polarization_coefficients": np.sqrt(FRACTIONS)} if FRACTIONS else {}))
     fields = [crop(np.asarray(w.psi), n_grid) for w in vector.wave_vector]
     dV = (2 * BOX / n_grid) ** 3
     mass = sum(np.sum(np.abs(f) ** 2) for f in fields) * dV

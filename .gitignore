@@ -28,3 +28,10 @@ slurm/koios_compare_c128.sbatch
 slurm/koios_convergence_c128.sbatch
 slurm/koios_convergence_h.sbatch
 slurm/koios_regen_c128.sbatch
+
+# large / working files kept locally but not versioned (untracked 2026-11-03)
+Research task report/
+*.ipynb
+/*.png
+/*.jpg
+plots/

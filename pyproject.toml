@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "uldm-simulation"
+version = "0.1.0"
+description = "Spectral Schroedinger-Poisson solver for ultralight (fuzzy) dark matter with baryons, gas and sinks (CuPy)"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "pandas",
+    "astropy",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+# CuPy depends on the CUDA version: pick one (or install cupy yourself).
+cuda12 = ["cupy-cuda12x"]
+cuda11 = ["cupy-cuda11x"]
+
+[tool.setuptools.packages.find]
+include = ["resources*"]
+namespaces = true

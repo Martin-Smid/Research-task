@@ -31,7 +31,7 @@ An **NVIDIA GPU is required**, because the solvers run on CuPy. Install, in this
 git clone https://github.com/Martin-Smid/Research-task.git -b working_with_chat
 cd Research-task
 python -m venv venv
-source venv/Scripts/activate          # Windows: venv\bin\activate
+source venv/bin/activate          # Windows: venv\Scripts\activate
 pip install -e ".[cuda12]"
 python tests/run_all.py
 ```

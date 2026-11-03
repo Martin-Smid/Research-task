@@ -20,6 +20,7 @@ dependencies = [
 # CuPy depends on the CUDA version: pick one (or install cupy yourself).
 cuda12 = ["cupy-cuda12x"]
 cuda11 = ["cupy-cuda11x"]
+docs = ["sphinx", "furo", "myst-parser"]
 
 [tool.setuptools.packages.find]
 include = ["resources*"]

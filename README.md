@@ -47,5 +47,6 @@ python -c "import cupy; print(cupy.__version__, cupy.cuda.runtime.runtimeGetVers
 
 ### Running
 
-See [`examples/`](examples/README.md); for instance `python -m examples.initialize_simulation` runs a small
+See the [user guide](docs/user_guide.md) (building blocks, output files, restarting and continuing runs) and
+[`examples/`](examples/README.md); for instance `python -m examples.initialize_simulation` runs a small
 soliton simulation. Output goes to `resources/data/`.

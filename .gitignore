@@ -38,3 +38,6 @@ plots/*/
 plots/*.png
 plots/*.jpg
 plots/*.pdf
+
+# built documentation
+docs/_build/

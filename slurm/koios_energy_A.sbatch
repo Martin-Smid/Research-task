@@ -9,5 +9,5 @@
 set -eo pipefail
 cd ~/projects/research_task
 source slurm/koios_env.sh
-python -u tests/test_sink_pair_smoothed.py 2>&1 | tr "\r" "\n" | grep -a "analytic\|PASS\|Error\|assert"
-python -u tests/sink_energy_conservation.py 2>&1 | tr "\r" "\n" | grep -aE "PART|^ +[0-9]|Error|Trace|eps|soft"
+python -u tests/sink/test_sink_pair_smoothed.py 2>&1 | tr "\r" "\n" | grep -a "analytic\|PASS\|Error\|assert"
+python -u tests/sink/sink_energy_conservation.py 2>&1 | tr "\r" "\n" | grep -aE "PART|^ +[0-9]|Error|Trace|eps|soft"

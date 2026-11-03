@@ -8,4 +8,4 @@
 set -eo pipefail
 cd ~/projects/research_task
 source slurm/koios_env.sh
-python -u tests/sink_friction_scan.py 2>&1 | tr "\r" "\n" | grep -av "Simulation Progress\|Warning\|_interp\|^0.94\|^12.5\|sol massss\|^$"
+python -u tests/sink/sink_friction_scan.py 2>&1 | tr "\r" "\n" | grep -av "Simulation Progress\|Warning\|_interp\|^0.94\|^12.5\|sol massss\|^$"

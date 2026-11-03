@@ -34,4 +34,7 @@ Research task report/
 *.ipynb
 /*.png
 /*.jpg
-plots/
+plots/*/
+plots/*.png
+plots/*.jpg
+plots/*.pdf

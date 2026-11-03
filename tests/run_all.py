@@ -1,5 +1,13 @@
 """Run the small regression checks without pytest."""
 
+import sys
+from pathlib import Path
+
+# tests live in subfolders (gas, particle, sink, other); the spin tests are run separately
+for _d in sorted(Path(__file__).resolve().parent.iterdir()):
+    if _d.is_dir() and _d.name != "spin":
+        sys.path.insert(0, str(_d))
+
 from test_diagnostics_gas_internal_energy_once import main as test_diagnostics_gas_internal_energy_once
 from test_gas_adaptive_substeps import main as test_gas_adaptive_substeps
 from test_gas_free_fall_collapse import main as test_gas_free_fall_collapse

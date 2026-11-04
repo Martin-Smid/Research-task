@@ -867,7 +867,7 @@ class Simulation_Class:
         source = cfg.get("source", "both")
 
         # --- GAS AUTO THRESHOLD
-        if cfg.get("enable_gas_sinks", False):
+        if source in ("gas", "both"):
             if cfg.get("gas_density_threshold", None) is None and cfg.get("gas_mode", "truelove") == "truelove":
                 gas = self._get_first_gas_system()
                 if gas is None:
@@ -896,7 +896,7 @@ class Simulation_Class:
                 NJ_b = int(cfg.get("baryon_NJ", cfg.get("gas_NJ", 4)))
                 sigma_floor = cfg.get("baryon_sigma_floor", None)
                 if sigma_floor is not None:
-                    cfg["density_threshold"] = self._truelove_rho_threshold(float(sigma_1d), NJ_b)
+                    cfg["density_threshold"] = self._truelove_rho_threshold(max(float(sigma_1d), float(sigma_floor)), NJ_b)
 
         return cfg
 

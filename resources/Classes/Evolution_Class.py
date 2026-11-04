@@ -1,6 +1,6 @@
 import cupy as cp
 import numpy as np
-from resources.Classes.Nbody_classes.Sink_N_Body import check_and_create_gas_sinks, SinkNBody
+from resources.Classes.Nbody_classes.Sink_N_Body import check_and_create_sinks, SinkNBody
 from resources.Classes.Nbody_classes.NBodyGas import NBodyGas
 from resources.Classes.Scribe_Class import Scribe
 from resources.Classes.Diagnostics_Class import Diagnostics
@@ -220,15 +220,11 @@ class Evolution_Class:
             if getattr(self.simulation, "sink_merging", False):
                 self._perform_sink_merging()
 
-            #checking if BH appeared
-            '''
-            #off right now
-            new_sink = self._check_and_form_sinks(step)
-            self._perform_sink_accretion()
+            #checking if BH appeared (does nothing unless enable_sink_particle_formation / sink_formation was set)
+            new_sink = self._check_and_form_sinks(step, wave_functions)
             if new_sink:
                 print("New sink formed at step", step)
                 total_density = self._compute_total_density(wave_functions)
-            '''
             # Perform evolution step
             wave_functions = self._perform_evolution_step(wave_functions, total_density, step, save_step)
 
@@ -785,170 +781,95 @@ class Evolution_Class:
             density_threshold=None,
             consecutive_steps=1,
             check_interval=10,
-            source="baryons",
+            source="both",
             enable_gas_sinks=False,
             gas_density_threshold=None,
             gas_consecutive_steps=1,
             gas_check_interval=10,
-            gas_r_acc_cells=3,
+            gas_r_acc_cells=2,
+            include_uldm=True,
+            federrath_checks=False,
             **kwargs
     ):
         """
-        Enable dynamic sink particle formation during evolution.
+        Enable dynamic sink formation during evolution (one criterion for particles, gas and ULDM together).
 
-        NOTE:
-        - This method expects that Simulation_Class already resolved any "AUTO" logic and passed
-          numeric thresholds in density_threshold / gas_density_threshold.
-        - If a threshold is None, that branch will simply never create sinks (SinkFormationTracker returns None).
+        A sink forms in a cell where the total density (particles and/or gas according to `source`, plus the ULDM density if
+        include_uldm) stays above the threshold for `consecutive_steps` checks. The threshold is density_threshold; if it is
+        None, gas_density_threshold (the automatic Truelove value from Simulation_Class._resolve_sink_thresholds, or a value
+        given by the user). The sink consumes the particles and the gas within gas_r_acc_cells cells (see
+        check_and_create_sinks). enable_gas_sinks, gas_consecutive_steps and gas_check_interval are kept only so that old
+        configurations still load; they are ignored.
         """
         from resources.Classes.Nbody_classes.Sink_N_Body import SinkFormationTracker
 
         grid_shape = (self.simulation.N,) * self.simulation.dim
 
-        # Validate source parameter
         if source not in ["baryons", "gas", "both"]:
             raise ValueError(f"source must be 'baryons', 'gas', or 'both', got '{source}'")
 
-        # --- PARTICLE/BARYON SINKS (via check_and_create_sinks) ---
-        self.sink_density_threshold = density_threshold
+        self.sink_density_threshold = density_threshold if density_threshold is not None else gas_density_threshold
         self.sink_tracker = SinkFormationTracker(grid_shape, consecutive_steps_required=consecutive_steps)
         self.enable_sink_formation = True
         self.sink_consecutive_steps = consecutive_steps
         self.sink_check_interval = check_interval
         self.sink_source = source
-
-        # --- GAS SINKS (via check_and_create_gas_sinks) ---
-        self.enable_gas_sink_formation = bool(enable_gas_sinks)
-        if self.enable_gas_sink_formation:
-            self.gas_sink_tracker = SinkFormationTracker(grid_shape, consecutive_steps_required=gas_consecutive_steps)
-            self.gas_sink_density_threshold = gas_density_threshold
-            self.gas_sink_consecutive_steps = gas_consecutive_steps
-            self.gas_sink_check_interval = gas_check_interval
-            self.gas_r_acc_cells = gas_r_acc_cells
+        self.sink_include_uldm = bool(include_uldm)
+        self.sink_federrath = bool(federrath_checks)
+        self.gas_r_acc_cells = gas_r_acc_cells
 
         print("Sink formation enabled:")
-        print(f"  - Source: {source}")
-        print(f"  - Density threshold (baryons/particles): {density_threshold}")
+        print(f"  - Source: {source}" + (" + ULDM density" if self.sink_include_uldm else ""))
+        print(f"  - Density threshold: {self.sink_density_threshold}")
         print(f"  - Consecutive steps required: {consecutive_steps}")
         print(f"  - Check interval: {check_interval} steps")
-        if self.enable_gas_sink_formation:
-            print(f"  - Gas sinks enabled with threshold: {gas_density_threshold}")
-            print(f"  - Gas consecutive steps required: {gas_consecutive_steps}")
-            print(f"  - Gas check interval: {gas_check_interval} steps")
-            print(f"  - Gas accretion radius: {gas_r_acc_cells} cells")
+        print(f"  - Accretion radius: {gas_r_acc_cells} cells")
 
-    def _check_and_form_sinks(self, step):
+    def _check_and_form_sinks(self, step, wave_functions=None):
         """
-        Check for sink formation conditions and create sinks if needed.
-
-        Logic:
-        - Particle (baryon N-body) sinks use check_and_create_sinks(... source='baryons')
-        - Gas sinks use check_and_create_gas_sinks(...), with r_acc = gas_r_acc_cells * dx
-        - Both branches merge created sinks into a single SinkNBody system via SinkNBody.merge_or_create(...)
+        Check for sink formation conditions and create sinks if needed (check_and_create_sinks; the new sinks are merged
+        into a single SinkNBody system via SinkNBody.merge_or_create).
         """
         if not getattr(self, "enable_sink_formation", False):
             return False
 
-        # Global cadence for particle sinks (and the function as a whole)
         if step % getattr(self, "sink_check_interval", 1) != 0:
             return False
 
-        from resources.Classes.Nbody_classes.Sink_N_Body import (
-            check_and_create_sinks,
-            check_and_create_gas_sinks,
-            SinkNBody,
+        uldm_density = None
+        if self.sink_include_uldm and wave_functions:
+            uldm_density = sum(wf.calculate_density() for wf in wave_functions)
+
+        new_sinks_data = check_and_create_sinks(
+            simulation=self.simulation,
+            sink_tracker=self.sink_tracker,
+            density_threshold=self.sink_density_threshold,
+            aggregation_radius=float(self.gas_r_acc_cells) * float(min(self.simulation.dx)),
+            source=self.sink_source,
+            extra_density=uldm_density,
+            federrath=self.sink_federrath,
         )
+        if new_sinks_data is None:
+            return False
 
-        new_sink_created = False
+        self.sink_system = SinkNBody.merge_or_create(
+            existing_sink_system=getattr(self, "sink_system", None),
+            new_sinks_data=new_sinks_data,
+            simulation=self.simulation,
+        )
+        if self.sink_system not in self.simulation.baryonic_matter:
+            self.simulation.baryonic_matter.append(self.sink_system)
+        print(f"  Total sinks now: {self.sink_system.N}")
 
-        # ---------------------------
-        # (A) PARTICLE/BARYON SINKS
-        # ---------------------------
-        do_particles = self.sink_source in ("baryons", "both")
-        if do_particles:
-            # IMPORTANT: if gas sinks are enabled, we avoid double-counting gas here by forcing source='baryons'
-            effective_source = "baryons" if getattr(self, "enable_gas_sink_formation", False) else self.sink_source
+        # Merge close sinks after formation (optional)
+        merge_cells = self.simulation._sink_cfg.get("merge_r_cells", 2)
+        merge_interval = self.simulation._sink_cfg.get("merge_interval", 10)
+        if (step % merge_interval) == 0 and self.sink_system.N > 1:
+            n_merge, dE = self.sink_system.merge_close_sinks(r_merge_cells=merge_cells, bound_check=True, v_factor=1.0)
+            if n_merge > 0:
+                print(f"  [SINK MERGE] merged {n_merge} pairs, dE_diss={dE:.3e}")
 
-            new_sinks_data = check_and_create_sinks(
-                simulation=self.simulation,
-                sink_tracker=self.sink_tracker,
-                density_threshold=self.sink_density_threshold,
-                aggregation_radius=None,
-                source=effective_source,  # 'baryons' or 'both' (if gas sinks disabled)
-            )
-
-            if new_sinks_data is not None:
-                self.sink_system = SinkNBody.merge_or_create(
-                    existing_sink_system=getattr(self, "sink_system", None),
-                    new_sinks_data=new_sinks_data,
-                    simulation=self.simulation,
-                )
-                if self.sink_system not in self.simulation.baryonic_matter:
-                    self.simulation.baryonic_matter.append(self.sink_system)
-
-                new_sink_created = True
-                print(f"  Total sinks now: {self.sink_system.N}")
-
-                # Merge close sinks after accretion (optional)
-                merge_cells = self.simulation._sink_cfg.get("merge_r_cells", 2)
-                merge_interval = self.simulation._sink_cfg.get("merge_interval", 10)
-
-                if (step % merge_interval) == 0 and self.sink_system is not None and self.sink_system.N > 1:
-                    n_merge, dE = self.sink_system.merge_close_sinks(
-                        r_merge_cells=merge_cells,
-                        bound_check=True,
-                        v_factor=1.0
-                    )
-                    if n_merge > 0:
-                        print(f"  [SINK MERGE] merged {n_merge} pairs, dE_diss={dE:.3e}")
-
-        # ---------------------------
-        # (B) GAS SINKS
-        # ---------------------------
-        gas_systems = [b for b in self.simulation.baryonic_matter
-                       if b.__class__.__name__.lower().endswith("gas")]
-
-        if gas_systems and getattr(self, "enable_gas_sink_formation", False) and self.sink_source in ("gas", "both"):
-            gas = gas_systems[0]
-
-            if step % getattr(self, "gas_sink_check_interval", 1) == 0:
-                dx = float(min(self.simulation.dx))
-                r_acc = float(getattr(self, "gas_r_acc_cells", 3)) * dx
-
-                new_gas_sinks = check_and_create_gas_sinks(
-                    simulation=self.simulation,
-                    sink_tracker=self.gas_sink_tracker,
-                    gas_system=gas,
-                    density_threshold=self.gas_sink_density_threshold,
-                    r_acc=r_acc
-                )
-
-                if new_gas_sinks is not None:
-                    self.sink_system = SinkNBody.merge_or_create(
-                        existing_sink_system=getattr(self, "sink_system", None),
-                        new_sinks_data=new_gas_sinks,
-                        simulation=self.simulation
-                    )
-                    if self.sink_system not in self.simulation.baryonic_matter:
-                        self.simulation.baryonic_matter.append(self.sink_system)
-
-                    new_sink_created = True
-                    print(f"  Total sinks now: {self.sink_system.N}")
-
-                    merge_cells = self.simulation._sink_cfg.get("merge_r_cells", 2)
-                    merge_interval = self.simulation._sink_cfg.get("merge_interval", 10)
-
-                    if (step % merge_interval) == 0 and getattr(self, "sink_system",
-                                                                None) is not None and self.sink_system.N > 1:
-                        n_merge, dE = self.sink_system.merge_close_sinks(
-                            r_merge_cells=merge_cells,
-                            bound_check=True,
-                            v_factor=1.0
-                        )
-                        if n_merge > 0:
-                            print(f"  [SINK MERGE] merged {n_merge} pairs, dE_diss={dE:.3e}")
-
-        return new_sink_created
+        return True
 
     def _perform_sink_merging(self):
         """Merge bound sinks closer than sim.sink_merge_radius (sinks are not in the density, nothing else changes)."""

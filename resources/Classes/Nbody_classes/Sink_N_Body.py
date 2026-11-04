@@ -879,7 +879,6 @@ class SinkFormationTracker:
         self.grid_shape = grid_shape
         self.consecutive_steps_required = consecutive_steps_required
         self.threshold_counter = cp.zeros(grid_shape, dtype=cp.int32)
-        self.has_sink = cp.zeros(grid_shape, dtype=cp.bool_)
 
     def update_and_check(self, density, threshold):
         """Update counters and return cells ready for sink formation."""
@@ -888,205 +887,198 @@ class SinkFormationTracker:
 
         exceeds = density > threshold
         self.threshold_counter = cp.where(exceeds, self.threshold_counter + 1, 0)
-        ready_for_sink = (self.threshold_counter >= self.consecutive_steps_required) & (~self.has_sink)
+        ready_for_sink = self.threshold_counter >= self.consecutive_steps_required
 
         if not cp.any(ready_for_sink):
             return None
 
-        self.has_sink = self.has_sink | ready_for_sink
         return cp.argwhere(ready_for_sink)
 
-    def mark_sink_region(self, position, radius):
-        """Mark a region around a sink position to prevent duplicate formation."""
-        pass
+    def reset_cell(self, ix, iy, iz):
+        """Start counting again in a cell where a sink was just created (a skipped cell keeps its count and may form later)."""
+        self.threshold_counter[ix, iy, iz] = 0
 
 
-def check_and_create_sinks(simulation, sink_tracker, density_threshold,
-                           aggregation_radius=None, source='both'):
+def _sphere_offsets(r_cells):
+    """Integer cell offsets (K, 3) within r_cells."""
+    rng = np.arange(-r_cells, r_cells + 1)
+    return np.array([(i, j, k) for i in rng for j in rng for k in rng if i * i + j * j + k * k <= r_cells * r_cells])
+
+
+def _is_collapsing(simulation, cell_pos, radius, particle_systems, gas_systems, cells, gas_offsets, box, cell_volume, uldm_mass):
+    """Federrath et al. (2010) checks on the region around a seed: converging flow and gravitationally bound (see check_and_create_sinks)."""
+    masses, positions, velocities, e_thermal = [], [], [], 0.0
+    for baryons in particle_systems:
+        off = baryons.positions - cell_pos[None, :]
+        for d in range(3):
+            off[:, d] -= box[d] * cp.round(off[:, d] / box[d])
+        inside = cp.sqrt(cp.sum(off ** 2, axis=1)) < radius
+        masses.append(cp.full(int(cp.sum(inside)), baryons.m_particle, dtype=cp.float64))
+        positions.append(off[inside])
+        velocities.append(baryons.velocities[inside])
+    for gas in gas_systems:
+        rho = gas.rho[cells]
+        vel = cp.stack([gas.vx[cells], gas.vy[cells], gas.vz[cells]], axis=1)
+        pressure = (gas.gamma - 1.0) * (gas.E[cells] - 0.5 * rho * cp.sum(vel ** 2, axis=1))
+        e_thermal += 1.5 * float(cp.sum(cp.maximum(pressure, 0.0))) * cell_volume
+        masses.append(rho * cell_volume)
+        positions.append(cp.asarray(gas_offsets))
+        velocities.append(vel)
+    m, x, v = cp.concatenate(masses), cp.concatenate(positions), cp.concatenate(velocities)
+    mass = float(m.sum())
+    if mass <= 0.0:
+        return False
+    v_cm = cp.sum(m[:, None] * v, axis=0) / mass
+    x_cm = cp.sum(m[:, None] * x, axis=0) / mass
+    converging = float(cp.sum(m * cp.sum((v - v_cm) * (x - x_cm), axis=1))) < 0.0
+    e_kinetic = 0.5 * float(cp.sum(m * cp.sum((v - v_cm) ** 2, axis=1)))
+    e_gravity = -0.6 * float(simulation.G) * (mass + uldm_mass) ** 2 / radius
+    return converging and (e_thermal + e_kinetic + e_gravity < 0.0)
+
+
+def check_and_create_sinks(simulation, sink_tracker, density_threshold, aggregation_radius=None, source='both',
+                           extra_density=None, federrath=False):
     """
-    CHANGE: Enhanced logging to show creation details.
+    Create sinks where the total density (particles + gas + extra_density, e.g. ULDM) stays above density_threshold.
+
+    - candidates: cells ready in the tracker that are the density maximum within the aggregation radius (one sink per clump,
+      found on the GPU in one pass), taken densest first, none within the aggregation radius of an existing sink or of a sink
+      created in this call;
+    - a sink consumes ALL particles within the aggregation radius of its cell and the gas excess above the threshold in the cells
+      within that radius (at most the gas density of the cell; the cell energy scales with its mass);
+    - with federrath=True a seed must also pass two of the Federrath et al. (2010) checks on the region (particles and gas
+      cells within the radius, relative to their centre of mass): converging flow, sum m (v - V).(x - X) < 0 (the moment of
+      inertia shrinks), and bound, E_th + E_kin + E_grav < 0 with E_th = 3/2 sum P dV (gas only), E_kin the kinetic energy
+      relative to the centre of mass, E_grav = -3/5 G M^2 / r (M includes the ULDM mass). The potential-minimum check is
+      replaced by the density-maximum condition above;
+    - it appears at the centre of mass of what it consumed, with its total mass and momentum; the kinetic energy lost is returned
+      as E_diss_formation. Returns None if nothing formed.
     """
-    shape = (simulation.N,) * simulation.dim
-    baryonic_density = cp.zeros(shape, dtype=cp.float64)
-    regular_baryons = []
+    from cupyx.scipy.ndimage import maximum_filter
 
-    # Count particles by type
-    n_baryon_particles = 0
-    n_gas_cells = 0
+    N = simulation.N
+    min_dx = min(simulation.dx)
+    if aggregation_radius is None:
+        aggregation_radius = 2.0 * min_dx
+    r_cells = int(np.ceil(aggregation_radius / min_dx))
 
+    shape = (N,) * simulation.dim
+    density = cp.zeros(shape, dtype=cp.float64)
+    particle_systems, gas_systems = [], []
     for baryons in simulation.baryonic_matter:
         if isinstance(baryons, SinkNBody):
             continue
-
         is_gas = not hasattr(baryons, 'N')
-        is_particles = hasattr(baryons, 'N') and baryons.N > 0
-
-        if source == 'baryons' and is_gas:
+        if (is_gas and source == 'baryons') or (not is_gas and source == 'gas'):
             continue
-        if source == 'gas' and not is_gas:
-            continue
-
         if is_gas:
-            baryonic_density += baryons.deposit_to_grid()
-            regular_baryons.append(baryons)
-            n_gas_cells += simulation.N ** simulation.dim
-        elif is_particles:
-            baryonic_density += baryons.deposit_to_grid()
-            regular_baryons.append(baryons)
-            n_baryon_particles += baryons.N
-
-    # MASS CONSERVATION: Initial state
-    initial_total_mass = 0.0
-    initial_baryon_mass = 0.0
-    initial_gas_mass = 0.0
-
-    for baryons in regular_baryons:
-        if hasattr(baryons, 'N'):
-            mass = float(baryons.N * baryons.m_particle)
-            initial_total_mass += mass
-            initial_baryon_mass += mass
+            gas_systems.append(baryons)
+        elif baryons.N > 0:
+            particle_systems.append(baryons)
         else:
-            mass = float(cp.sum(baryons.rho) * simulation.dV)
-            initial_total_mass += mass
-            initial_gas_mass += mass
+            continue
+        density += baryons.deposit_to_grid()
+    if extra_density is not None:
+        density += extra_density
 
-    ready_indices = sink_tracker.update_and_check(baryonic_density, density_threshold)
-    if ready_indices is None:
+    ready = sink_tracker.update_and_check(density, density_threshold)
+    if ready is None:
         return None
 
-    n_new_sinks = ready_indices.shape[0]
+    # local density maxima only, densest first
+    offsets = _sphere_offsets(r_cells)
+    footprint = cp.zeros((2 * r_cells + 1,) * 3, dtype=bool)
+    footprint[tuple((offsets + r_cells).T)] = True
+    peaks = density >= maximum_filter(density, footprint=footprint, mode='wrap')
+    ready = ready[peaks[tuple(ready.T)]]
+    ready = ready[cp.argsort(-density[tuple(ready.T)])]
+    ready_cpu = cp.asnumpy(ready)
+    node_pos = np.stack([cp.asnumpy(cp.asarray(g)[tuple(ready.T)]) for g in simulation.grids], axis=1)
 
-    '''
-    print(f"\n{'=' * 60}")
-    print(f"SINK CREATION EVENT")
-    print(f"{'=' * 60}")
-    print(f"Creating {n_new_sinks} new sink particle(s)")
-    print(f"Source: {source}")
-    print(f"Available: {n_baryon_particles} baryon particles, {n_gas_cells} gas cells")
-    print(f"Initial mass: Baryons={initial_baryon_mass:.6e}, Gas={initial_gas_mass:.6e}")
-    '''
+    box = np.array([b[1] - b[0] for b in simulation.boundaries], dtype=np.float64)
+    low = np.array([b[0] for b in simulation.boundaries], dtype=np.float64)
+    placed = [cp.asnumpy(e.positions[n]) for e in simulation.baryonic_matter if isinstance(e, SinkNBody) for n in range(e.N)]
+    seeds = []
+    for n in range(len(ready_cpu)):
+        if placed:
+            d = np.asarray(placed) - node_pos[n]
+            d -= box * np.round(d / box)
+            if np.sqrt((d ** 2).sum(axis=1)).min() < aggregation_radius:
+                continue
+        placed.append(node_pos[n])
+        seeds.append(n)
 
-    grids = simulation.grids
-    min_dx = min(simulation.dx)
-    if aggregation_radius is None:
-        aggregation_radius = 1.0 * min_dx
-
-    new_masses = []
-    new_positions = []
-    new_velocities = []
+    dx_vec = np.array(simulation.dx, dtype=np.float64)
+    cell_volume = float(simulation.dV)
+    new_masses, new_positions, new_velocities = [], [], []
     total_dissipated_energy = 0.0
 
-    # Track what was consumed
-    baryon_particles_consumed = 0
-    baryon_mass_consumed = 0.0
-    gas_mass_consumed = 0.0
-
-    for cell_idx in ready_indices:
-        ix, iy, iz = int(cell_idx[0]), int(cell_idx[1]), int(cell_idx[2])
-        cell_pos = cp.array([
-            grids[0][ix, iy, iz],
-            grids[1][ix, iy, iz],
-            grids[2][ix, iy, iz]
-        ], dtype=cp.float64)
-
+    for n in seeds:
+        ix, iy, iz = (int(c) for c in ready_cpu[n])
+        cell_pos = cp.asarray(node_pos[n])
+        cells = ((ix + offsets[:, 0]) % N, (iy + offsets[:, 1]) % N, (iz + offsets[:, 2]) % N)
+        if federrath and not _is_collapsing(simulation, cell_pos, aggregation_radius, particle_systems, gas_systems, cells,
+                                            offsets * dx_vec, box, cell_volume,
+                                            0.0 if extra_density is None else float(extra_density[cells].sum()) * cell_volume):
+            continue
         total_mass = 0.0
         total_momentum = cp.zeros(3, dtype=cp.float64)
+        mass_offset = cp.zeros(3, dtype=cp.float64)         # sum of m * (minimum-image offset from the cell)
         KE_before = 0.0
+        thermal_removed = 0.0                               # internal energy leaving with the gas (not kinetic)
 
-        for baryons in regular_baryons:
-            if not hasattr(baryons, 'N'):
-                continue
+        for baryons in particle_systems:
             if baryons.N == 0:
                 continue
-
-            particles_before = baryons.N
-
-            dx_vec = baryons.positions - cell_pos[None, :]
+            off = baryons.positions - cell_pos[None, :]
             for d in range(3):
-                low, high = simulation.boundaries[d]
-                L = high - low
-                dx_vec[:, d] = dx_vec[:, d] - cp.copysign(L, dx_vec[:, d]) * (cp.abs(dx_vec[:, d]) > L / 2)
-            dist = cp.sqrt(cp.sum(dx_vec ** 2, axis=1))
+                off[:, d] -= box[d] * cp.round(off[:, d] / box[d])
+            nearby = cp.sqrt(cp.sum(off ** 2, axis=1)) < aggregation_radius
+            n_nearby = int(cp.sum(nearby))
+            if n_nearby == 0:
+                continue
+            m = baryons.m_particle
+            v = baryons.velocities[nearby]
+            KE_before += float(0.5 * m * cp.sum(v ** 2))
+            total_mass += m * n_nearby
+            total_momentum += cp.sum(v * m, axis=0)
+            mass_offset += m * cp.sum(off[nearby], axis=0)
+            keep = ~nearby
+            baryons.positions = baryons.positions[keep]
+            baryons.velocities = baryons.velocities[keep]
+            baryons.N = int(cp.sum(keep))
+            baryons.invalidate_density_cache()
 
-            nearby_mask = dist < aggregation_radius
-            n_nearby = int(cp.sum(nearby_mask))
-
-            if n_nearby > 0:
-                v_gas = baryons.velocities[nearby_mask]
-                m_gas = baryons.m_particle
-
-                KE_before += 0.5 * m_gas * cp.sum(v_gas ** 2)
-                mass_nearby = m_gas * n_nearby
-                momentum_nearby = cp.sum(v_gas * m_gas, axis=0)
-
-                total_mass += mass_nearby
-                total_momentum += momentum_nearby
-
-                # Track consumption
-                baryon_particles_consumed += n_nearby
-                baryon_mass_consumed += float(mass_nearby)
-
-                keep_mask = ~nearby_mask
-                baryons.positions = baryons.positions[keep_mask]
-                baryons.velocities = baryons.velocities[keep_mask]
-                baryons.N = int(cp.sum(keep_mask))
-                # TODO: check this - particle removal invalidates cached CIC density.
-                if hasattr(baryons, "invalidate_density_cache"):
-                    baryons.invalidate_density_cache()
+        for gas in gas_systems:
+            rho_gas = gas.rho[cells]
+            excess = cp.minimum(cp.maximum(density[cells] - density_threshold, 0.0), rho_gas)
+            dm = excess * cell_volume
+            if not float(dm.sum()) > 0.0:
+                continue
+            vel = cp.stack([gas.vx[cells], gas.vy[cells], gas.vz[cells]], axis=1)
+            total_mass += float(dm.sum())
+            total_momentum += cp.sum(dm[:, None] * vel, axis=0)
+            mass_offset += cp.sum(dm[:, None] * cp.asarray(offsets * dx_vec), axis=0)
+            KE_before += float(0.5 * cp.sum(dm * cp.sum(vel ** 2, axis=1)))
+            thermal_removed += float(cp.sum(excess * (gas.E[cells] / cp.where(rho_gas > 0.0, rho_gas, 1.0)
+                                                      - 0.5 * cp.sum(vel ** 2, axis=1)))) * cell_volume
+            gas.E[cells] *= (rho_gas - excess) / cp.where(rho_gas > 0.0, rho_gas, 1.0)    # energy leaves with the mass
+            gas.rho[cells] = rho_gas - excess
+            density[cells] -= excess
 
         if total_mass > 0:
             v_sink = total_momentum / total_mass
-            KE_after = 0.5 * total_mass * cp.sum(v_sink ** 2)
-            dissipation = KE_before - KE_after
-            total_dissipated_energy += dissipation
-
+            total_dissipated_energy += KE_before - float(0.5 * total_mass * cp.sum(v_sink ** 2)) + thermal_removed
+            sink_pos = cell_pos + mass_offset / total_mass
+            for d in range(3):
+                sink_pos[d] = (sink_pos[d] - low[d]) % box[d] + low[d]
             new_masses.append(total_mass)
-            new_positions.append(cell_pos)
+            new_positions.append(sink_pos)
             new_velocities.append(v_sink)
+            sink_tracker.reset_cell(ix, iy, iz)
 
     if len(new_masses) == 0:
         return None
-
-    # === MASS CONSERVATION CHECK ===
-    final_total_mass = 0.0
-    final_baryon_mass = 0.0
-    final_gas_mass = 0.0
-
-    for baryons in regular_baryons:
-        if hasattr(baryons, 'N'):
-            mass = float(baryons.N * baryons.m_particle)
-            final_total_mass += mass
-            final_baryon_mass += mass
-        else:
-            mass = float(cp.sum(baryons.rho) * simulation.dV)
-            final_total_mass += mass
-            final_gas_mass += mass
-
-    created_sink_mass = float(sum(new_masses))
-    mass_removed = initial_total_mass - final_total_mass
-    mass_error = abs(created_sink_mass - mass_removed)
-    rel_error = mass_error / (initial_total_mass + 1e-30)
-
-    '''
-    print(f"\nCONSUMPTION SUMMARY:")
-    print(f"  Baryon particles consumed: {baryon_particles_consumed}")
-    print(f"  Baryon mass consumed: {baryon_mass_consumed:.6e} Msun")
-    print(f"  Gas mass consumed: {gas_mass_consumed:.6e} Msun")
-    print(f"  Total sink mass created: {created_sink_mass:.6e} Msun")
-    print(f"  Energy dissipated: {total_dissipated_energy:.6e}")
-
-    print(f"\nMASS CONSERVATION:")
-    if rel_error > 1e-10:
-        print(f"  ❌ WARNING: Violation detected!")
-        print(f"     Mass removed: {mass_removed:.12e}")
-        print(f"     Mass created: {created_sink_mass:.12e}")
-        print(f"     Absolute error: {mass_error:.12e}")
-        print(f"     Relative error: {rel_error:.12e}")
-    else:
-        print(f"  ✓ Conserved (error: {rel_error:.3e})")
-
-    print(f"{'=' * 60}\n")
-    '''
 
     return {
         'masses': cp.array(new_masses, dtype=cp.float64),
@@ -1094,146 +1086,3 @@ def check_and_create_sinks(simulation, sink_tracker, density_threshold,
         'velocities': cp.stack(new_velocities, axis=0),
         'E_diss_formation': float(total_dissipated_energy)
     }
-
-
-def check_and_create_gas_sinks(simulation, sink_tracker, gas_system, density_threshold,
-                               r_acc=None):
-    """
-    CHANGE: Enhanced logging for gas sink creation.
-    """
-    N = simulation.N
-    dx = min(simulation.dx)
-    if r_acc is None:
-        r_acc = 2.5 * dx
-    r_cells = int(np.ceil(r_acc / dx))
-
-    rho = gas_system.rho
-
-    # MASS CONSERVATION: Initial state
-    initial_gas_mass = float(cp.sum(rho) * simulation.dV)
-    initial_avg_density = float(cp.mean(rho))
-    initial_max_density = float(cp.max(rho))
-
-    ready_indices = sink_tracker.update_and_check(rho, density_threshold)
-    if ready_indices is None:
-        return None
-
-    n_new_sinks = ready_indices.shape[0]
-
-    '''
-    print(f"\n{'=' * 60}")
-    print(f"GAS SINK CREATION EVENT")
-    print(f"{'=' * 60}")
-    print(f"Creating {n_new_sinks} sink(s) from gas")
-    print(f"Initial gas mass: {initial_gas_mass:.6e} Msun")
-    print(f"Density - avg: {initial_avg_density:.3e}, max: {initial_max_density:.3e}")
-    print(f"Threshold: {density_threshold:.3e}")
-    '''
-
-    new_masses = []
-    new_positions = []
-    new_velocities = []
-    total_diss = 0.0
-
-    cells_processed = 0
-    total_gas_removed = 0.0
-
-    offsets = []
-    for i in range(-r_cells, r_cells + 1):
-        for j in range(-r_cells, r_cells + 1):
-            for k in range(-r_cells, r_cells + 1):
-                if (i * i + j * j + k * k) <= r_cells * r_cells:
-                    offsets.append((i, j, k))
-
-    grids = simulation.grids
-    cellV = simulation.dV
-
-    for sink_num, cell_idx in enumerate(ready_indices):
-        ix, iy, iz = map(int, cell_idx)
-
-        dM = 0.0
-        dPx = dPy = dPz = 0.0
-        Kin_in = 0.0
-        cells_in_region = 0
-
-        for oi, oj, ok in offsets:
-            i = (ix + oi) % N
-            j = (iy + oj) % N
-            k = (iz + ok) % N
-
-            rho_cell = rho[i, j, k]
-            if rho_cell <= density_threshold:
-                continue
-
-            rho_excess = rho_cell - density_threshold
-            dm = rho_excess * cellV
-
-            vx = gas_system.vx[i, j, k]
-            vy = gas_system.vy[i, j, k]
-            vz = gas_system.vz[i, j, k]
-
-            dM += dm
-            dPx += dm * vx
-            dPy += dm * vy
-            dPz += dm * vz
-            Kin_in += 0.5 * dm * (vx * vx + vy * vy + vz * vz)
-
-            gas_system.rho[i, j, k] = density_threshold
-            cells_in_region += 1
-
-        if dM <= 0:
-            continue
-
-        Vx, Vy, Vz = dPx / dM, dPy / dM, dPz / dM
-        Kin_after = 0.5 * dM * (Vx * Vx + Vy * Vy + Vz * Vz)
-        diss = Kin_in - Kin_after
-        total_diss += float(diss)
-
-        pos = cp.array([grids[0][ix, iy, iz], grids[1][ix, iy, iz], grids[2][ix, iy, iz]], dtype=cp.float64)
-        vel = cp.array([Vx, Vy, Vz], dtype=cp.float64)
-
-        new_masses.append(cp.asarray(dM, dtype=cp.float64))
-        new_positions.append(pos)
-        new_velocities.append(vel)
-
-        cells_processed += cells_in_region
-        total_gas_removed += float(dM)
-
-        #print(
-         #   f"  Sink {sink_num + 1}: mass={dM:.6e}, cells={cells_in_region}, |v|={cp.sqrt(Vx ** 2 + Vy ** 2 + Vz ** 2):.3e}")
-
-    if len(new_masses) == 0:
-        return None
-
-    # === MASS CONSERVATION CHECK ===
-    final_gas_mass = float(cp.sum(gas_system.rho) * simulation.dV)
-    created_sink_mass = float(sum([float(m) for m in new_masses]))
-    mass_removed = initial_gas_mass - final_gas_mass
-    mass_error = abs(created_sink_mass - mass_removed)
-    rel_error = mass_error / (initial_gas_mass + 1e-30)
-
-    '''
-    print(f"\nGAS CONSUMPTION SUMMARY:")
-    print(f"  Cells processed: {cells_processed}")
-    print(f"  Gas mass removed: {mass_removed:.6e} Msun")
-    print(f"  Sink mass created: {created_sink_mass:.6e} Msun")
-    print(f"  Energy dissipated: {total_diss:.6e}")
-    print(f"  Final gas mass: {final_gas_mass:.6e} Msun")
-
-    print(f"\nMASS CONSERVATION:")
-    if rel_error > 1e-10:
-        print(f"  ❌ WARNING: Violation detected!")
-        print(f"     Absolute error: {mass_error:.12e}")
-        print(f"     Relative error: {rel_error:.12e}")
-    else:
-        print(f"  ✓ Conserved (error: {rel_error:.3e})")
-
-    print(f"{'=' * 60}\n")
-
-    return {
-        "masses": cp.asarray(new_masses, dtype=cp.float64),
-        "positions": cp.vstack(new_positions),
-        "velocities": cp.vstack(new_velocities),
-        "E_diss_formation": float(total_diss),
-    }
-    '''

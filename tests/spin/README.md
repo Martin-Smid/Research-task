@@ -118,3 +118,14 @@ The onset time of the soliton is read from the time series of `rho_max/rho_mean`
 soliton criterion of the literature, and only the onset time (not the values after it) is reliable at N = 64.
 Spin 1, N = 64, 25 or 50 Gyr: n_eff = 1 (f = 1,0,0): 9.2 +- 1.7 Gyr (k = 3) and 9.7 +- 1.4 Gyr (k = 5), 3 seeds;
 n_eff = 3 (equal fractions): 31.7 +- 5.2 Gyr and 39.6 +- 3.2 Gyr, 3 seeds; n_eff = 1.5 and 2.3 (one seed): 10.4 and 14.4 Gyr.
+
+## Measurement scripts (not tests; GPU, results go to `resources/data/`, not in git)
+
+| script | what it does |
+|---|---|
+| `spin_gravity_comparison.py` | Self-gravitating independent Gaussian fields of s = 0, 1, 2 (and n-component fields for half-integer s: s = 1.5 / 2.5 / 3.5 gives n = 4 / 6 / 8, s = 4 gives n = 9) in a periodic box; modes `main`, `conv`, `report`, settings by environment variables (see its docstring: `N, H, TOTAL_TIME, SAVE_EVERY, SEEDS, SPINS, FRACTIONS, TAG, SIM_DIR`). |
+| `onset_times.py` | Soliton onset time versus the effective number of components n_eff from the saved cases (CPU, no GPU); prints the table and saves `spin_onset_vs_neff.png`. |
+| `plot_peak_slice.py` | Slice through the density maximum of a snapshot, zoom, phase and profile against the soliton formula. |
+| `sink_infall.py` | Phase 2 of the sink-infall study: start a new segment from a finished `spin_gravity_comparison.py` run, drop a sink at distance `DIST` from the soliton, evolve (`NOSINK=1` gives the control without the sink). Environment variables in its docstring. |
+| `plot_infall.py` | Sink-to-peak distance versus time from the output of `sink_infall.py`. |
+| `test_composite_components.py` | Test (run alone, `PASS`): the n-component fields for s = 1.5, 2.5, 3.5, 4 have n components of equal mass and variance(rho / rho_mean) * n = 1 within 5 %. Not part of `tests/run_all.py`. |

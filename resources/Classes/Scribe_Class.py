@@ -28,6 +28,7 @@ class Scribe:
         """
         self.simulation = simulation
         self.snapshot_directory = None
+        self.output_root = "resources/data"   # parent of the simulation_<timestamp> folder; may be overridden after initialize_simulation
         self.max_vals_filename = None
         self.max_locations_path = None
         self.trajectory_path = None
@@ -46,7 +47,7 @@ class Scribe:
         Create directory structure for saving data AND initialize energy log.
         """
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        save_dir = f"resources/data/simulation_{timestamp}"
+        save_dir = f"{self.output_root}/simulation_{timestamp}"
         os.makedirs(save_dir, exist_ok=True)
         self.snapshot_directory = save_dir
 

@@ -73,7 +73,8 @@ H = _env("H", 8.0e-4)                     # time step [Gyr]; below half the stab
 TOTAL_TIME = _env("TOTAL_TIME", 3.2)      # [Gyr]; spins 1 and 2 collapse about 2 times later than the scalar
 SAVE_EVERY = _env("SAVE_EVERY", 125)      # steps between saved times (and energy records), 0.1 Gyr
 SEEDS = _env("SEEDS", (1, 2, 3, 4))
-SPINS = _env("SPINS", (0, 1, 2))
+SPINS = tuple(int(float(v)) if float(v).is_integer() else float(v) for v in os.environ.get("SPINS", "0,1,2").split(","))
+                                          # a half-integer s means a composite field with n = 2s+1 independent equal-mass components (see build_sim)
 K_MAX = _env("K_MAX", 8.0)                # spectral cut, in fundamental modes 2 pi / (2 BOX)
 COLLAPSE_THRESHOLDS = _env("COLLAPSE_THRESHOLDS", (10.0, 50.0))   # rho_max / rho_mean
 COMPARE_TIME = _env("COMPARE_TIME", 0.0)  # if > 0 the "end" values of the table and of the resolution study are taken at this time [Gyr]
@@ -83,12 +84,25 @@ CORE_FACTOR = 100.0                       # a core is "clearly present" if rho_m
 CONV_SPIN = _env("CONV_SPIN", 1)
 CONV_NS = _env("CONV_NS", (48, 64, 96))
 TAG = os.environ.get("TAG", "")
+SIM_DIR = os.environ.get("SIM_DIR", "")   # parent folder of the simulation_* run folders (default resources/data), e.g. D:\sims
 OUTPUT_DIR = os.path.join("resources", "data", f"spin_gravity_comparison{TAG}")
 
 
 # ---------------------------------------------------------------------------------------------------------
 # set-up
 # ---------------------------------------------------------------------------------------------------------
+def composite_spins(spin):
+    """Irreducible spins (each at most once, as Simulation.add_wave_vector merges equal spins) that give 2 spin + 1 components."""
+    remaining, spins = int(round(2 * spin + 1)), []
+    for s in (2, 1, 0):
+        if 2 * s + 1 <= remaining:
+            spins.append(s)
+            remaining -= 2 * s + 1
+    if remaining:
+        raise ValueError(f"{int(round(2 * spin + 1))} components cannot be built from distinct spins 0, 1, 2")
+    return spins
+
+
 def build_sim(spin, n_grid, **vector_kwargs):
     sim = Simulation_Class(
 
@@ -107,22 +121,28 @@ def build_sim(spin, n_grid, **vector_kwargs):
 
     )
     sim.strict_time_step = True
-    vector = Wave_vector_class(
+    vectors = []
+    for i, irreducible_spin in enumerate([spin] if float(spin).is_integer() else composite_spins(spin)):
+        kwargs = dict(vector_kwargs)
+        if i and "random_seed" in kwargs:
+            kwargs["random_seed"] += 100003 * i                  # the extra irreducible parts get their own independent fields
+        vector = Wave_vector_class(
 
-        packet_type="resources/solitons/GroundState(1).dat",    # placeholder, psi is replaced by the caller
-        means=[0, 0, 0],
-        st_deviations=[0.5, 0.5, 0.5],
-        simulation=sim,
-        mass=1,
-        omega=1,
-        momenta=[0, 0.0, 0],
-        spin=spin,
-        desired_soliton_mass=5.0e7,
-        **vector_kwargs,
+            packet_type="resources/solitons/GroundState(1).dat",    # placeholder, psi is replaced by the caller
+            means=[0, 0, 0],
+            st_deviations=[0.5, 0.5, 0.5],
+            simulation=sim,
+            mass=1,
+            omega=1,
+            momenta=[0, 0.0, 0],
+            spin=int(irreducible_spin),
+            desired_soliton_mass=5.0e7,
+            **kwargs,
 
-    )
-    sim.add_wave_vector(vector)
-    return sim, vector
+        )
+        sim.add_wave_vector(vector)
+        vectors.append(vector)
+    return sim, vectors
 
 
 def spectrum_cut(k):
@@ -143,9 +163,12 @@ def crop(psi, n):
 def initial_fields(spin, seed, n_grid):
     """Independent Gaussian fields of the code's generator, generated at N_FINE, cut to n_grid, scaled to the total mass."""
     with redirect_stdout(io.StringIO()):
-        _, vector = build_sim(spin, N_FINE, independent_fields=True, random_seed=seed + 1000 * spin, power_spectrum=spectrum_cut,
+        _, vectors = build_sim(spin, N_FINE, independent_fields=True, random_seed=int(seed + 1000 * spin), power_spectrum=spectrum_cut,
                               **({"polarization_coefficients": np.sqrt(FRACTIONS)} if FRACTIONS else {}))
-    fields = [crop(np.asarray(w.psi), n_grid) for w in vector.wave_vector]
+    fields = [crop(np.asarray(w.psi), n_grid) for vector in vectors for w in vector.wave_vector]
+    if not float(spin).is_integer():
+        # every irreducible part has unit total mass, so its components carry 1/n_i of it: weight by sqrt(n_i) to give all components equal mass
+        fields = [crop(np.asarray(w.psi), n_grid) * np.sqrt(len(vector.wave_vector)) for vector in vectors for w in vector.wave_vector]
     dV = (2 * BOX / n_grid) ** 3
     mass = sum(np.sum(np.abs(f) ** 2) for f in fields) * dV
     factor = np.sqrt(RHO_MEAN * (2 * BOX) ** 3 / mass)
@@ -159,7 +182,7 @@ def analyse(folder, sim, spin, n_grid):
     """Read the saved snapshots of one run and return the time series (dict of arrays)."""
     files = sorted(glob.glob(os.path.join(folder, "wf_0_snapshot_at_time_*.npy")),
                    key=lambda f: float(os.path.basename(f).split("time_")[1][:-4]))
-    n_comp = 2 * spin + 1
+    n_comp = int(round(2 * spin + 1))
     dV = (2 * BOX / n_grid) ** 3
     dx = 2 * BOX / n_grid
     out = {key: [] for key in ("time", "variance", "rho_max", "mass", "mass_fractions", "spin_total", "spin_sq", "phase")}
@@ -173,7 +196,7 @@ def analyse(folder, sim, spin, n_grid):
         out["mass"].append(rho.sum() * dV)
         out["mass_fractions"].append([np.sum(np.abs(f) ** 2) / rho.sum() for f in fields])
         out["phase"].append(potential_phase(rho, BOX, float(sim.G), H, float(sim.h_bar_tilde)))
-        if spin >= 1:
+        if float(spin).is_integer() and spin >= 1:
             S = spin_density(fields, spin)
             out["spin_total"].append([s.sum() * dV for s in S])
             out["spin_sq"].append(np.mean(S[0] ** 2 + S[1] ** 2 + S[2] ** 2) / mean ** 2)
@@ -212,6 +235,9 @@ def run_case(spin, n_grid, seed):
         sim.initialize_simulation()
         for wave, field in zip(sim.wave_functions, fields):
             wave.psi = cp.asarray(field, dtype=cp.complex128)
+        if SIM_DIR:
+            os.makedirs(SIM_DIR, exist_ok=True)
+            sim.evolution.scribe.output_root = SIM_DIR
         sim.evolution.evolve(sim.wave_functions, save_every=SAVE_EVERY, diagnostics_every=SAVE_EVERY)
     folder = sim.evolution.scribe.snapshot_directory
     with open(os.path.join(OUTPUT_DIR, "run_folders.txt"), "a") as handle:
@@ -237,8 +263,9 @@ def load_cases(spin, n_grid):
 
 
 def per_case_numbers(case):
-    spin = int(case["spin"])
-    n = 2 * spin + 1
+    spin = float(case["spin"])
+    n = int(round(2 * spin + 1))
+    has_spin = spin.is_integer() and spin >= 1
     last = np.searchsorted(case["time"], COMPARE_TIME + 1e-9) - 1 if COMPARE_TIME > 0 else -1
     drift = lambda a: np.max(np.abs(a - a[0])) / np.abs(a[0])
     spin_total = case["spin_total"]
@@ -252,8 +279,8 @@ def per_case_numbers(case):
         "mass drift": drift(case["mass"]),
         "energy drift": drift(case["energy"]),
         "fraction drift": np.max(np.abs(case["mass_fractions"] - case["mass_fractions"][0])),
-        "spin drift /M": np.max(np.abs(spin_total - spin_total[0])) / spin_scale if spin >= 1 else np.nan,
-        "spin |S|^2/rho^2 (end/start)": case["spin_sq"][-1] / case["spin_sq"][0] if spin >= 1 else np.nan,
+        "spin drift /M": np.max(np.abs(spin_total - spin_total[0])) / spin_scale if has_spin else np.nan,
+        "spin |S|^2/rho^2 (end/start)": case["spin_sq"][-1] / case["spin_sq"][0] if has_spin else np.nan,
         "max phase/step": np.max(case["phase"]),
         "core rho/mean": case["core_rho_over_mean"] if core_clear else np.nan,
         "core r_half [kpc]": case["core_r_half"] if core_clear else np.nan,
@@ -294,12 +321,12 @@ def plot_main(spins, n_grid):
         label = f"s={spin} (n={2 * spin + 1})"
         for ax, key in ((axes[0], "variance"), (axes[1], "rho_max")):
             values = np.array([c[key] for c in cases])
-            ax.plot(t, values.mean(0), color=colors[spin], label=label)
-            ax.fill_between(t, values.mean(0) - values.std(0, ddof=1), values.mean(0) + values.std(0, ddof=1), color=colors[spin], alpha=0.25)
+            ax.plot(t, values.mean(0), color=colors.get(spin, "tab:gray"), label=label)
+            ax.fill_between(t, values.mean(0) - values.std(0, ddof=1), values.mean(0) + values.std(0, ddof=1), color=colors.get(spin, "tab:gray"), alpha=0.25)
         k = cases[0]["k"]
         P = np.array([c["P_end"] for c in cases])
-        axes[2].loglog(k, P.mean(0), color=colors[spin], label=label)
-        axes[2].fill_between(k, np.maximum(P.mean(0) - P.std(0, ddof=1), 1e-300), P.mean(0) + P.std(0, ddof=1), color=colors[spin], alpha=0.25)
+        axes[2].loglog(k, P.mean(0), color=colors.get(spin, "tab:gray"), label=label)
+        axes[2].fill_between(k, np.maximum(P.mean(0) - P.std(0, ddof=1), 1e-300), P.mean(0) + P.std(0, ddof=1), color=colors.get(spin, "tab:gray"), alpha=0.25)
     axes[0].set(xlabel="t [Gyr]", ylabel="variance of rho / rho_mean", yscale="log")
     axes[1].set(xlabel="t [Gyr]", ylabel="rho_max / rho_mean", yscale="log")
     axes[2].set(xlabel="k [fundamental modes]", ylabel="P_rho(k) of delta (t = end)")

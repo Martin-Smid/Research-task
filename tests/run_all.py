@@ -28,6 +28,9 @@ from test_sink_binary_kepler import main as test_sink_binary_kepler
 from test_sink_merging import main as test_sink_merging
 from test_sink_formation import main as test_sink_formation
 from test_boss_bodenheimer import main as test_boss_bodenheimer
+from test_sink_bondi_local import main as test_sink_bondi_local
+from test_sink_formation import main as test_sink_formation
+from test_boss_bodenheimer import main as test_boss_bodenheimer
 from test_sink_force_smoothing import main as test_sink_force_smoothing
 from test_sink_pair_smoothed import main as test_sink_pair_smoothed
 from test_max_values_during_run import main as test_max_values_during_run
@@ -60,6 +63,9 @@ def main():
         ("sink merging (periodic edge, softened bound check, energy, flag)", test_sink_merging),
         ("automatic sink formation (particles and gas)", test_sink_formation),
         ("Boss & Bodenheimer: m = 2 collapse forms two sinks", test_boss_bodenheimer),
+        ("automatic sink formation (particles and gas)", test_sink_formation),
+        ("Boss & Bodenheimer: m = 2 collapse forms two sinks", test_boss_bodenheimer),
+        ("Bondi-Hoyle accretion with local cs and v_rel", test_sink_bondi_local),
         ("sink force smoothing gives action = reaction with psi", test_sink_force_smoothing),
         ("smoothed sinks attract with s^2 = 2 eps^2 (force and energy)", test_sink_pair_smoothed),
         ("max_values.csv is written during the run", test_max_values_during_run),

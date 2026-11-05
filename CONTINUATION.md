@@ -210,3 +210,21 @@ Joby: `3649545` (cpu_int, zaseklý pending; zrušit jen se souhlasem), `3649691`
 
 **Pasti, které jsme potkali (aby se neopakovaly).** `wave_function.psi` je do `evolve()` numpy; loader profilů čte float32, interpoluje lineárně a mimo tabulku dává 0 (proto první řádek profilu r = 0); `--export=…MQ_LIST=1,0.3` v sbatch rozdělí hodnotu čárkou; `/tmp` je lokální na uzlu; N=384 přeteče 16 GB P100; PowerShell kazí uvozovky v `ssh … "…"` (skripty psát do souboru a `scp`); jedna volná GPU, joby čekají za sebou; diplomka obsahuje chyby, jen inspirace.
 **Aktualizace (noc 2026-10-29).** Kontrolní běhy `3649691` (zrušeny uživatelem v 20,3 Myr běhu B) vyvrátily hypotézu o nereciprocitě: runaway hybnosti nastává i se `smooth_force=True` (jen o ~5 Myr později) a i s ε = 1 buňka (B). Nejlépe podporovaná hypotéza: kusp s r_B = 1,4 buňky není rozlišený a schéma pak nezachovává hybnost interakce ψ-BH (netestováno). Nejdůležitější další krok: spustit doporučený případ z `correct_params.py` (N=320, box ±0,389, ε=0,00243, H=5,8e-7). Podrobnosti v `plans.md` sekce 8. Test `tests/test_dressed_soliton.py` je obnovený z mé kopie (po obnovení znovu nespuštěn).
+
+
+## 2026-11-05: tvorba sinku (sink formation), stav a co dál
+Hotové (commit 9a4a98c + tento): `Simulation_Class(sink_formation={...})` funguje. Jedno kritérium pro částice, plyn a ULDM (`check_and_create_sinks`, `Sink_N_Body.py`):
+- semínko = lokální maximum celkové hustoty (částice + plyn + |psi|^2 pro `include_uldm=True`), nad prahem `consecutive_steps` kontrol; nejhustší první; nic do 2 dx od existujícího sinku; přeskočená buňka se neblokuje navždy;
+- sink pohltí VŠECHNY částice v okruhu (`gas_r_acc_cells` = 2 buňky) i přebytek plynu; vznikne v těžišti pohlceného, s jeho hmotou a hybností; kinetická i vnitřní energie plynu jde do `E_diss_formation_total`;
+- práh: `density_threshold` (explicitní, vyhrává) > `gas_density_threshold` (číslo, nebo automatický Truelove s konstantním `gas.cs`) > částicový z `baryon_sigma_floor` (teď opravdu podlaha: max(sigma, floor));
+- NOVÉ: `dynamic_threshold=True` = Truelove práh přepočítaný při každé kontrole z lokální rychlosti zvuku plynu gamma*P/rho (po buňkách) a aktuální 1D disperze částic (jedna globální hodnota), nebo floor;
+- NOVÉ: `federrath_checks=True` = konvergující tok + gravitačně vázaná oblast (Federrath 2010; test minima potenciálu nahrazen podmínkou lokálního maxima hustoty);
+- NOVÉ: `sink.bondi_local = True` = Bondi-Hoyle-Lyttleton s lokálním cs a rychlostí plynu vůči sinku (default False = konstantní `gas.cs`, výsledky beze změny).
+Testy: `tests/sink/test_sink_formation.py` (a-n), `tests/sink/test_boss_bodenheimer.py` (m = 2 kolaps -> 2 sinky; s Federrathem zůstávají 2 při N = 64 i 128, bez něj 7 / 23), `tests/sink/test_sink_bondi_local.py`; grafy `tests/sink/plot_boss_bodenheimer.py` (`plots/boss_bodenheimer/`). Na P100 (Koios, job 3651759, kopie `~/projects/rt_test`): `run_all` + `compare` + `diagnostics-check` vše OK a bitově shodné.
+Pozor: názvy snapshotů mají čas na 6 míst v Gyr (1 kyr), pro krátké běhy ukládat méně často než ~12 kroků nejde; `gas_snapshot_*` se neukládá (jen `baryons_` a `total_density_`).
+
+Co dál (pořadí):
+1. **Akrece ULDM do sinku** (rozhodnout s uživatelem). arXiv:2607.00349 (Ludwig, Mocz, Robles) je o akreci PLYNU: fixní poloměr r_sink = 2.5 dx, odebraná hmota jde do BH, cílová rychlost Bondi-Hoyle 4 pi lambda (GM)^2 rho_inf / (cs^2 + v_rel^2)^(3/2), rho_inf z tenké slupky těsně za r_sink; ULDM akreci NEMÁ. Kandidáti na předpis pro ULDM (ověřit, nic neimplementovat z paměti): Unruh 1976 (absorpční průřez skalárního pole, s-vlna), 1905.11745 (příloha, odhad rychlosti pro soliton), 1805.00122, 2309.02482, 1107.3173. Rozhodnout: odstraňovat hmotu z |psi|^2 (mění normu psi, ztráta unitarity), jak.
+2. Bondi: rho_inf a v_rel ze slupky vně r_sink (podle 2607.00349), omezení rychlostí dopadu při r_B < dx, dynamický Truelove i pro částice lokálně (disperze po buňkách).
+3. B&B: vyšší rozlišení / s akrecí; porovnat s literaturou (vzdálenost binárky ~ stovky AU).
+4. Úklid: `docs/simulation_class.md` je zatím necommitnutý (jiná session), diagnostics-check a optimization-check na Quadro nešly (Windows PermissionError při zápisu run_config.json; na P100 prošly).

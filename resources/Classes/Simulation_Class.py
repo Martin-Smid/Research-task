@@ -888,7 +888,7 @@ class Simulation_Class:
                     cfg["gas_density_threshold"] = self._truelove_rho_threshold(cs_eff, NJ)
 
 
-        if cfg.get("density_threshold", None) is None and source in ("baryons", "both"):
+        if cfg.get("density_threshold", None) is None and source in ("baryons", "both") and not cfg.get("dynamic_threshold", False):
             sigma_1d = self._estimate_baryon_sigma_1d()
             if sigma_1d is None:
                 pass

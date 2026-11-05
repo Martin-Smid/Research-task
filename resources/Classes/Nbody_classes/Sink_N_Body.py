@@ -13,6 +13,9 @@ class SinkNBody(NBody):
     - Improved code clarity and documentation
     """
 
+    # False: Bondi accretion uses the constant gas.cs (default); True: local cs and relative velocity (see accrete_from_gas)
+    bondi_local = False
+
     def __init__(self, simulation, N_sinks, initial_masses,
                  initial_positions, initial_velocities,
                  capture_radius=None, softening_bh=None, softening_cusp=None, softening_length=None,
@@ -482,7 +485,31 @@ class SinkNBody(NBody):
 
         # --- Bondi prefactor per sink ---
         M = self.masses
-        dM_fac = float(dt) * 4.0 * np.pi * float(lam) * (G * M) ** 2 / (float(sound_speed) ** 3)
+        if self.bondi_local and hasattr(gas_system, "E"):
+            # Bondi-Hoyle-Lyttleton with the local sound speed cs^2 = gamma P / rho and the gas speed relative to the sink,
+            # both interpolated to the sink position (CIC): rate ~ (G M)^2 rho / (cs^2 + v_rel^2)^(3/2)
+            from itertools import product as _product
+            gamma = float(getattr(gas_system, "gamma", 5.0 / 3.0))
+            velocity_grids = [getattr(gas_system, name, None) for name in ("vx", "vy", "vz")][:dim]
+            cs2_local = cp.zeros(self.N, dtype=cp.float64)
+            v_gas = cp.zeros((self.N, dim), dtype=cp.float64)
+            for bits in _product([0, 1], repeat=dim):
+                inds, w = [], cp.ones(self.N, dtype=cp.float64)
+                for d, b in enumerate(bits):
+                    inds.append(idx1[d] if b else idx0[d])
+                    w = w * (w1[d] if b else w0[d])
+                rho_c = rho[tuple(inds)]
+                v2_c = sum(v[tuple(inds)] ** 2 for v in velocity_grids if v is not None)
+                pressure = cp.maximum((gamma - 1.0) * (gas_system.E[tuple(inds)] - 0.5 * rho_c * v2_c), 0.0)
+                cs2_local += w * gamma * pressure / cp.maximum(rho_c, 1.0e-300)
+                for d, v in enumerate(velocity_grids):
+                    if v is not None:
+                        v_gas[:, d] += w * v[tuple(inds)]
+            v_rel2 = cp.sum((v_gas - self.velocities[:, :dim]) ** 2, axis=1)
+            denominator = (cs2_local + v_rel2) ** 1.5
+            dM_fac = cp.where(denominator > 0.0, float(dt) * 4.0 * np.pi * float(lam) * (G * M) ** 2 / cp.where(denominator > 0.0, denominator, 1.0), 0.0)
+        else:
+            dM_fac = float(dt) * 4.0 * np.pi * float(lam) * (G * M) ** 2 / (float(sound_speed) ** 3)
         
         # Accumulate per-sink mass and (optionally) momentum gains.
         dM = cp.zeros(self.N, dtype=cp.float64)
@@ -941,6 +968,7 @@ def check_and_create_sinks(simulation, sink_tracker, density_threshold, aggregat
     """
     Create sinks where the total density (particles + gas + extra_density, e.g. ULDM) stays above density_threshold.
 
+    - density_threshold is a number or a grid (dynamic threshold);
     - candidates: cells ready in the tracker that are the density maximum within the aggregation radius (one sink per clump,
       found on the GPU in one pass), taken densest first, none within the aggregation radius of an existing sink or of a sink
       created in this call;
@@ -1051,7 +1079,8 @@ def check_and_create_sinks(simulation, sink_tracker, density_threshold, aggregat
 
         for gas in gas_systems:
             rho_gas = gas.rho[cells]
-            excess = cp.minimum(cp.maximum(density[cells] - density_threshold, 0.0), rho_gas)
+            threshold_here = density_threshold[cells] if isinstance(density_threshold, cp.ndarray) else density_threshold
+            excess = cp.minimum(cp.maximum(density[cells] - threshold_here, 0.0), rho_gas)
             dm = excess * cell_volume
             if not float(dm.sum()) > 0.0:
                 continue

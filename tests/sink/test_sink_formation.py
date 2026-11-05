@@ -23,6 +23,8 @@ Checks
     j) the ULDM density counts in the criterion (include_uldm, default True): ULDM + baryons above the threshold forms a sink,
        baryons alone below it do not.
     m) Federrath checks (federrath_checks=True): converging + bound regions form a sink, expanding or unbound ones do not.
+    n) dynamic threshold (dynamic_threshold=True): pi c^2 / (G (NJ dx)^2) with the LOCAL gas sound speed and the CURRENT particle velocity
+       dispersion: a dense cell in hot gas does not form a sink, the same density in cold gas does.
     k) an explicit threshold (density_threshold or gas_density_threshold) overrides the automatic Truelove value.
     l) speed: a whole uniform gas sphere above the threshold (thousands of candidate cells) is processed in seconds.
     h) the automatic particle threshold pi sigma^2 / (G (NJ dx)^2) uses max(sigma, baryon_sigma_floor)."""
@@ -357,6 +359,42 @@ def check_federrath():
     assert results[("inward", True)] and not results[("outward", True)] and not results[("inward, unbound", True)]
 
 
+def check_dynamic_threshold():
+    """n) hot and cold gas, and a particle dispersion that changes in time."""
+    with quiet():
+        sim = Simulation_Class(dim=3, boundaries=[(-BOX, BOX)] * 3, N=N_GRID, total_time=0.1, h=1.0e-3, order_of_evolution=2,
+                               use_gravity=True, use_units=True, use_sponge=False, self_int=False,
+                               sink_formation=dict(source="gas", dynamic_threshold=True))
+        rho_cold = np.pi * CS_GAS ** 2 / (float(sim.G) * (4 * 2 * BOX / N_GRID) ** 2)       # Truelove threshold of the cold gas
+        rho = np.full((N_GRID,) * 3, 1.0e3)
+        rho[8, 16, 16] = rho[24, 16, 16] = 2.0 * rho_cold
+        zeros = np.zeros_like(rho)
+        gas = NBodyGas(simulation=sim, rho=rho, vx=zeros, vy=zeros, vz=zeros, cs=CS_GAS, gamma=5 / 3, name="gas")
+        gas.E[17:] *= 9.0                                                                  # hot half: cs is 3 times larger
+        sim.add_baryons(gas)
+        sim.initialize_simulation()
+    grid = cp.asnumpy(sim.evolution._dynamic_sink_threshold())
+    print(f"n) dynamic threshold: cold {grid[8, 16, 16]:.4e} (Truelove {rho_cold:.4e}), hot {grid[24, 16, 16]:.4e} (9x)")
+    assert abs(grid[8, 16, 16] / rho_cold - 1.0) < 1.0e-9 and abs(grid[24, 16, 16] / (9.0 * rho_cold) - 1.0) < 1.0e-9
+    with quiet():
+        created = sim.evolution._check_and_form_sinks(0)
+    sinks = sim.evolution.sink_system
+    x = cp.asnumpy(sinks.positions)[:, 0]
+    assert created and sinks.N == 1 and x[0] < 0.0, "only the dense cell in the cold gas should form a sink"
+
+    positions = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+    sim, particles = build_few(positions, [[0.0, 0.0, 0.0]] * 4, dict(dynamic_threshold=True, baryon_sigma_floor=0.5))
+    dx = 2 * BOX / N_GRID
+    before = float(sim.evolution._dynamic_sink_threshold().min())
+    velocities = np.random.default_rng(0).normal(size=(4, 3)) * 20.0
+    particles.velocities = cp.asarray(velocities)
+    after = float(sim.evolution._dynamic_sink_threshold().min())
+    sigma = np.sqrt(((velocities - velocities.mean(axis=0)) ** 2).sum(axis=1).mean() / 3.0)
+    expected = np.pi * np.array([0.5, sigma]) ** 2 / (float(sim.G) * (4 * dx) ** 2)
+    print(f"   particles: threshold {before:.4e} (floor 0.5, expected {expected[0]:.4e}) -> {after:.4e} (sigma {sigma:.2f}, expected {expected[1]:.4e})")
+    assert abs(before / expected[0] - 1.0) < 1.0e-9 and abs(after / expected[1] - 1.0) < 1.0e-9
+
+
 def check_speed():
     """l) a uniform gas sphere (about 2000 cells above the threshold) is processed in seconds, mass is conserved."""
     from time import perf_counter
@@ -428,6 +466,7 @@ def main():
         check_explicit_threshold()
         check_speed()
         check_federrath()
+        check_dynamic_threshold()
         check_particle_centre_of_mass()
         check_blocked_cell_forms_later()
         check_sigma_floor()

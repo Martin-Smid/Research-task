@@ -789,6 +789,7 @@ class Evolution_Class:
             gas_r_acc_cells=2,
             include_uldm=True,
             federrath_checks=False,
+            dynamic_threshold=False,
             **kwargs
     ):
         """
@@ -816,6 +817,11 @@ class Evolution_Class:
         self.sink_source = source
         self.sink_include_uldm = bool(include_uldm)
         self.sink_federrath = bool(federrath_checks)
+        # dynamic Truelove threshold: recomputed at every check from the local gas sound speed and the particle velocity
+        # dispersion (an explicit density_threshold always wins)
+        self.sink_dynamic_threshold = bool(dynamic_threshold) and density_threshold is None
+        self.sink_NJ = int(kwargs.get("baryon_NJ", kwargs.get("gas_NJ", 4)))
+        self.sink_speed_floor = max(float(kwargs.get("baryon_sigma_floor") or 0.0), float(kwargs.get("gas_cs_floor") or 0.0))
         self.gas_r_acc_cells = gas_r_acc_cells
 
         print("Sink formation enabled:")
@@ -824,6 +830,29 @@ class Evolution_Class:
         print(f"  - Consecutive steps required: {consecutive_steps}")
         print(f"  - Check interval: {check_interval} steps")
         print(f"  - Accretion radius: {gas_r_acc_cells} cells")
+
+    def _dynamic_sink_threshold(self):
+        """Truelove threshold grid pi c^2 / (G (N_J dx)^2) with c^2 = max(local gas gamma P / rho, particle sigma^2, floor^2);
+        infinite where there is neither gas nor particles. None if no speed is known (the static threshold is used then)."""
+        sim = self.simulation
+        shape = (sim.N,) * sim.dim
+        c2 = cp.zeros(shape, dtype=cp.float64)
+        for system in sim.baryonic_matter:
+            if self._is_gas_system(system):
+                v2 = system.vx ** 2 + system.vy ** 2 + system.vz ** 2
+                pressure = cp.maximum((system.gamma - 1.0) * (system.E - 0.5 * system.rho * v2), 0.0)
+                c2 = cp.maximum(c2, system.gamma * pressure / cp.maximum(system.rho, 1.0e-300))
+        sigma = sim._estimate_baryon_sigma_1d()
+        has_matter = c2 > 0.0
+        if sigma is not None or self.sink_speed_floor > 0.0:
+            has_matter = cp.ones(shape, dtype=bool)
+        if sigma is not None:
+            c2 = cp.maximum(c2, sigma ** 2)
+        c2 = cp.maximum(c2, self.sink_speed_floor ** 2)
+        if not float(c2.max()) > 0.0:
+            return None
+        threshold = cp.pi * c2 / (float(sim.G) * (self.sink_NJ * float(min(sim.dx))) ** 2)
+        return cp.where(has_matter, threshold, cp.inf)
 
     def _check_and_form_sinks(self, step, wave_functions=None):
         """
@@ -840,10 +869,16 @@ class Evolution_Class:
         if self.sink_include_uldm and wave_functions:
             uldm_density = sum(wf.calculate_density() for wf in wave_functions)
 
+        threshold = self.sink_density_threshold
+        if self.sink_dynamic_threshold:
+            dynamic = self._dynamic_sink_threshold()
+            if dynamic is not None:
+                threshold = dynamic
+
         new_sinks_data = check_and_create_sinks(
             simulation=self.simulation,
             sink_tracker=self.sink_tracker,
-            density_threshold=self.sink_density_threshold,
+            density_threshold=threshold,
             aggregation_radius=float(self.gas_r_acc_cells) * float(min(self.simulation.dx)),
             source=self.sink_source,
             extra_density=uldm_density,

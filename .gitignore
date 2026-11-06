@@ -42,3 +42,10 @@ docs/_build/
 
 # local research plan / handoff notes (not for the repository; the GitHub repository is public)
 plans.md
+
+# private draft of article BC (not for the public repository)
+docs/paperBC_draft.tex
+docs/clanek_BC_obsah.md
+docs/paper1_outline.tex
+docs/crosscode_comparison/
+docs/t5/

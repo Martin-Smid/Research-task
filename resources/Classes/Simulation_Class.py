@@ -97,6 +97,11 @@ class Simulation_Class:
     sink_merging = False
     sink_merge_radius = None
 
+    # Particles and sinks (order_of_evolution 2 only) feel the force averaged over the step (start and predicted end).
+    # Set to False before evolve() for the old behaviour, the force frozen at the start of the step. Costs one extra baryon
+    # drift, one Poisson solve and one density deposit per step; second order in h for a time-varying source.
+    baryon_time_centered_force = True
+
     @parameter_check(int, list, int, (int, float), (int, float),int, float, float,bool, bool, object, (str, type(None)), bool,(type(None),dict), dict,bool,bool,float)
     def __init__(self, dim, boundaries, N, total_time, h,order_of_evolution = 2, m_s=2.5e-22, sponge_V0 =0.6 ,use_sponge=True, use_gravity=True,
                  static_potential=None, baryonic_model = None, save_max_vals=False, sink_formation=None,
@@ -110,7 +115,7 @@ class Simulation_Class:
             N (int): Number of spatial points for each dimension
             total_time (float): Total simulation time
             h (float): Time step size for propagation
-            order_of_evolution (int): Order of evolution possible values are 2 and 4
+            order_of_evolution (int): Order of evolution, possible values are 2, 4 and 6 (use 2 with baryons)
             m_s (float): Mass parameter
             use_gravity (bool): Whether to include gravitational effects
             static_potential (callable): Function that returns static potential values

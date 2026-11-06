@@ -386,6 +386,7 @@ class Evolution_Class:
     def _evolve_order_2(self, wave_functions, total_density, is_first, is_last, save_step):
         """Second-order split-step evolution."""
 
+        psi_drifted = False
         gravity_fields = None
         if wave_functions:
             # Interior kick pairs are combined into one full kick. Only the
@@ -404,25 +405,33 @@ class Evolution_Class:
             forces_total = self.propagator.compute_force_grids_from_potential(phi_total)
             self._set_gas_potential(phi_total, total_density, phi_sink)
 
+            # particles and sinks (not gas, which refreshes its own potential) can feel the force centred in the step
+            centered = None
+            particle_systems = [b for b in self.simulation.baryonic_matter if not self._is_gas_system(b)]
+            if getattr(self.simulation, "baryon_time_centered_force", False) and particle_systems:
+                centered = self._time_centered_forces(wave_functions, particle_systems, forces_total, forces_environment,
+                                                      is_first, is_last)
+                psi_drifted = True
+
             for baryons in self.simulation.baryonic_matter:
                 if isinstance(baryons, SinkNBody):
                     baryons.drift(
                         dt=self.h * 1.0,
-                        potential_grid=forces_environment,
+                        potential_grid=forces_environment if centered is None else centered[1],
                         first_step=is_first,
                         last_step=is_last
                     )
                 else:
                     baryons.drift(
                         dt=self.h * 1.0,
-                        potential_grid=forces_total,
+                        potential_grid=forces_total if (centered is None or self._is_gas_system(baryons)) else centered[0],
                         first_step=is_first,
                         last_step=is_last
                     )
 
 
         # Drift step (for wave functions if present)
-        if wave_functions:
+        if wave_functions and not psi_drifted:
             self._drift_all_wave_functions(wave_functions)
 
         # Final kick for last step
@@ -432,6 +441,35 @@ class Evolution_Class:
             print("is last")
 
         return wave_functions
+
+    def _time_centered_forces(self, wave_functions, systems, forces_total, forces_environment, is_first, is_last):
+        """Forces for particles and sinks averaged over the step: (force at the start + force at the predicted end) / 2.
+
+        The end force comes from a trial drift with the start force: psi drifts (its density does not depend on the
+        baryons, so it can drift first) and the particles move to their trial positions, the gravity fields are rebuilt
+        from that density and the particles are put back. Gas is not moved. The psi drift is done here.
+        Returns (forces for particles, forces for sinks without the sink potential or None)."""
+        saved = [(s.positions.copy(), s.velocities.copy()) for s in systems]
+        for s in systems:
+            s.drift(
+                dt=self.h * 1.0,
+                potential_grid=forces_environment if isinstance(s, SinkNBody) else forces_total,
+                first_step=is_first,
+                last_step=is_last
+            )
+        if wave_functions:
+            self._drift_all_wave_functions(wave_functions)
+        phi_environment, phi_sink = self._compute_gravity_fields(self._compute_total_density(wave_functions))
+        end_total = self.propagator.compute_force_grids_from_potential(phi_environment + phi_sink)
+        end_environment = self._sink_environment_forces(phi_environment)
+        for s, (positions, velocities) in zip(systems, saved):
+            s.positions, s.velocities = positions, velocities
+            s.invalidate_density_cache()
+
+        centered_total = tuple(0.5 * (a + b) for a, b in zip(forces_total, end_total))
+        centered_environment = None if forces_environment is None else tuple(
+            0.5 * (a + b) for a, b in zip(forces_environment, end_environment))
+        return centered_total, centered_environment
 
     def _evolve_order_4(self, wave_functions, total_density, is_first, is_last, save_step):
         """Fourth-order split-step evolution."""

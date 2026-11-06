@@ -77,8 +77,11 @@
      `resources/diagnostics/cfl_disk_repro.py`.
    - MUSCL with a single forward-Euler stage is untouched (limits time accuracy of the hydro).
 2. Baryon coupling in time: gas now uses a kick–drift–kick with a refreshed potential (second order for the
-   gas); **particles and sinks still use the frozen potential**; orders 4/6 call particle drift with kick
-   coefficients; gas supports order 2 only.
+   gas); particles and sinks (order 2) feel the force averaged over the step (`Simulation_Class.baryon_time_centered_force`,
+   default True since 2026-11-06: trial drift to the end of the step, force rebuilt there, mean of start and end forces; second
+   order in h, breathing-soliton error 1.3e-3 -> 2e-5 r0, apparent order 2.21, `tests/particle/test_particle_time_centered_force.py`;
+   one extra baryon drift + Poisson solve per step; False restores the frozen force); orders 4/6 still use the frozen force
+   and call particle drift with kick coefficients; gas supports order 2 only.
 3. Self-interaction potential `pref*(psi^2 + 2 rho psi)` looks complex/non-unitary; expected `g|psi|^2`. Not touched.
 4. Then: cleanup/packaging (requirements.txt is UTF-16 (tqdm added 2026-10-26); `.idea` tracked; duplicate
    `system_fucntions.py`) → docs → settle licence/citation with me.

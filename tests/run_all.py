@@ -25,6 +25,7 @@ from test_sink_gas_accretion_energy import main as test_sink_gas_accretion_energ
 from test_sink_force_vs_analytic import main as test_sink_force_vs_analytic
 from test_sink_oscillation_in_soliton import main as test_sink_oscillation_in_soliton
 from test_sink_binary_kepler import main as test_sink_binary_kepler
+from test_particle_time_centered_force import main as test_particle_time_centered_force
 from test_sink_merging import main as test_sink_merging
 from test_sink_formation import main as test_sink_formation
 from test_boss_bodenheimer import main as test_boss_bodenheimer
@@ -57,7 +58,8 @@ def main():
         ("accretion removes energy with mass", test_sink_gas_accretion_energy),
         ("particle integrator on a circular orbit around a sink", test_particle_kepler_orbit),
         ("sink force on the grid vs analytic formula", test_sink_force_vs_analytic),
-        ("particle in a breathing soliton converges in h", test_particle_breathing_soliton),
+        ("particle in a breathing soliton converges in h (frozen force)", test_particle_breathing_soliton),
+        ("time-centred force: second order in h in a breathing soliton", test_particle_time_centered_force),
         ("sink oscillates through a soliton", test_sink_oscillation_in_soliton),
         ("two sinks attract each other (circular binary)", test_sink_binary_kepler),
         ("sink merging (periodic edge, softened bound check, energy, flag)", test_sink_merging),

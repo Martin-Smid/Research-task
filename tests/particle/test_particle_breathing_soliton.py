@@ -127,6 +127,16 @@ def run_orbit(h):
 
 
 def main():
+    # this test measures the frozen force; the default (time-centred force) is tested in test_particle_time_centered_force.py
+    previous = Simulation_Class.baryon_time_centered_force
+    Simulation_Class.baryon_time_centered_force = False
+    try:
+        run_test()
+    finally:
+        Simulation_Class.baryon_time_centered_force = previous
+
+
+def run_test():
     reference = run_orbit(H_REFERENCE)
     print(f"soliton {M_SOLITON:.2e} Msun (psi x {SCALE}), r0 = {R0} kpc, {T_END} Gyr, "
           f"reference h = {H_REFERENCE:.1e} ({len(reference) - 1} steps)")

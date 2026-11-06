@@ -2,9 +2,9 @@
 
 ## START HERE (2026-11-02): mapa dokumentů, stav, co dál
 Jak se v tom vyznat (nové Claude sezení čte v tomto pořadí):
-1. `CLAUDE.md`: pravidla práce, commity, testy, seznam "Known issues" (body 1-16). 2. Tento soubor: pracovní deník (česky); starší sekce níže jsou HISTORIE, platí pořadí podle dat.
+1. `CLAUDE.md`: pravidla práce (krátké). Seznam "Known issues" (body 1-16), session logy a handoff 2026-10-27 jsou na KONCI tohoto souboru ("Archiv"). 2. Tento soubor: pracovní deník (česky); starší sekce níže jsou HISTORIE, platí pořadí podle dat.
 3. `plans.md` (git-ignored schválně, repozitář je veřejný; existuje jen na Koios, zálohovat; anglicky): výzkumný plán a všechna čísla; **sekce 11 = závěry, kam co vede, otevřené úkoly, rozhodnutí, index souborů**; sekce 7-10 = chronologický záznam.
-4. `tests/README.md` (testy a měřicí skripty), `tests/spin/README.md` (spin), `docs/` (`crosscode_comparison/` = jaxion a PyUltraLight, `t5/`, `paper1_outline.tex` = osnova článku k vložení do Overleafu).
+4. `tests/README.md` (testy a měřicí skripty), `tests/spin/README.md` (spin), `docs/` (`crosscode_comparison/` = jaxion a PyUltraLight, `t5/`, `paper1_outline.tex` = osnova článku k vložení do Overleafu, `clanek_BC_obsah.md` = přehled článku BC).
 
 Stav k 2026-11-02 (větev `working_with_chat`, Koios, poslední push uživatele byl `203b21d`):
 - Hotové a ověřené: sink-sink gravitace, slučování, dynamické tření vůči přesné lineární teorii (T1-T3), `smooth_force`, soliton s BH (1D/3D), `correct_params.py`, `strict_time_step`, T5 (reprodukce t_stop z arXiv:2403.09038: 45,9 vs 46,9 Myr, jeden běh), srovnání se dvěma dalšími kódy (jaxion: shoda 0,2-2,6 %, PyUltraLight: shoda jen pro M_Q >= 1), spin testy (5 testů + měření skalár vs spin 1, 2).
@@ -13,204 +13,92 @@ Stav k 2026-11-02 (větev `working_with_chat`, Koios, poslední push uživatele 
 - Rozhodnutí na uživateli: výchozí `smooth_force` v kódu (zatím False, doporučeno True pro BH v solitonu), spin testy do `run_all`, (rozhodnuto 2026-11-02: `plans.md` zůstává mimo git, repo je veřejné; CONTINUATION.md, CLAUDE.md a docs/ veřejné jsou).
 - Data: 2026-11-02 smazány snapshoty a checkpointy sedmi velkých běhů v `resources/data/` (99 GB -> 218 MB), zůstaly `run_config.json`, CSV a grafy; jak je znovu spustit je v `plans.md` 11.8 (T5: `sbatch --export=ALL,T_MYR=60 slurm/koios_t5.sbatch`, ~8 min).
 - Pravidla, která se nemění: commit jen na vyžádání a na jméno uživatele (Martin-Smid, bez Co-Authored-By), push nikdy; mazat jen podle jmen, která uživatel schválí; novost nic nepřipisovat, dokud není přečtena literatura; čísla z agentů (jaxion, PyUltraLight) jsou nezkontrolovaná a srovnání není slepé.
-- Provozní: připojení `ssh koios` (Windows ssh-agent: `Start-Service ssh-agent`, potom `ssh-add`), skripty psát do souboru a `scp` (PowerShell kazí uvozovky), `set -u` v sbatch s EESSI zabije job, jedna volná GPU, N=384 nejde na P100. Další pasti v `plans.md` 11.7.
+- Provozní: připojení `ssh koios` (Windows ssh-agent: `Start-Service ssh-agent`, potom `ssh-add`), skripty psát do souboru a `scp` (PowerShell kazí uvozovky), `set -u` v sbatch s EESSI zabije job, jedna volná GPU, N=384 nejde na P100, `/tmp` je lokální na uzlu, `--export=…MQ_LIST=1,0.3` rozdělí hodnotu čárkou. Další pasti v `plans.md` 11.7.
 
-**CFL v NBodyGas: obě příčiny nalezeny a opraveny (2026-10-16 a 2026-10-26).**
-- *Opraveno:* těžká studená koule (1e12 Msun, Rs=5 kpc, h=1e-3, N=128) končila NaN. Příčina: `dt_sub` se počítal jednou na okno, takže skutečné Courantovo číslo během ~80 substepů vyrostlo z 0,5 na 2,95 (vmax 3e3 → 2,4e4), schéma se rozkmitalo a `v = m/rho_floor` přetekla do NaN. Teď se CFL krok přepočítává před každým substepem (`_substeps` v NBodyGas.py); okna s jedním substepem jsou bitově beze změny, cena ~2–6 % jednoho substepu navíc. Při příliš velkém `h` vyhodí `FloatingPointError` s počtem potřebných substepů místo NaN (pro 1e12 a h=1e-3 je to 112 > max_substeps=100). Doporučení pro kolaps: `h = t_ff/100`, t_ff = √(3π/(32Gρ0)) (1e12: 5,85 Myr), `max_substeps` zvýšit.
-- *Druhý případ (okno, 2026-10-26) vyřešen:* příčina nebyla CFL ani vakuum samo o sobě, ale nezávislé omezování ρ a hybnosti v MUSCL. Ve vakuové buňce mezi dvěma rozbíhajícími se toky (ρ lokální minimum, hybnost monotónní) vznikl povrch s konečnou hybností a ρ = rho_floor, tedy rychlost ~1e11; Rusanovovy toky ~1e10 daly záporné hustoty a jejich ořez vytvořil hmotu. Oprava (volba B): na plochách, kde je povrchová rychlost větší než 10× (|v|+c) sousedních buněk, se použijí stavy prvního řádu. Referenční sady zůstávají bitově shodné; test `test_gas_vacuum_hole_between_flows.py`, reproducer `resources/diagnostics/cfl_disk_repro.py`.
+## TL;DR (2026-11-06)
+Hotovo, podrobnosti v `CLAUDE.md` (Known issues a session logy):
+- **Běh a reference:** Koios P100, `baselines_koios_p100/` bitově reprodukovatelná (`KOIOS.md`). Quadro vs P100: baryony 1e-14 %, vlna ~1e-4 %, sink ~1-3 %.
+- **Plyn** (issue 1, log 2026-10-16): CFL přepočet před každým substepem, vakuová buňka mezi toky, energie gravitace přes stěny buněk (kick-hydro-kick, pojistka vnitřní energie), validace Sod, Jeans, volný pád. Stabilitu plynu bereme jako hotovou. Zbývá numerická viskozita (jedna Eulerova fáze MUSCL): ztráta momentu hybnosti −30,9 / −18,2 / −9,9 % pro N = 64 / 128 / 256. Plyn umí jen řád 2 (`Evolution_Class.py:78-79` jinak vyhodí `ValueError`).
+- **ψ v `complex128`** (issue 7) a konvergence soliton + baryony N = 64/128/256 (issue 10): drift energie −0,036 / −0,024 / −0,015 %, hmotnost ψ ~1e-10 %.
+- **Sinky** (issues 5, 11-15): potenciál a energie akrece, sink-sink gravitace, slučování, dynamické tření, `smooth_force`, `strict_time_step`, tvorba sinku (sekce 2026-11-05 níže), lokální Bondi.
+- **Testy** `tests/` (gas / particle / sink / other, spin zvlášť), `run_all.py` ~1 min. Restart (`resume`, `start_new_segment`) bitově shodný. Dvoufázový setup galaxie (relaxace, pak `from_checkpoint` + `start_new_segment`): `examples/variety/main.py`.
+- **Dokumentace:** README, Sphinx v `docs/` (installation, user_guide, simulation_class, api, rotation_curves).
 
-## Stav k 2026-10-26 (Koios, P100)
-
-**Hotovo**
-- Běh na Koios: `KOIOS.md` (ssh-agent, venv, sbatch), reference `baselines_koios_p100/` (bitově reprodukovatelná), srovnání sad `compare_baseline_sets.py`. Quadro vs P100: baryonové případy 1e-14 %, vlnová část ~1e-4 %, sink ~1–3 %.
-- Sink: potenciál byl středěný v rohu boxu (ignoroval dolní hranici) a akrece plynu neodebírala energii. Obojí opraveno, testy `test_sink_potential_position.py` a `test_sink_gas_accretion_energy.py`. Akrece se zapíná `sim.sink_accretion = True` (výchozí False). Změnilo se 5 referenčních souborů s sinkem v každé sadě; přegenerována jen sada P100, sady Quadro, RTX 3070 a GTX 1050 Ti jsou pro sink zastaralé.
-- Plyn kolem černé díry: 13/13 kontrol (zachování hmoty, energie, rotační křivka = Kepler do 2 %). Ztráta momentu hybnosti 3,6 % za oběh je numerická viskozita Rusanova schématu. **Stabilitu plynu bereme jako hotovou, jak bude** (vnitřní kroužky do 4 kpc ±10 %, vnější 5–8 kpc ~−30 % za Gyr, tam je plyn s cs = 8 pro mělký potenciál příliš horký).
-- `main.py`: zjednodušená trpasličí galaxie (soliton 5,3e7 Msun, hvězdy 10 %, plyn 10 %, černá díra 0,4 % hmotnosti solitonu), dvě fáze: relaxace s pomalu zapínanými hvězdami, pak `from_checkpoint` + `start_new_segment` a přidání plynu a černé díry. Čistá relaxace dýchání solitonu (±13 %, perioda ~0,75 Gyr) neutlumí; pomalé zapínání ano (rozkmit 0,4 %). Po přidání plynu naráz se dýchání vrací s poloviční amplitudou (13 %), což bereme jako přijatelné.
-- Energie: skok při t=0 zmizel, drift +0,28 % za Gyr. Virial s izolovaným W: soliton sám 1,004, celek −0,2 % z |W| na začátku.
-- Obrázky z `plot_energies.py`, `plot_density.py`, `Plot_max_vals.py`, `plot_from_snapshots.py` se ukládají do složky simulace.
-
-**Co dál**
-1. Konvergence: hotová pro N = 64/128/256 s `complex128` (viz Doplněk); zbývá numerická viskozita plynu (RK2 v čase pro MUSCL?).
-2. Volitelně zapínat plyn postupně (jako hvězdy), případně relaxovat rovnou s plynem.
-3. ~~Dohledat únik hmotnosti vlnové funkce (0,04–0,09 % za Gyr)~~ vyřešeno: byl to `complex64`, viz Doplněk 2026-10-26.
-4. Částice a sinky pořád používají zamrzlý potenciál v čase; podezřelý potenciál samointerakce (viz CLAUDE.md, body 2 a 3).
-5. Bondiho akrece používá konstantní `gas.cs`; rychlost akrece bereme jako numerický test, ne fyzikální predikci.
-6. Zkontrolovat starší simulace s černou dírou v boxech, které nezačínají v 0.
-7. Přegenerovat reference na ostatních GPU; commit (zatím nic nebylo commitnuto).
-8. Úklid balíčkování a dokumentace, licence a citace (viz seznam níže).
-
-## Doplněk 2026-10-26 (večer)
-
-- **Přesnost ψ:** vlnová funkce byla v `complex64`, takže každý krok zaokrouhloval na float32 a norma ψ klesala úměrně počtu kroků (−0,3 % za Gyr při h = 1,25e-4; drift energie 0,28 % → 1,2 % při 4× menším kroku, nezávisle na N). Opraveno na `complex128` (2 řádky, `Wave_function_class.py`, `Wave_Packet_Class.py`). Změna výsledků ~1e-7, `tests/run_all.py` prochází, sada `baselines_koios_p100` přegenerována (bitově reprodukovatelná). Sady Quadro/RTX/GTX jsou zastaralé pro všechny případy.
-- **Konvergence (fáze 2, 1 Gyr, N = 64/128/256):** s `complex128` zmizel drift energie (−0,036 / −0,024 / −0,015 % místo +0,25 / +0,28 / +1,16 %) i ztráta hmotnosti ψ (~1e-10 %); `complex128` nestojí měřitelný čas (N = 256: 2 h 46 vs 2 h 42). Soliton konverguje (ρ_max 1,500 / 1,508 / 1,511e7; profil pro r ≥ 1 kpc mezi 128 a 256 do 1 %, pod ~0,5 kpc pomaleji), dýchání ρ_max (10,3 / 12,2 / 13,4 %) je fyzikální (soliton kmitá po zapnutí baryonů); jeho růst s N je hlavně lépe rozlišený vrchol (max 1,662 / 1,704 / 1,727e7, přírůstky 0,042 / 0,023), ne jiná fyzika. Plyn: ztráta momentu hybnosti −30,9 / −18,2 / −9,9 % (klesá pomalu, zdánlivý řád ~0,6 ze tří bodů), vφ v 1–3 kpc 5,28 / 6,34 / 6,55, vnější plyn 3–6 kpc nekonverguje. N = 32 spadne ve fázi 2 na NaN plynu (příliš hrubé). Zbývající nekonvergovaná část je numerická viskozita plynu (jedna Eulerova fáze MUSCL).
-- **Částice a sinky:** nové testy `test_particle_kepler_orbit.py` (integrátor je učebnicové DKD, skutečný krok určuje kritérium podkroků), `test_sink_force_vs_analytic.py` (pole sinku sedí na analytiku, použitelné do r ≤ L/4, dál anizotropie periodické mříže), `test_particle_breathing_soliton.py` (proměnný zdroj: první řád v h kvůli zamrzlému potenciálu, chyba ~1e-3 r0, přijato). Kruhová dráha se Keplerovou rychlostí `sqrt(GM/r)` v periodickém boxu není kruhová (síla je při r = L/4 o ~6,5 % slabší); použít r0 ≲ L/10 nebo rychlost z mřížky. Minimální skript: `testing_baryons.py`.
-
-## Handoff 2026-10-27
-
-Další fáze: kolize černých děr v solitonu (bez plynu). **Blokátor: sinky se navzájem nepřitahují** (dva sinky 4 kpc od sebe zůstanou po 0,1 Gyr přesně 4,0000 kpc; sink se hýbe jen v `forces_environment`). Plán a stav repa/dat: viz sekce „Handoff 2026-10-27“ na konci `CLAUDE.md`.
+Otevřené (ověřeno v kódu 2026-11-06):
+1. **Částice a sinky: opravitelné 2026-11-06, ale výchozí je vypnuto** (`Simulation_Class.baryon_time_centered_force`, výchozí False, ~1,7× dražší krok, jen řád 2; `_time_centered_forces` v `Evolution_Class.py`): síla je průměr ze začátku a ze zkušebního konce kroku, test dýchajícího solitonu 1,3e-3 → 2,0e-5 r0, řád 2,21. Proti P100 baselines se výsledky mění nejvýš o 5e-6 (relativně); v realistickém případu (soliton + hvězdy + sink) o ~0,1 % a chyba vůči jemnému kroku klesne jen o ~16 %, převládá jiná chyba (příčina neměřena, hypotéza: vazba ψ a částic nebo podkroky). Řády 4/6 pořád zamrzlá síla.
+2. **Bondi akrece:** lokální `cs` a rychlost plynu vůči sinku existují (`sink.bondi_local = True`, `Sink_N_Body.py:16-17`, `:488`), ale **výchozí je False**, tedy konstantní `gas.cs`. Rychlost akrece bereme jako numerický test, ne fyzikální predikci.
+3. **Samointerakce** (issue 3): `Propagator_Class.get_self_int_potential` pořád počítá `pref*(psi^2 + 2 rho psi)`, `self_int` má výchozí True. Rozhodnout: opravit na g|psi|^2 s testem, nebo vypnout a zdokumentovat.
+4. **Výchozí hodnoty k rozhodnutí:** `smooth_force` (False), `strict_time_step` (False; při `h` nad limitem jen varování a běh je tichý nesmysl).
+5. **Reference Quadro / RTX / GTX** jsou zastaralé (`complex128`, sinky). Uživatel 2026-11-06: přegenerovat asi není potřeba, rozhodnout před vydáním.
+6. **Akrece ULDM do sinku** a plán dalších kroků: sekce 2026-11-05 níže.
+7. **Vydání:** viz release checklist níže.
 
 ## Cíl a pravidla
+Publikovatelný framework: správnost a reprodukovatelnost před rychlostí vývoje. Malé, čitelné změny; po každé změně numeriky porovnat mřížky, částice a energie s referencemi, změna výsledků = zastavit a vyšetřit. Referenční data nepřepisovat jako opravu testu. `working_with_chat` nese testy, reference a historii; `main` jen ověřený kód. Tento soubor patří jen do pracovní větve.
 
-Zjednodušit simulátor, omezit zbytečné výpočty a závislosti a připravit dokumentaci pro publikování. Zachovat strukturu autorova kódu a malé, čitelné změny. Při každé úpravě numerického výpočtu porovnat mřížky, částice a energie s původními referencemi; změna výsledků znamená zastavit a vyšetřit příčinu. Referenční data nepřepisovat jako způsob opravy testu.
+Commity jsou pouze na jméno autora (Martin-Smid), bez `Co-Authored-By` a jiných řádků s Claude/Anthropic (platí i pro Claude Code na Koios).
 
-`working_with_chat` obsahuje testy, reference a historii v resources/diagnostics; main má stejný produkční kód a příklady bez tohoto vývojového adresáře a chats_playground.py. Tento soubor patří pouze do pracovní větve. Na novém počítači začít touto větví, přečíst resources/diagnostics/README.md a docs/rotation_curves.md, připravit CUDA/CuPy prostředí a ověřit testy před změnami.
+## Nástroje pro soliton s černou dírou (2026-10-29; necommitnuto vše, co není v `git ls-files`)
+- `DressedSoliton.py` (1D, CPU/scipy): radiální základní stav SP s centrální BH (Gaussovskou o šířce `eps` = `softening_bh`, nebo bodovou), shooting v jednom vlastním čísle. `python DressedSoliton.py --selftest`; `--m 1e-21 --M_sol 5.57e7 --M_bh 4e6 --eps 0.005 --out profil.dat` zapíše profil (`r phi U`) pro `Wave_vector_class(packet_type=profil.dat, desired_soliton_mass=vypsaná hmotnost)`. Z Python: `solve_physical(m_ev, M_bh, M_sol, eps)`.
+- `DressedSoliton3D.py` (3D, GPU): imaginary-time Strang na mřížce simulace (stejná periodická Poissonova rovnice, analytický Gaussovský potenciál sinku), `relax(sim, m_sol, m_bh, bh_position, eps, pin_centroid=None)`, `save`, `load_into(wave_function, soubor.npz)` po `initialize_simulation()`. `pin_centroid` drží soliton v bodě (vázaný stav deformovaný slapem BH, ne stacionární). CLI: `python DressedSoliton3D.py --N 192 --half_box 1.0 --M_bh 4e6 --eps 0.005 --out dressed.npz`.
+- `correct_params.py`: z N, M_sol, m, M_bh vyplní box, ε, H, čas a kontroly (pravidla r_B ≥ 4 buňky, ε = 1 buňka, fáze potenciálu < 0,1 jsou odhad).
+- Ověření: 3D (BH ve středu, N = 128, box 1,5 kpc) vs 1D: centrální hustota 1,1575e11 vs 1,1584e11 (0,08 %), reziduum 1e-4; vodíkový limit hmotnosti přesně (1e-8). Test `tests/other/test_dressed_soliton.py` (mimo `run_all`, ~5 min na GPU).
+- Neplatí: profily z `ModosFinder.py` / `ModosDbscan*.ipynb` mají φ(0) = 1 (pevná centrální hustota), přeškálování hmotností je s BH neplatné, hledání je náhodné.
+- Pasti: `wave_function.psi` je do `evolve()` numpy; loader profilů čte float32, interpoluje lineárně a mimo tabulku dává 0 (proto první řádek profilu r = 0); `ModosFinder` má G o 3e-5 vyšší než astropy.
 
-## Co už je hotové
+## Článek A: otestovaný kód pro ostatní (software + validace)
+Cíl: SP s Fourierovým split-step, baryony (částice, plyn) a sinky; srovnatelné s PyUltraLight, s testy a návodem. Možná místa: JOSS, Astronomy & Computing, RNAAS. Poctivě: software + validace, ne nový fyzikální výsledek.
+Hotovo: regrese bitově na P100, testy (Kepler, binárka sinků, slučování, `smooth_force`, Sod, Jeans, volný pád, tvorba sinku, Boss & Bodenheimer), exaktní lineární benchmark v boxu (`tests/sink/sink_friction.py`, `sink_friction_scan.py`, `t2_aggregate.py`), `complex128`, solitonové řešiče, srovnání s jaxion a PyUltraLight (`docs/crosscode_comparison/`, skripty psal agent).
+Chybí (ověřeno 2026-11-06):
+1. Licence (`LICENSE`) a citace (`CITATION.cff`, DOI přes Zenodo): v repu nejsou, řešit s uživatelem.
+2. Dokument „known limitations": periodický box (zbytková gravitace obrazů, střední hustota −(4π/3) G m r/V platí do r ≈ L/4), sponge je `complex64` (`Simulation_Class._build_sponge_potential`), bodový / Gaussovský BH, plyn není jádro článku.
+3. Popis parametrů sinku a doporučené rozsahy (ε/λ ≲ 0,15, λ ≥ 3 buňky); stránka o numerice v `docs/` není.
+4. Výkon a paměť (P100: N = 384 nejde, ~5 min na případ N = 256), tabulka a škálování.
+5. Nezávislý kód na stejném testu a T5 (jaxion a PyUltraLight jsou nerecenzované), jednotná mapa platnosti (viz článek BC).
 
-- Gravitace: stejný potenciál pro wave kick a baryon kick se znovu použije pouze v rámci stejného integračního stavu. Konstantní jmenovatel Poissonova výpočtu se připraví jednou v Propagator; pořadí kroků a aktualizace hustoty se zachovaly. Autor naměřil přibližně 40–45 -> 50–55 FPS.
-- Diagnostics_Class.py: Evolution předává aktuální stav a poskytovatel sink potenciálu, Diagnostics počítá energie/profily a organizuje rotace; výsledky jdou přes Evolution do Scribe. Vnořená smyčka, která počítala vnitřní energii plynu jednou za každý baryonový systém (s plynem a sinkem 2×), byla opravena: U_iso plynu se počítá jednou. Mění to jen logované energie, ne vývoj.
-- Rotation_Curve_Class.py: společný GPU výpočet pro plyn a částice, periodický hmotnostní střed, odečtení pohybu těžiště a osa z celkového momentu hybnosti. Výchozí cutoff je válcový poloměr obsahující 50 % hmotnosti, ne 50 % maximální hustoty; neurčená osa vrací stav místo smyšlené křivky. NBody/NBodyGas volají společnou třídu, Diagnostics vrací malé profily a metadata do Evolution, Scribe zapisuje rotational_velocity.dat a rotation_frames.csv.
-- plot_rot_curves.py: bez argumentů poslední běh a oba typy komponent; -g/-N filtr, více adresářů překryje více běhů, --no-show pouze uloží. examples/plot_rotation_curves.py sdílí implementaci.
-- Vazba plynu na gravitaci (NBodyGas.py, Evolution_Class.py, 2026-10-16): (1) energie z gravitace se plynu dává jako tok hmoty přes stěnu buňky × rozdíl potenciálu (`_sweep_axis`, `phi_total`), takže součet přes buňky přesně odpovídá změně W; (2) kick–hydro–kick s potenciálem obnoveným po hydru (`potential_update`, jedno Poissonovo řešení navíc na okno, +3–6 % času okna); (3) pojistka vnitřní energie `_add_gravity_energy_correction` drží E−K nad floorem, dodanou energii sčítá `E_guard_injected`. Evolution plyn zásobuje přes `_set_gas_potential`. Bez `phi_total`/`potential_update` zůstává původní chování (bitově).
-- Energie v main.py konfiguraci (N=64, t=0,06 Gyr): drift +3,6 |E0| → +0,1 %; N=128: −1,5 %. Pojistka dodala ~1,5 % |E0|. Výsledky plynu se změnily: hustota/rychlosti o ~1e-3 % v regresním případu, vnitřní energie studeného plynu v nerozlišeném potenciálu o desítky %. Starý kód nekonvergoval s rozlišením (hmota do 1 kpc, N=64→160), nový ano. Ramena („kříž") v řezech main.py vznikají na hranicích boxu z neperiodické počáteční podmínky (rotace a hustota se na stěnách nespojují), jsou i ve starém kódu.
-- NBodyGas.py dále: (4) `_reset_emptied_cells` po každém směrovém sweepu: buňka vyprázdněná pod rho_floor dostane nulovou hybnost a energii na floor místo `v = m/rho_floor` (bitově beze změny na benchmarcích, drift energie disku stejný); (5) adaptivní `_substeps` (viz CFL výše).
-- Validace volného pádu studené koule (N=128, 1e12, h=t_ff/100, bez solitonu a sinku): r50/r50₀ = 0,85 / 0,57 / 0,20 při t/t_ff = 0,5 / 0,8 / 1,0, analytika 0,84 / ~0,52 / 0; zaostává o ~2 % do 0,5 t_ff a ~9 % u 0,8 t_ff, kolaps ~1,05 t_ff, špička ρ_max ≈ 150–265 ρ0 (omezeno rozlišením). Je trvalým testem (`tests/test_gas_free_fall_collapse.py`, N=64, tolerance 2/4/8 % při 0,25/0,5/0,75 t_ff). Funkce `free_fall_estimate(mass, radius)` v NBodyGas.py vypíše t_ff, doporučené `h = t_ff/100` a `total_time = 1,3 t_ff`.
-- tests/ už není v .gitignore. Nové testy: práce gravitace vs. změna W, kladná vnitřní energie, U_iso jednou, Sodova trubice, Jeansova nestabilita (obě proti analytice, tolerance v souborech), vyprázdněná buňka bez hybnosti, adaptivní substepy. Pouštět `tests/run_all.py` (~1 min).
-- Úklid: odstraněno 188 simulací před 2026-10-04 (1,86 GiB); dnešní běhy a reference zachovány. Jednorázové migrační skripty jsou v diagnostickém archivu a nelze je přímo znovu spustit.
+## Článek BC: tření a pád sinku (černé díry) ve vícesložkovém ULDM
+Přehled pro všechna sezení: `docs/clanek_BC_obsah.md` (tam jsou i pozadí, soliton a plán). Spojuje původní B (tření sinku, skalár) a C (vícesložková pole pod gravitací). Samostatné C jako „nový zákon n-závislosti" padlo: Jain+ 2304.01985 změřili τ ≈ N τ0 pro rovné zastoupení.
+Motivace (spolupracovník Erick, 2026-11-03): kondenzace v kinetickém režimu je v literatuře hotová (Levkov+ 1804.05857, Jain+, Chen+ 2304.01965), zajímavější je tření a pád BH ve vyšším spinu. Gravitace je U(N)-symetrická, takže n-závislost může jít jen přes statistiku (zrnitost ∝ 1/n, interference polarizací), ne novou sílu (očekávání, neověřeno).
+Osnova (uživatel): (1) úvod, problém, teorie vyšších spinů; (2) testy M_Q a ε/λ, tři režimy, kde přestává platit lineární teorie, srovnání s jaxion a PyUltraLight; (3) IC: (A) gaussovské pole vyzrálé do solitonu, sink do vzdálenosti r, doba pádu a pohyb, (B) stabilní soliton se sinkem vs bez (volný vs dressed); (4) rozlišení, krok, M_BH.
 
-## Ověření a omezení
+### Co je změřeno
+**Sink v uniformním pozadí (skalár).** M_Q ≥ 3: simulace = přesná lineární teorie pro konečný periodický box do 0,8 %; M_Q ≤ 1 tření osciluje (fyzikální), střední hodnota = ustálený stav při M_Q = 1, o 15 % výš při 0,3. Pravidlo ε ≲ 0,3 λ, λ ≥ 3 buňky, pod 0,25 buňky se teorie nemění (< 0,3 %). Bodový přijímač porušuje hybnost a energii ∝ (ε/λ)², `smooth_force=True` ji obnoví (pod ~2 %, ~N^-2). Konvergence v N a H pod 0,5 %. Limita ε → 0 souhlasí s Lancasterem+ 2020 (C 3,276 vs 3,268 při M_Q 17,4; M_Q = 1 +2 %; M_Q = 0,3 +7-9 %). Chybí přesná reference pro ε → 0 při M_Q ≤ 1. T5 (BH v klidu v solitonu): 45,9 vs 46,9 Myr (jeden běh), ale drift E_total 0,6-0,8 % a rostoucí hybnost ψ + BH (příčina otevřená).
 
-Původní čtyři případy měly bitově shodné mřížky a energie; rozšířené porovnání optimalizace zahrnovalo 12 případů. Oddělení diagnostik a rotace ověřeno v sedmi případech s 49 energetickými vzorky. Restart bitově shodný; drobné segmentové rozdíly existovaly už ve starém kódu. Osm analytických testů rotací prošlo i po úklidu. Povolené změny uložených výstupů po nové rotaci jsou pouze rotational_velocity.dat a rotation_frames.csv.
+**Čas vzniku solitonu vs počet složek.** IC: gaussovské pole, box 19,2 kpc, m = 2,5e-22 eV, ρ_mean 5e5 Msun/kpc³, řez |k| ≤ 8 módů, N = 64, 3 seedy, jen vlastní gravitace. Variance(ρ/ρ_mean) · n = 1 (testy `test_spin_granule_statistics.py`, `test_spin_independent_fields.py`). Čas zlomu [Gyr] (k = 3 / k = 5; n_eff = 1/Σf², u 1,52 a 2,27 jde o spin 1 s nerovnými zlomky, N = 6, 8, 9 jsou složená N-složková pole, ne spin 2):
 
-Neuzavřeno po změnách plynu: (a) referenční sady pro GTX 1050 Ti (`baselines/`) a RTX 3070 (`baselines_rtx3070/`) mají plynové případy z kódu před změnami (nový kód se jim záměrně neshoduje); sada pro Quadro P4000 (`baselines_quadro_p4000/`) byla 2026-10-16 přegenerována (plynové případy z kódu po změnách, ostatní bitově beze změny), `compare`, `diagnostics-check` i optimalizační kontrola prochází bitově; (b) tepelná energie studeného plynu v nerozlišeném potenciálu je slabé místo (rozdíl práce přes stěny a ve středu buňky padá do E−K); (c) zbytek driftu energie při N=128 (−1,5 %) není vysvětlen; (d) chybí validace volného pádu koule, orders 4/6 pro plyn zůstávají odmítnuté.
+| n_eff | 1 | 1,52 | 2,27 | 3 (spin 1) | 5 (spin 2) | 6 | 8 | 9 (spin 4) |
+|---|---|---|---|---|---|---|---|---|
+| k = 3 | 9,2 ± 1,7 | 11,1 ± 0,8 | 15,6 ± 1,7 | 31,7 ± 5,2 | 48,9 ± 7,8 | 66,1 ± 8,8 | 96,0 ± 6,0 | 98,9 ± 4,6 |
+| k = 5 | 9,7 ± 1,4 | 11,5 ± 0,5 | 18,1 ± 2,3 | 39,6 ± 3,2 | 63,2 ± 10,3 | 81,6 ± 5,0 | 113,9 ± 14,0 | 125,9 ± 3,3 |
 
-NBodyGas podporuje řád evoluce 2; řády 4/6 mají záporné podkroky a jsou odmítnuty. Plynový dt musí být konečný a nezáporný. Nezaměňovat tato omezení s dosud nevyšetřeným problémem CFL. Nakloněný disk N=128 se správnou osou není důkazem fyzikální rovnováhy.
+Fit a·N^p: p = 1,25 ± 0,05 (k = 3), 1,33 ± 0,05 (k = 5); lineární τ ∝ N i exponenciála jsou vyloučeny, ale jen N = 64, 3 seedy, jedna definice zlomu (p závisí na k) a hrubší sampling u N ≥ 6 (0,8 Gyr). Skript `tests/spin/onset_times.py`, graf `resources/data/spin_onset_vs_neff.png`. Vzorec Jain+ t_a/t_skalár = 1/(2 f_a − Σf²) pro nerovné zlomky je **moje čtení rovnice 6, neověřené**; naměřeno je o 15-35 % pomalejší. Chen+ 2304.01965 nečteno.
 
-```powershell
-python chats_playground.py --help
-python chats_playground.py compatibility-check
-python resources/diagnostics/rotation_playground.py
-python resources/diagnostics/check_optimization.py --help
-```
+**Pád sinku do zralého solitonu** (N = 128; fáze 1: skalár 12 Gyr, spin 1 60 Gyr, spin 2 90 Gyr; fáze 2 `tests/spin/sink_infall.py`: sink 2,5e7 Msun, 4 kpc od píku, v klidu, `smooth_force`, softening 1,5 buňky, 3 Gyr; 5 / 5 / 3 seedy skalár / spin 1 / spin 2):
+- První pád k solitonu 0,105-0,113 Gyr, nezávisí na spinu, odpovídá volnému pádu v hmotě uvnitř 4 kpc (0,11 Gyr).
+- Pozdní usazení (střední vzdálenost sink-pík v 2-3 Gyr) 0,76 / 0,50 / 0,27 kpc, bloudění píku bez sinku 1,25 / 0,58 / 0,47 kpc: usazení sleduje bloudění solitonu, které s n klesá. Sink bloudění nezměnil. Pík je rozlišen na buňku 0,15 kpc, údaje pod ~0,3 kpc nejsou spolehlivé.
+- Citlivost (seed 1): pozdní usazení závisí na M_BH (10× menší se neusadí, tlumení ∝ M), softeningu (3 buňky nechá sink ~1 kpc od středu) a na H (bloudění solitonu je chaotické); doba prvního pádu na ničem z toho nezávisí.
+- **Je to zatím „bloudění solitonu klesá s n", ne nový efekt tření. O spinu jako příčině nepsat.** Rozdíl skalár vs spin 1 je v rámci změn při změně H a softeningu.
 
-Pro porovnání rotací použít podporovaný přepínač --allow-rotation-changes podle nápovědy playgroundu. Lokální .venv není přenosná a data simulací jsou ignorovaná; uložené referenční NPZ a manifesty v pracovní větvi jsou přenosné. Na Windows může být nutné použít .venv/Scripts/python.exe místo systémového aliasu python.
+### Plán (pořadí)
+1. Zrnitá síla na lehké sinky vs n (`tests/spin/granular_force.py`, běží na pozadí k 2026-11-06, výsledky zatím nejsou): ⟨Δv²⟩(t) a a_rms² pro n = 1, 3, 4, 5, 6 před kolapsem, očekávání a_rms² ∝ 1/n; pak těžký sink v pohybu.
+2. Rozlišení: fáze 1 při N = 192/256 (jádro má při N = 128 jen ~1,2 buňky); spin 1 se sinkem menší hmotnosti (blíž lineárnímu tření).
+3. Multikomponentní sink: energie a hybnost sinku + ψ, zda `Diagnostics` sčítá všechny složky (zatím jen vizuálně); tlumení přes energii sinku místo jednoho čísla.
+4. Zahřívání tracerů a rozptyl síly vs n; přečíst Chen+ 2304.01965.
+5. T6 (ε/dx, N, sponge vs periodické okraje), nezávislý kód na T5, adiabatický růst BH, mapa M_Q,eff v solitonu.
+6. Vícesložkový stacionární soliton: profil umíme jen pro stejné polarizace, pro různé rozšířit hledání, nebo použít stejné polarizace.
+7. Akrece ULDM do sinku (sekce 2026-11-05).
+Novost nelze tvrdit před přečtením celých textů Boey+2024 (2403.09038), Wang & Easther 2021, Boey+2025 (2504.16348), Buehler & Desjacques (2207.13740), Lancaster+2020, Jain+ 2304.01985, Chen+ 2304.01965.
 
-## Další práce po CFL
-
-1. **Reduce structural clutter.** Consolidate the two system_fucntions.py modules after checking their callers, replace wildcard imports with explicit imports, and move plotting helpers out of engine dependencies. Extract the repeated baryon advancement code while preserving the integration sequences.
-2. **Make installation reproducible.** Add package metadata, distinguish runtime dependencies from plotting/development dependencies, and verify a clean installation. One concrete gap: the engine imports tqdm, but requirements.txt omits it. Tracked editor files and historical outputs also need a deliberate cleanup.
-3. **Document the verified behavior.** Replace the README's development diary with installation, a minimal runnable example, units, boundary conditions, supported components, and restart instructions. Add numerical-method documentation, checkpoint-format documentation, and reproducible validation cases with stated tolerances. Before release, settle licensing and citation information with the author.
-
-Postupovat po malých změnách, nejprve měřit a porovnávat výsledky. Vývojové experimenty držet v working_with_chat; do main přenášet ověřený kód, příklady a uživatelskou dokumentaci.
-
-## Pravidlo pro commity
-
-Commity jsou pouze na jméno autora (Martin-Smid). Do commit zpráv ani popisů PR nepřidávat `Co-Authored-By` ani jiné řádky s Claude/Anthropic, aby GitHub nezobrazoval Clauda jako přispěvatele. Platí i pro Claude Code běžící na Koios.
-
-
-## Dva články a nástroje pro soliton s černou dírou (2026-10-29)
-
-### Nástroje (hotové, necommitnuté; testy v `tests/test_dressed_soliton.py`, mimo `run_all`, ~5 min na GPU)
-- `DressedSoliton.py` (1D, CPU/scipy): radiální základní stav SP s centrální černou dírou, Gaussovskou (šířka `eps` = `softening_bh` běhu) nebo bodovou. Shooting v jednom vlastním čísle.
-  `python DressedSoliton.py --selftest` (volný soliton = `GroundState(1).dat` na 7 míst, vodíkový limit), `python DressedSoliton.py --m 1e-21 --M_sol 5.57e7 --M_bh 4e6 --eps 0.005 --out profil.dat`
-  zapíše profil (`r phi U`) pro `Wave_vector_class` (`packet_type=profil.dat`, `desired_soliton_mass` = vypsaná hmotnost, faktor ≠ 1 platí jen bez BH). Z Python: `solve_physical(m_ev, M_bh, M_sol, eps)`.
-- `DressedSoliton3D.py` (3D, GPU): imaginary-time Strang na stejné periodické mřížce jako simulace (stejná Poissonova rovnice se zrušenou střední hustotou, analytický Gaussovský potenciál sinku),
-  hmotnost se renormalizuje na `m_sol`. `relax(sim, m_sol, m_bh, bh_position, eps, pin_centroid=None)`, `save(...)`, `load_into(wave_function, soubor.npz)` po `initialize_simulation()`.
-  Časový krok se zmenšuje po úrovních (pevný bod rozděleného kroku je vlastní stav lehce změněného H, reziduum klesá ~tau^1,3-2); cíl rezidua 3e-4. CLI: `python DressedSoliton3D.py --N 192 --half_box 1.0 --M_bh 4e6 --eps 0.005 --out dressed.npz`.
-  `pin_centroid`: bez něj se stav s BH mimo střed usadí na BH; s ním je to soliton držený v bodě a zdeformovaný slapem BH (vázaný stav, ne stacionární).
-- Ověření: 3D (BH ve středu, N=128, box 1,5 kpc) vs 1D: centrální hustota 1,1575e11 vs 1,1584e11 (0,08 %), max rozdíl profilu 8e-4 ρ_c, reziduum 1e-4; vodíkový limit hmotnosti přesně (1e-8).
-- Neplatí: profily z `ModosFinder.py` / `ModosDbscan*.ipynb` mají φ(0)=1 (pevná centrální hustota), přeškálování hmotností je u profilu s BH neplatné, hledání je náhodné.
-
-### Článek A: otestovaný kód pro ostatní (software + validace)
-Cíl: SP s Fourierovým split-step, baryony (částice, plyn) a sink částice; srovnatelné s PyUltraLight, s testy a návodem. Možná místa: JOSS (software), Astronomy & Computing, RNAAS (krátké).
-Co už máme: regrese bitově na P100 (`baselines_koios_p100`), testy (Kepler, binárka sinků, slučování, `smooth_force`, energie sink-sink, Sod, Jeans, volný pád...), exaktní lineární benchmark v boxu
-(`tests/sink_friction.py`), mapa C(M_Q, ε/λ) a konvergence (`tests/sink_friction_scan.py`, `t2_aggregate.py`), complex128, řešiče solitonu 1D/3D.
-Co chybí (pořadí): (1) README se skutečným návodem (instalace, minimální příklad, jednotky, okrajové podmínky, restart), `requirements.txt` v UTF-8 a bez zbytečných balíků, licence, CITATION, `.idea` pryč, sloučit `system_fucntions.py`;
-(2) výchozí hodnota `smooth_force` (rozhodnutí; zatím False), popis všech parametrů sinku a doporučené rozsahy (ε/λ ≲ 0,15, λ ≥ 3 buňky); (3) výkon a paměť (P100: N=384 nejde, ~5 min / případ N=256) tabulka a škálování;
-(4) srovnání s nezávislým kódem na stejném testu (PyUltraLight, po ověření, že umí uniformní pozadí) a na pár bodech literatury (T5); (5) jednotná mapa platnosti (viz B); (6) regenerace referenčních sad pro další GPU (Quadro/RTX/GTX jsou po complex128 zastaralé);
-(7) dokument „known limitations": periodický box (zbytková gravitace obrazů, střední hustota -(4π/3)G m r/V platí do r ≈ L/4), sponge je complex64, bodový/Gaussovský BH, gas nepatří do jádra článku.
-Poctivě: článek A je software + validace, ne nový fyzikální výsledek.
-
-### Článek B: dynamické tření sinku v homogenním a solitonovém FDM pozadí (rozšíření 2403.09038)
-Na čem stojí (už máme, ověřeno, čísla v `plans.md` sekce 7): (i) exaktní lineární teorie pro konečný periodický box s Gaussovským sinkem (diskrétní součet módů) souhlasí se simulací na 0,5-1 % pro M_Q ≥ 10;
-(ii) limita ε → 0 souhlasí s Lancasterem 4.21 (C 3,276 vs 3,268 při M_Q 17,4; M_Q = 1: +2 %; M_Q = 0,3: +7-9 %, ještě konverguje); (iii) bodový přijímač porušuje hybnost a energii úměrně (ε/λ)², `smooth_force` ji obnoví (~N^-2);
-(iv) konvergence v N a H pod 0,5 %; oscilace při M_Q ≤ 1 jsou fyzikální; (v) čtení 2403.09038: jejich setup má λ ≈ 2,3 buňky a ε/λ ≈ 0,2 při špičkové rychlosti, což je v oblasti našich několika procent.
-Tvrzení, která by článek mohl nést (každé jen po splnění uvedených kroků): (a) mapa C a chyb hybnosti/energie v (M_Q, ε/λ, N) s pravidlem platnosti; (b) exaktní benchmark jako veřejný test pro ostatní kódy; (c) odhad systematiky publikovaných t_stop a dalších veličin
-vůči ε/dx, N, boxu a okrajům (sponge vs periodické); (d) chování BH v solitonu: čas zastavení, reheating, poloha vůči těžišti solitonu, stacionarita dressed stavu, adiabatický růst, kick. Novost nelze tvrdit před přečtením celých validačních částí Boey+2024, Wang & Easther 2021,
-Boey+2025 (2504.16348), Buehler & Desjacques (2207.13740), Lancaster+2020; z druhé ruky: 2504.16348 a podobné.
-Kroky (nejlevnější a nejvíc rozhodující první):
-1. Dokončit T2: N=320 pro M_Q 1 a 0,3 (běží), případně menší box při N=256 pro ε/λ < 0,07; rozhodnout o výchozí `smooth_force`. [hodiny]
-2. Test A (stacionarita): `DressedSoliton3D` + BH ve středu, pustit real-time, měřit drift hustoty/polohy BH vs ε/dx, M_BH/M_sol, N. [minuty až desítky minut] Tím se ověří i `Sink_N_Body` v solitonu.
-3. T5: přečíst 2403.09038 stránky 12-13, postavit jejich setup (soliton 5,57e7 z Eq. 4, BH 4e6 v klidu na (0,125, 0,125, 0), box 2 kpc, N = 192, ε = 0,5 dx), t_stop a reheating; ověřit proti A/M + B (A = 1,38e8 Msun Myr, B = 12,4 Myr). [hodiny na běh]
-4. T6: citlivost na ε/dx ∈ {0,25, 0,5, 1, 1,5}, N ∈ {128, 192, 256}, bodový přijímač vs `smooth_force`, zmrazený soliton (kontrola), sponge vs periodické okraje (`use_sponge`, V0 = 0,6, zkontrolovat jednotky a complex64). [desítky běhů, 1-2 dny GPU; prioritizovat]
-5. Adiabatický růst (dM = (M_f - M_i) / N_steps, doba růstu ≫ dynamická doba solitonu ~ Myr; ověřit konvergenci s dobou růstu), porovnání s dressed stavem z ODE; potom kick (rychlost BH ve středu) a měřit tlumení vs M_Q. [hodiny]
-6. Mapa M_Q v solitonu: M_Q,eff ≈ M_sol/M_BH × O(1) (z profilu spočítat přesně), kdy přestává lineární režim platit; srovnat s uniformním pozadím.
-7. Nezávislé ověření (druhý kód) aspoň na jednom bodě uniformního testu a na T5; bez něj zůstane „kód reprodukuje sebe".
-8. Teprve potom text: čísla z `plans.md`, grafy `resources/data/sink_friction_t2_summary`, tabulky, veřejné skripty.
-Rizika: mřížkové artefakty diagnostik (viz energie sinku: analytický self-term), `smooth_force` při ε < 0,5 buňky (hybnost +3,9 % při M_Q = 0,3, příčina neověřena), N = 384 nejde na P100, jedna volná GPU, diplomka neslouží jako zdroj čísel.
-
-### Článek C (nápad, 2026-11-02): vícesložkové (spin 1, 2) ULDM pod gravitací, zrnitost a vznik solitonu
-Otázka: jak počet nezávislých polarizací n = 2s+1 mění vývoj hustoty a vznik solitonu pro gaussovské počáteční podmínky? Kód: `Wave_vector_class(..., independent_fields=True, power_spectrum=..., polarization_coefficients=...)` (každá polarizace má vlastní gaussovské pole, hmotnostní zlomky f_m = a_m^2), měření `tests/spin/spin_gravity_comparison.py` (módy `main`, `conv`, `report`; env proměnné RHO_MEAN, H, TOTAL_TIME, SAVE_EVERY, SEEDS, SPINS, N, TAG, FRACTIONS), funkce v `resources/Functions/spin_analysis.py`, testy v `tests/spin/` (README tam). Výsledky leží v `resources/data/spin_gravity_comparison<TAG>/` (mimo git; `_final`, `_long*`, `_frac*`).
-Nastavení: periodický box 19,2 kpc, m = 2,5e-22 eV, střední hustota 5e5 Msun/kpc^3, plochý spektrální řez |k| <= 8 základních módů, N = 64 (kontrola 48/96/128), h = 8e-4 (N = 128: 5e-4), jen vlastní gravitace.
-Co máme (číselně, N = 64 pokud neuvedeno):
-- t = 0: variance(rho/rho_mean) · n = 0,975 / 0,986 / 1,005 pro s = 0 / 1 / 2 (zákon 1/n platí; gama rozdělení, KS < 0,002; test `test_spin_granule_statistics.py`, `test_spin_independent_fields.py`). Pozdější čas 3,2 Gyr, 4 seedy: variance 24,6 ± 1,0 / 15,2 ± 1,5 / 13,4 ± 0,5; rho_max/rho_mean 338 ± 86 / 145 ± 31 / 116 ± 20; čas rho_max > 50 rho_mean 0,71 / 1,34 / 1,46 Gyr. Zachování: hmotnost 1e-12, zlomky 3e-15, celkový spin 2e-14, energie 1-2 %.
-- Konvergence (spin 1): variance N = 64 vs 128 do 2 %, N = 96 vs 128 do 1,5e-4; ρ_max do 5-9 %; N = 48 ne. Po vzniku solitonu je N = 64 nerozlišené (x_c < buňka), spolehlivý je jen čas zlomu.
-- Soliton: skalár (N = 128) tvoří po ~7 Gyr jádro (ρ_max 626 -> 5047 rho_mean při 10 Gyr, profil sedí na ρ_c = 1,9e7 m22^-2 x_c^-4 Msun/kpc^3 podle Schiveho Rov. 3, fáze uvnitř x_c koherentní, rozptyl 0,1 rad). Spin 1 s rovnými zlomky do 25 Gyr (N = 64) a 20 Gyr (N = 96) soliton netvoří, objeví se až po ~30-40 Gyr.
-- Čas zlomu = první čas po 6 Gyr, kdy rho_max/rho_mean překročí k-násobek základní úrovně (medián rho_max v 2-6 Gyr; k = 3 nebo 5). n_eff = 1/sum f_m^2 (efektivní počet nezávislých složek; variance hustoty při t = 0 = sum f_m^2). Spin 1 (seed 1): n_eff = 1 (f = 1,0,0, kontrola = skalár) 8,0 Gyr; 1,5 (0,8/0,1/0,1) 10,4; 2,3 (0,6/0,2/0,2) 14,4; 3 (rovné) 31. Seedy 1-3 (krajní případy): n_eff = 1: 9,2 ± 1,7 Gyr (k = 3), 9,7 ± 1,4 (k = 5); n_eff = 3: 31,7 ± 5,2 (k = 3), 39,6 ± 3,2 (k = 5). Poměr ~3,4-4, není to přímo úměrné n_eff. Spin 2 (n_eff = 5) by potřeboval stovky Gyr.
-- Mezistupně, seedy 1-3 (2026-11-02, `tests/spin/onset_times.py`, graf `resources/data/spin_onset_vs_neff.png`), čas zlomu [Gyr] k = 3 / k = 5: n_eff 1,00: 9,2 ± 1,7 / 9,7 ± 1,4; 1,52: 11,1 ± 0,8 / 11,5 ± 0,5; 2,27: 15,6 ± 1,7 / 18,1 ± 2,3; 3,00: 31,7 ± 5,2 / 39,6 ± 3,2 (std přes 3 seedy; N = 64, jen čas zlomu je věrohodný). Trend je hladký a konvexní (log-log), rozdíl 1,0 vs 1,52 je v rámci rozptylu.
-- Hrubý fit (čtyři body, vážený std; scratch, ne v repu): k = 3: a n^p, p = 1,01 (chi2 5,0 / 2 dof), predikce n = 5: 38 Gyr; a exp(b(n-1)), b = 0,58 (2,3), 83 Gyr; a + b(n-1)^p, p = 2,9 (0,7 / 1 dof), 167 Gyr. k = 5: p = 1,59 (12,7), 78 Gyr; b = 0,79 (4,2), 180 Gyr; p = 2,7 (0,7), 201 Gyr. Čtyři body nerozliší tvar; predikce pro spin 2 se liší 4-5x, takže právě bod n_eff = 5 (spin 2, rovné zlomky) rozhoduje. Exponent p z jednoduchého mocninného fitu závisí na k (1,0 vs 1,6), tedy i na definici zlomu.
-- **Spin 2 (n_eff = 5, rovné zlomky, 3 seedy, N = 64, 150 Gyr; seed 1-2 na notebooku, seed 3 na Koios P100, 17 min; výsledky `resources/data/spin_gravity_comparison_long_s2/`)**: soliton vznikl (ρ_max/ρ_mean = 6178 na konci seedu 3); čas zlomu 48,9 ± 7,8 Gyr (k = 3, hodnoty 48; 41,6; 57,2) a 63,2 ± 10,3 (k = 5, 65,2; 52; 72,4). Poměr k skaláru: 5,3 (k = 3), 6,5 (k = 5), tj. k = 3 je v rámci rozptylu zákona τ = N τ0 (Jain+ dává 46 Gyr), k = 5 je ~30 % nad ním. Refit se všemi 5 body (std přes seedy jako váhy, scratch): k = 3: a n^p, p = 1,17 (chi2 5,7 / 3 dof); a exp(b(n-1)), b = 0,44 (4,0 / 3); a + b(n-1)^p, p = 1,5 (2,7 / 2). k = 5: p = 1,49 (13,6 / 3, špatný fit); exp b = 0,55 (19,6 / 3, špatný); a + b(n-1)^p, p = 1,49 (8,6 / 2). Predikce n = 5 z fitu čtyř bodů (38 / 83 / 167 Gyr) se tedy potvrdila nejblíž pro mocninu s p ≈ 1 (k = 3), exponenciála i třetí tvar vycházely moc vysoko. Jen N = 64, 3 seedy, čas zlomu (ne ρ_max po něm); k = 5 a 3 dávají jiné p, takže definice zlomu je systematika, kterou nutno uvést.
-**Doplnění literatury (2026-11-02): čas vzniku solitonu vs počet složek pro gaussovské IC už někdo změřil.** Jain, Amin, Thomas, Wanichwecharungruang, *Kinetic relaxation and Bose-star formation in multicomponent dark matter - I*, arXiv:2304.01985, PRD 108, 043535 (2023; přečteno celé, kromě odvození v přílohách A, B) měří přesně čas vzniku solitonu vs počet složek N = 2s+1 pro gaussovské (Maxwellovské, náhodné fáze) IC, spin-s pole, jen gravitace, a odvozuje z vlnové kinetiky (Fokker-Planck, eikonální aproximace, Gaussovo IC):
-- Rovné zastoupení: rychlost relaxace Γ(s) = Γ0/(2s+1) (faktor 1/N^2 z hustot složek krát N z gravitační sumy přes složky), tedy **τ(s) ≈ N τ0** (rovnice 8). Simulace: 14 běhů pro každé s = 0, 1, 2 (plus ~10 pro N = 2 a 4, dohromady >100 simulací v článku), mřížka většinou 128^3, kontrola 256^3 bez rozdílu; polarizace pro každý mód vybrána na sféře S^{4s+1} (součet |psi_a(k)|^2 = 1 pro každé k, tj. rovnoměrné rozdělení, amplituda módu pevná, jen fáze náhodné). Čas kondenzace = zlom ve sklonu ρ_max(t) v log-log (zkoušeli i prahy, klouzavé průměry, regresi: „kvalitativně stejné“). Zdvojnásobení boxu urychlilo vznik halo a solitonu (Jeansova nestabilita), tedy IR efekt velikosti boxu je reálný.
-- Obecná počáteční rychlost pro složku a (rovnice 6, stejné hmotnosti a σ, ε_ab = 1): Γ_a ∝ sum_b mu_b (2 mu_a - mu_b), mu = průměrná hustota složky. Ověřeno proti jejich rovnici 10 (x = 1) a proti 1/N pro rovné zastoupení; **je to moje čtení rovnic z textu PDF s ztracenými řeckými symboly, ne ověřené proti sazbě**. Pro naše zlomky f_a = mu_a/mu (sum f = 1) dává t_a / t_skalár = 1/(2 f_a - sum f^2) pro nejhustší složku: f = (1,0,0) 1,00; (0,8; 0,1; 0,1) 1,06; (0,6; 0,2; 0,2) 1,32; rovné 3 stejně jako N. Naměřeno (k = 3 / k = 5): 1,00; 1,21 / 1,19; 1,70 / 1,87; 3,45 / 4,08. Pořadí a rovné zastoupení sedí, mezistupně a n_eff = 3 jsou naměřeně pomalejší než predikce (o ~15 % u 1,5, ~30 % u 2,3, 15-35 % u 3). Slabší složky podle vzorce nekondenzují (Γ < 0).
-- Jejich poznámka na konci: souběžný článek Chen, Du, Zhou, Benson, Marsh, arXiv:2304.01965 (kondenzace vektorové / hidden-photon DM; **nečteno**) má „korelovaný“ případ = méně statisticky nezávislých složek s různými hustotami, což odpovídá našemu n_eff < N (nezávislá pole s nerovnými zlomky). K přečtení před psaním.
-- Důsledek pro článek C: zákon τ ∝ N pro rovné zastoupení je už změřený a nemá smysl ho prezentovat jako cíl. Co dělat místo toho (navazuje to na jejich práci, nerozporuje ji): (i) spojité n_eff (nerovné zlomky) a test vzorce 1/(2 f - sum f^2), kde máme data a oni jen dvousložkový případ se skaláry; (ii) statistika přes seedy a citlivost na definici zlomu (mocnina p = 1,0 vs 1,6 pro k = 3 vs 5); (iii) bod spin 2 (běží, seed 1-3) jako nezávislá kontrola N = 5 na jiných IC (plochý řez |k| <= 8, jiný box a hustota); (iv) co po vzniku solitonu: spin / polarizace jádra, profil, rozptyl hustoty a zahřívání tracerů vs n (oni se zastavili u O(1) spinu na boson v jádru); (v) vztah k halu: soliton v zrnitém halu a vliv baryonů v `main.py`, kde je naše framework silný; (vi) případně jen krátký text / sekce v článku A jako ověření jejich zákona druhým kódem.
-- Kontrola kinetického režimu (orientačně, z hlavy, předfaktory neověřeny): pro naše IC (σ = ħ~ k_max/sqrt(5) = 9,2 kpc/Gyr, mu = 5e5, Λ = log(σL/ħ~) = 3,1) vychází τ_gr = σ^6 / (ħ~^3 (4 pi G mu)^2 Λ) ≈ 0,5 Gyr a 1/(m σ^2) = ħ~/σ^2 ≈ 0,09 Gyr, tedy poměr ≈ 5 (kinetický režim vyžaduje ≫ 1, takže hraniční), a naměřené τ0 ≈ 9 Gyr je ≈ 18 τ_gr. Mohou za to nemaxwellovské spektrum, definice zlomu, nebo že box nemá dost vlnových délek (K_MAX = 8 módů). Neznáme jejich konkrétní L, dx (řecké symboly v extrakci chybí).
-Literatura (agent číst plné texty článků 1, 2, 3, 5, 6, 7, 9; články 4, 8, 10 jen ze shrnutí): Amin+ 2203.11935: rozptyl vektor/skalár ~ 1/3 v halu, jádro méně husté, počáteční podmínky jsou soubor solitonů. Lopez-Sanchez, Munive-Villa, Skordis, Urban 2502.03561: τ_99 = 338 / 741 / 1131 τ_dyn (spin 0/1/2, extrapolace fitu), τ_heat/τ_dyn ~ 10/50/100 (z grafu). Chen, Nguyen, Marsh 2407.17315: nezávislá gaussovská pole na slupce |p| = m v0 (nejbližší našim IC). Kritérium solitonu (2203.10100): ρ_max >= 200 ρ_mean, pokles <= 25 % v sousední buňce.
-Nápad (uživatel, 2026-11-02): vynést čas kolapsu proti počtu složek n = 2s+1 (resp. n_eff) a proložit funkcí; stačilo by to na menší článek. Návrh postupu (stav 2026-11-03: bod n_eff = 5 hotov, 3 seedy; zbývají mezistupně 3,5 / 4 a víc seedů, ale priorita se přesunula, viz „Plán B + C“ níže): (a) bod n_eff = 5 (spin 2, rovné zlomky) a 2-3 mezistupně 3,5 / 4 / 5 s 3 seedy; dlouhé časy (40-200 Gyr, ~40 min na běh při N = 64) nebo kratší čas přes vyšší RHO_MEAN (škálování času ~ rho^-1/2 nejdřív ověřit na skaláru a spinu 1, jinak se mění poměr de Broglie / box); (b) dohromady 5-6 hodnot n_eff × 3-5 seedů, fit mocnina vs exponenciála vs a + b(n-1)^p s chi2 a bootstrapem přes seedy, hlásit exponent pro k = 3, 5 i pro kritérium solitonu z literatury; (c) fyzikální model k porovnání: Jain+ 2304.01985, τ = N τ0 (rovné zlomky) a t_a/t_skalár = 1/(2 f_a - sum f^2) (nerovné zlomky, moje čtení rovnice 6, ověřit) místo naivního 1/(rozptyl hustoty); naše p = 1,0 pro k = 3 a 1,6 pro k = 5, plus Amin+ / Lopez-Sanchez+ poměry spin 1/2 vs 0 (kolaps 338 / 741 / 1131 τ_dyn, tj. poměr 2,2 a 3,3 pro n = 3, 5, náš poměr pro n = 3 je 3,4-4); (d) kontrola, že tvar nezávisí na boxu / hustotě (jedna další hustota), jinak závěr platí jen pro tato IC; Jain+ ukazují, že zdvojnásobení boxu mění čas, takže test BOX (9,6 vs 19,2) je nutný; (e) přečíst 2304.01965 a použít jejich definici zlomu (změna sklonu ρ_max v log-log) jako třetí kritérium, aby výsledky šly srovnat.
-Co chybí, než by to šlo psát: (1) více seedů a mezistupně n_eff (2,7; 3,5; 5) s chybovými úsečkami (1,5 a 2,3 hotovo se 3 seedy); (2) rozlišení N >= 128 (N = 256 se vejde do 8 GB) pro časy a profil po vzniku; (3) kritérium solitonu z literatury (fit profilu, ρ_max >= 200 ρ_mean, fáze) místo našeho násobku; (4) realističtější IC (slupkové spektrum jako u Chen+ 2407.17315, soliton v zrnitém halu, např. v `main.py` přes `add_wave_vector` dvou vektorů) a vztah k fyzikálním jednotkám (časy závisí na hustotě a boxu); (5) zahřívání tracerů vs n (nový skript; literatura: hlavním zdrojem ohřevu je pohyb solitonu); (6) přečíst články 4, 8, 10 celé.
-Rozhodnutí o struktuře: po nálezu Jain+ 2304.01985 už C není „nový zákon n-závislosti“, ale test a rozšíření (nerovné zlomky / n_eff, statistika, spin 2, jiná IC); C je zatím jeden skupinový výsledek na jednom ICs; samostatný článek až po bodech 1-4, jinak sekce / ukázka v článku A (software + validace). Skripty k článku (měření, dlouhé běhy) patří spíš do vlastního repa se závislostí na konkrétním commitu frameworku; framework nese solver, `independent_fields`, `spin_analysis.py` a spin testy.
-
-### Plán B + C (dohodnuto 2026-11-03): tření a pád sinku ve vícesložkovém (spin 1, 2) FDM, kombinace článků B a C
-Motivace: Erick (spolupracovník, mail 2026-11-03): kondenzace v kinetickém režimu je v literatuře hotová (Levkov+ 1804.05857 pro skalár, Jain+ 2304.01985 a Chen+ 2304.01965 pro vyšší spin, i N = 32^3 stačí), IC jsou raný vesmír bez halo. Zajímavější je tření / pád černé díry (sinku) ve vyšším spinu: vyšší spin vyhlazuje potenciál (zrnitost ∝ 1/n), „něco drží hmotu od sebe“ (podle uživatele ne doslova síla). Gravitace je U(N)-symetrická, takže efekt jde přes zrnitost / interferenci polarizací, ne novou sílu (moje očekávání, neověřené). Referenční článek B: 2403.09038 (soliton + BH, jejich setup viz sekce Článek B, T5).
-Osnova (uživatel): (1) úvod, problém a teorie vyšších spinů; (2) testování: M_Q i ε/λ, tři režimy a kde přestává platit lineární teorie (máme pro skalár, sekce Článek B, T1-T3), srovnání s pyultralight a jaxion (v `docs/crosscode_comparison/`); (3) IC: (A) gaussovské spin 1 (potom spin 2) pole nechat vyzrát do solitonu, z konečného stavu začít novou simulaci, kde se do vzdálenosti r dá sink a měří se doba pádu a pohyb; (B) stabilní soliton se sinkem vs bez (pro stejné polarizační funkce umíme najít stacionární profil, pro různé ne: buď rozšířit hledání stacionárního stavu, nebo použít stejné polarizace); (4) další analýzy: rozlišení, krok, závislost na M_BH.
-Moje poznámky: u spinu 1 vzniká soliton až po ~30-40 Gyr (N = 64), u spinu 2 po ~50-60 Gyr, tedy „vyzrát“ znamená dlouhé běhy; ověřit, že sink kód a `Diagnostics` zvládají víc vlnových funkcí (spin 1, 2) pro fázi 2; sink pole je použitelné do r <= L/4 ≈ 4,8 kpc v boxu 19,2 kpc (5 kpc je na hraně, raději 4 kpc nebo vyjádřit v x_c); čisté srovnání n by chtělo i zrnité pozadí bez solitonu (před zlomem); měřit i rozptyl síly na sink / tracer vs n (zrnitost), ne jen střední odpor.
-Fáze 1 (spuštěno 2026-11-03 na Koios, 1 GPU na job, `tests/spin/spin_gravity_comparison.py main`, N = 128, H = 5e-4, seed 1, rovné zlomky, výstup do `resources/data/` na Koios, TAG `_ic_s0_N128` resp. `_ic_s1_N128`, SAVE_EVERY 240 / 1200, sbatch v `~/conv/koios_ic_s0.sbatch`, `~/conv/koios_ic_s1.sbatch`, logy `~/conv/ic_s0-<ID>.out`, `ic_s1-<ID>.out`): job `3651390` skalár 12 Gyr, job `3651389` spin 1 60 Gyr (soliton po ~30-40 Gyr, proto ne 40). Po doběhnutí: najít pozici solitonu (max ρ), změřit M_sol a x_c, z posledního stavu udělat `from_checkpoint` a přidat sink (10 % M_sol, r ≈ 4 kpc od středu), změřit dobu pádu a trajektorii.
-Teoretický odhad pádu (předběžný, z N = 128 skaláru při 10 Gyr, ρ_max ≈ 5000 ρ_mean, x_c ≈ 0,19 kpc, M_sol ≈ 2e8 Msun Schiveho profil): pád z klidu z 5 kpc v poli M ≈ 2,2e8 Msun trvá t = (π/2) sqrt(r^3 / (2 G M)) ≈ 0,4 Gyr, tření to prodlouží, čekej 0,5-1 Gyr. Přepočítat podle skutečného M_sol.
-**Výsledky fáze 1 + 2 (2026-11-03; N = 128, seed 1, jen jeden běh na spin, bez kontrol).** Fáze 1 doběhla na Koios: skalár 12 Gyr (5,5 min), ρ_max/ρ_mean = 9459, soliton v (-5,25; -6,9; 7,8) kpc; spin 1 60 Gyr (44 min), ρ_max/ρ_mean = 4733, soliton v (-7,65; -6,45; -1,95) kpc. Složky: `simulation_20261103_093519_135106` (skalár), `simulation_20261103_085120_407895` (spin 1) na Koios, `resources/data/`. Soliton leží v rozsáhlém halu: přebytek hmoty nad průměrem uvnitř 1 / 2 / 4 kpc je 0,3-0,4 / 0,7-0,8 / 1,5 e9 Msun (jádro M(<0,5 kpc) = 2,2e8 skalár, 2,9e8 spin 1), x_c z ρ_max (Schive) 0,16 / 0,19 kpc = ~1,1-1,3 buňky (hraničně rozlišené). Předběžný odhad pádu z doby volného pádu v hmotě uvnitř 4 kpc (1,5e9) vychází 0,11 Gyr (starší odhad 0,4 Gyr z M_sol = 2e8 byl špatný, halo je důležité). Fáze 2 (`tests/spin/sink_infall.py`, nový skript; sink 2,5e7 Msun = ~10 % jádra, 4 kpc od píku podél osy x, v klidu, `smooth_force=True`, softening 1,5 buňky, žádná akrece, H = 5e-4, 3 Gyr, ~4 min na běh; joby 3651415 skalár `simulation_20261103_095214_591032`, 3651416 spin 1 `simulation_20261103_095600_626919`): první pád k solitonu (r < 1 kpc) 0,109 Gyr (skalár) a 0,106 Gyr (spin 1), tedy shoda s odhadem volného pádu a s sebou navzájem. Potom sink osciluje kolem středu (perioda ~0,2 Gyr) s klesající amplitudou; vzdálenost od píku na konci 0,30 / 0,24 kpc, spin 1 se usazuje rychleji (amplituda po 2 Gyr ~0,5 kpc vs ~1 kpc u skaláru). **Neinterpretovat jako vliv spinu**: jedna realizace každého, jiné halo a jiný soliton (ρ_max 4,7e9 vs 2,4e9), peak se pohybuje a vzdálenost od něj ho zahrnuje, bez kontrolního běhu bez sinku. Graf `resources/data/infall/sink_infall.png` (lokálně, trajektorie v `resources/data/infall/s0|s1/`), vyhodnocení `tests/spin/plot_infall.py`. Další kroky: (1) kontrola bez sinku (jak se soliton sám pohybuje), (2) více seedů pro oba spiny a spin 2, (3) tlumení amplitudy (energie sinku vs t, exponenciální čas útlumu) místo jednoho čísla, (4) citlivost na M_BH, softening, H, N, `smooth_force`, vzdálenost, (5) zrnité pozadí před zlomem pro čisté srovnání n.
-**N-složková pole (2026-11-03):** v čisté gravitaci (U(N) symetrie) závisí dynamika jen na počtu rovnocenných složek N a statistice IC; hmotné spin-2 pole má 5 složek (bezstopý symetrický tenzor), N = 6, 8, 9 jsou obecná N-složková pole (6 = symetrický tenzor se stopou, 9 = obecný tenzor 3x3), ne spin 2. `spin_gravity_comparison.py` teď bere i poločíselné s: s = 1,5 / 2,5 / 3,5 dává N = 4 / 6 / 8 nezávislých složek složených z různých nesnížitelných spinů (0, 1, 2; funkce `composite_spins`, váha sqrt(n_i), aby měla každá složka stejnou hmotu), s = 4 je nesnížitelný spin 4 (N = 9); celé s se nezměnilo (pole bitově stejná). Test `tests/spin/test_composite_components.py` (variance·N = 1 do 5 %, stejné hmotnosti; před váhováním vycházelo pro N = 6 variance·N = 1,86, protože jedna složka měla 5x větší hmotu). Spuštěno na Koios (joby 3651428 / 3651429 / 3651430, N = 6 / 8 / 9, 3 seedy, N = 64, 150 Gyr, SAVE_EVERY = 1000, data do /tmp uzlu a po seedu smazána, TAG `_N6_long`, `_N8_long`, `_N9_long`, výsledky `case_s2.5_N64_seed*.npz` atd. v `resources/data/spin_gravity_comparison<TAG>/` na Koios; stáhnout a přidat do `CASES` v `onset_times.py`). Predikce z lineárního zákona (k = 3, 9,2 Gyr × N): ~55 / ~74 / ~83 Gyr (jen odhad). N = 2 se z různých spinů složit nedá (potřebuje dvě skalární pole, `add_wave_vector` slučuje stejné spiny).
-**Výsledky 2026-11-04 (vše z fronty doběhlo).**
-- N-složková pole, čas zlomu [Gyr] k = 3 / k = 5 (N = 64, 3 seedy, std přes seedy; SAVE_EVERY = 1000 = 0,8 Gyr, hrubší než dřívější 0,4): N = 6: 66,1 ± 8,8 / 81,6 ± 5,0; N = 8: 96,0 ± 6,0 / 113,9 ± 14,0; N = 9 (spin 4): 98,9 ± 4,6 / 125,9 ± 3,3. Poměr k N = 1 (k = 3): 7,2 / 10,4 / 10,8, tj. **nad lineárním zákonem N** (N = 6, 8, 9). Fit všech 8 bodů (N = 1; 1,5; 2,3; 3; 5; 6; 8; 9; std jako váhy, scratch): a N^p: k = 3 p = 1,25 ± 0,05 (chi2 8,6 / 6 dof), k = 5 p = 1,33 ± 0,05 (18,2 / 6); a + b(N-1)^p: p = 1,28 ± 0,14 (6,2 / 5) a 1,18 ± 0,13 (14,8 / 5); exponenciála vyloučena (28,6 a 90,7 / 6); lineární a·N vyloučeno (50 / 7 a 200 / 7). Pro N <= 5 vycházelo p ≈ 1,0-1,2, takže odchylka od Jain+ (τ ∝ N) roste s N; N = 9 je jen o 3 % (k = 3) nad N = 8, může jít o nasycení, efekt boxu (K_MAX = 8 módů) nebo hrubší sampling. Jen N = 64, 3 seedy, jedna definice zlomu; `onset_times.py` zahrnuje N = 6, 8, 9, graf `resources/data/spin_onset_vs_neff.png`. Hmotnostní podíly rovné (test `test_composite_components.py`).
-- Pád sinku (fáze 2, N = 128, sink 2,5e7 Msun, 4 kpc, 3 Gyr), 3 seedy skalár a spin 1, 1 seed spin 2 (spin 2 fáze 1: 90 Gyr, soliton vznikl; `ch_s2_1`): čas k prvnímu průchodu r < 1 kpc 0,105-0,113 Gyr pro všechny (skalár 0,109 / 0,108 / 0,105; spin 1 0,106 / 0,113 / 0,111; spin 2 0,110), tedy nezávisí na spinu a odpovídá volnému pádu v hmotě uvnitř 4 kpc (0,11). Pozdní fáze (průměr vzdálenosti sink-pík v 2-3 Gyr): skalár 0,69 / 0,76 / 0,54, spin 1 0,36 / 0,50 / 0,57, spin 2 0,24 kpc (1 seed); max v 2-3 Gyr: 1,56 / 1,37 / 1,07, 0,79 / 1,11 / 1,42, 0,89. Samotný pohyb píku solitonu bez sinku (posun za 3 Gyr): skalár 1,51 / 1,29 / 0,96, spin 1 0,21 / 0,92 / 0,82, spin 2 0,37 kpc; sink pohyb solitonu nezměnil (skalár seed 3: 0,96 vs 1,66 se sinkem, ostatní shodné do ~0,1, spin 1 seed 2: 0,92 vs 0,56). Pozdní vzdálenost sinku od píku roste zhruba s vlastním putováním solitonu (ne s samotným spinem): usazení sinku je dáno hlavně tím, jak soliton sám bloudí, a ten bloudí méně s víc složkami (skalár ~1,25 kpc, spin 1 ~0,65, spin 2 0,37 kpc za 3 Gyr; 3 / 3 / 1 seedy, rozptyl velký). Graf `resources/data/infall/sink_infall_all.png`. **Neověřeno**: poloha píku je rozlišena na buňku 0,15 kpc a argmax skáče, takže údaje pod ~0,3 kpc nejsou spolehlivé; chybí kontrola citlivosti (M_BH, softening, N, H, `smooth_force`, vzdálenost) a měření tlumení přes energii sinku; sink v boxu 19,2 kpc je mimo svůj kvadrát L/4 = 4,8 kpc jen těsně.
-**Citlivost sinku (2026-11-04; N = 128, seed 1 skalár a spin 1, 3 Gyr, varianty vzhledem k M_BH = 2,5e7, 4 kpc, softening 1,5 buňky, smooth_force = 1, H = 5e-4; jedna realizace, `tests/spin/sink_infall.py` s `M_BH`, `SMOOTH`, `H`, `SOFT`, `DIST`).** První pád k solitonu (r < 1 kpc) je robustní: skalár 0,109 Gyr ve všech variantách (M_BH ×10 0,104; DIST = 2 kpc 0,053 podle očekávání), spin 1 0,106-0,108 (M_BH ×10 0,100; DIST = 2 0,044). Pozdní usazení je citlivé: střední vzdálenost sink-pík v 2-3 Gyr [kpc], skalár / spin 1: reference 0,69 / 0,36; M_BH 10× menší 3,97 / 2,66 (nelze usadit, tlumení ∝ M); M_BH 10× větší 0,15 / 0,18; softening 0,75 buňky 0,26 / 0,21; softening 3 buňky 2,00 / 1,36; SMOOTH = 0 0,37 / 0,31; H poloviční 1,09 / 0,45 (u skaláru o 58 % jiné, bloudění solitonu je citlivé na H, takže jde o jinou realizaci); DIST = 2 kpc 0,32 / 0,26. Závěr: pro srovnání spinů je pozdní fáze (usazení) závislá na hmotě sinku, softeningu a na realizaci solitonu; doba prvního pádu na nich nezávisí. Rozdíl skalár vs spin 1 (0,69 vs 0,36) je v rámci změn při změně H a softeningu, tedy **ne** signifikantní z těchto běhů. Pro tvrzení o spinu potřebujeme víc seedů a pevné M_BH / softening, nebo měřit tlumení přes energii sinku. Složky `~/conv/infall_runs.txt`, lokálně `resources/data/infall/<label>/`.
-Zbývá: ověřit multikomponentní sink (sink cítí celkovou hustotu, `_compute_total_density` sčítá všechny složky; fáze 2 běžela pro spin 1 bez chyby, ale energii a hybnost jsme neověřili), rozhodnout hledání stacionárního profilu pro různé polarizace, rozhodnout skutečný počet seedů pro fázi 2. Nepsat nic do článku, dokud není pád změřen a porovnán s odhadem.
-
-### Příprava na vydání (release checklist, 2026-11-03; pořadí = od nejméně rizikového)
-Cíl: aby šel framework vypustit jako použitelný kód (a citovatelný). Zdroje: CLAUDE.md (Known issues 4, 3), Handoff 2026-10-27 bod 5. Každý bod malá samostatná změna, po každé `tests/run_all.py` a benchmarky (CLAUDE.md), nic se nemění ve fyzice bez schválení.
-1. Audit (jen čtení, žádné změny): co je tracked a nemá být (`.idea`, `__pycache__`, velké soubory), `requirements.txt` je UTF-16, duplicitní `system_fucntions.py`, natvrdo zadané cesty (`resources/data`, Windows cesty), importy mimo balík, nepoužívané skripty v kořeni (`testing*.py`, `sim_run*.py`, notebooky).
-2. Úklid repa: `.gitignore`, `requirements.txt` do UTF-8 (+ `pyproject.toml` / instalovatelný balík, verze, Python a CuPy verze), smazat duplicity po souhlasu.
-3. README: jednotky (kpc, Msun, Gyr, ħ~), minimální příklad (soliton, + jedna baryonová složka, + sink), instalace (Windows / Linux / Koios), popis výstupů, jak spustit testy.
-4. Dokumentace: stručné odvození numeriky (FFT split-step, Poisson, sink, plyn), přehled testů a validací (Sod, Jeans, free-fall, Kepler, friction), limity (periodický box, sink-pole do L/4, jen gravitace, vícesložkový spin).
-5. Self-interakce (Known issue 3): buď opravit na g|psi|^2 s testem, nebo vypnout a zdokumentovat; rozhodne uživatel.
-6. `Simulation_Class` při H nad limitem stability: chyba nebo `strict_time_step` jako výchozí? (rozhodne uživatel).
-7. Reference sety: přegenerovat Quadro / RTX / GTX (zastaralé kvůli complex128 a sinkům) nebo je označit; `hashes_*.json`.
-8. Licence a citace (`LICENSE`, `CITATION.cff`, DOI přes Zenodo) po domluvě s uživatelem; skripty ke článkům případně do vlastního repa se závislostí na commitu.
-9. CI (GitHub Actions bez GPU: jen CPU testy, pokud existují), jinak dokumentovat, že testy potřebují CuPy / GPU.
+## Příprava na vydání (release checklist, stav 2026-11-06)
+Hotovo: audit repa (`requirements.txt` smazán, závislosti v `pyproject.toml`; `.idea` není tracked; duplicitní `system_fucntions.py` odstraněn, zůstává `resources/Functions/system_fucntions.py`; volné skripty přesunuty do `examples/variety` a `plots/`), README (instalace), Sphinx dokumentace.
+Zbývá (každý bod malá samostatná změna, po každé `tests/run_all.py` a benchmarky, fyzika jen se schválením):
+1. Ověřit verze Pythonu a CuPy v `pyproject.toml` (nezkontrolováno).
+2. Dokumentace numeriky (FFT split-step, Poisson, sink, plyn) a přehled testů a validací s tolerancemi; formát checkpointu.
+3. Samointerakce (otevřený bod 3), výchozí `smooth_force` a `strict_time_step` (bod 4): rozhodne uživatel.
+4. Reference sady Quadro / RTX / GTX a `hashes_*.json` (bod 5).
+5. `LICENSE`, `CITATION.cff`, DOI; skripty k článkům případně do vlastního repa se závislostí na commitu.
+6. CI: v repu není (`.github` chybí); testy potřebují CuPy / GPU, to zdokumentovat.
 Co nedělat bez ptaní: commit / push, `main`, `main.py`, `plot_from_snapshots.py`, mazání dat, spouštění na GPU, když běží joby (notebook RTX 3070 šetřit, Koios `gpu3`/`gpu4` jen po dohodě).
-
-## Handover 2026-10-29 (večer) — kde jsme, co dál
-
-**Stav repa (`working_with_chat`, Koios).** Commity `9c2ad17` (smooth_force), `b1de09e` (párová síla s² = ε_a²+ε_b², analytická energie sink-sink v Diagnostics, test A), `c135f14` (`max_values.csv` průběžně s energií, odstraněn starý check `Deviation`/`mass diff`, nahrazen hlášením hmotností). Nepushnuto je 9 commitů (6 starých + 3 z dneška); push dělá uživatel přes VS Code.
-Necommitnuté (moje): `DressedSoliton.py`, `DressedSoliton3D.py`, `tests/test_dressed_soliton.py`, `tests/README.md`, tato sekce, `tests/sink_friction_scan.py` (řízení přes env proměnné, T2), `tests/t2_aggregate.py`, `slurm/koios_t2.sbatch`, `slurm/koios_dressed_test.sbatch`, `correct_params.py` (nový). Uživatelovo (nesahat): `testing.py`, `plot_from_snapshots.py`, `latest_comparison.json`.
-Joby: `3649545` (cpu_int, zaseklý pending; zrušit jen se souhlasem), `3649691` (`bh320_check`: diagnostika runawaye, viz níže; výsledek v `slurm/bh320_check-3649691.out`, běhy v `resources/data/simulation_20261029_21*`; skripty `~/conv/bh320_smooth.py`, `~/conv/bh320_eps125.py`, profil `resources/solitons/Dressed_..._eps0.0125.dat` jsou moje, smazat jen po souhlasu).
-
-**Nové od posledního zápisu (podrobnosti a čísla v `plans.md`, sekce 8).**
-- Nástroje na soliton s BH: 1D `DressedSoliton.py` (CLI ukládá do `resources/solitons/`, G z astropy jako Simulation_Class; ModosFinder má G o 3e-5 vyšší), 3D `DressedSoliton3D.py`, `correct_params.py` (z N, M_sol, m, M_bh vyplní box, ε, H, čas, kontroly). Ověřená ruční simulace (stacionární běh i kick) je v `plans.md`.
-- Běhy uživatele (`testing.py`): N=256 box ±2 s H = 1,5e-4 je 5,7× nad limitem (kód jen varuje); N=256 s ε = 0,96 buňky pulzuje 1,0-1,29× ρ0; **N=320 s ε = 0,36 buňky a r_B = 1,4 buňky: exponenciální runaway** (hybnost ψ+BH roste 10× za 1,7 Myr, BH uteče po úhlopříčce, E +17 %). Hypotéza: nereciproční bodový přijímač (`smooth_force=False`) při ε < 1 buňka; alternativa: mřížková anizotropie / Nyquist. Neověřeno, kontrolní běhy `3649691` (A: smooth_force=True, B: ε = 1 buňka).
-
-**Co dělat dál (pořadí).**
-1. Vyhodnotit `3649691` (BH poloha, ρ_max/ρ0, E_total, hybnost ψ+BH ze snapshotů `wf_0`), zapsat do `plans.md`. Z toho rozhodnout o výchozí hodnotě `smooth_force` (důkazy: T2/T3 hybnost a energie, test A, runaway).
-2. Ověřit doporučení `correct_params.py` na případu uživatele (N=320, M_sol 1e8, M_bh 5e7: box ±0,389, ε = 0,00243, H = 5,8e-7, 7400 kroků) jako stacionární kontrolu; tím se potvrdí/vyvrátí pravidla (r_B ≥ 4 buňky, ε = 1 buňka, fáze potenciálu < 0,1 je jen odhad).
-3. Zvážit, aby `Simulation_Class` při H nad limitem stability skončila chybou (nebo to šlo vypnout); teď jen varuje a běh je tichý nesmysl.
-4. Vyhodnotit N=320, M_Q=0,3 (`slurm/t2n320q03_*`, joby 3649676-79; zatím nikde nezapsáno) a doplnit tabulku ε→0.
-5. T5: přečíst `2403.09038` str. 12-13, postavit setup (soliton 5,57e7, BH 4e6 v klidu na (0,125, 0,125, 0)), použít `correct_params.py` pro box/ε/H (u 192³ vychází box ±0,81, ε = 8,4 pc, H = 6,9e-6), t_stop a reheating; pak T6 (ε/dx, N, smooth_force, sponge vs periodické okraje, zmrazený soliton).
-6. Adiabatický růst BH (dM = (M_f−M_i)/N_steps), kick, 3D `pin_centroid` v simulaci (zatím jen v testu mimo simulaci).
-7. Sponge: `use_sponge`, `sponge_V0` = 0,6 (jednotky nejasné), pole je complex64; ověřit před použitím.
-8. Commitnout nástroje (po souhlasu), uklidit; kód-článek (A) a článek B podle sekce výše.
-
-**Pasti, které jsme potkali (aby se neopakovaly).** `wave_function.psi` je do `evolve()` numpy; loader profilů čte float32, interpoluje lineárně a mimo tabulku dává 0 (proto první řádek profilu r = 0); `--export=…MQ_LIST=1,0.3` v sbatch rozdělí hodnotu čárkou; `/tmp` je lokální na uzlu; N=384 přeteče 16 GB P100; PowerShell kazí uvozovky v `ssh … "…"` (skripty psát do souboru a `scp`); jedna volná GPU, joby čekají za sebou; diplomka obsahuje chyby, jen inspirace.
-**Aktualizace (noc 2026-10-29).** Kontrolní běhy `3649691` (zrušeny uživatelem v 20,3 Myr běhu B) vyvrátily hypotézu o nereciprocitě: runaway hybnosti nastává i se `smooth_force=True` (jen o ~5 Myr později) a i s ε = 1 buňka (B). Nejlépe podporovaná hypotéza: kusp s r_B = 1,4 buňky není rozlišený a schéma pak nezachovává hybnost interakce ψ-BH (netestováno). Nejdůležitější další krok: spustit doporučený případ z `correct_params.py` (N=320, box ±0,389, ε=0,00243, H=5,8e-7). Podrobnosti v `plans.md` sekce 8. Test `tests/test_dressed_soliton.py` je obnovený z mé kopie (po obnovení znovu nespuštěn).
-
 
 ## 2026-11-05: tvorba sinku (sink formation), stav a co dál
 Hotové (commit 9a4a98c + tento): `Simulation_Class(sink_formation={...})` funguje. Jedno kritérium pro částice, plyn a ULDM (`check_and_create_sinks`, `Sink_N_Body.py`):
@@ -228,3 +116,226 @@ Co dál (pořadí):
 2. Bondi: rho_inf a v_rel ze slupky vně r_sink (podle 2607.00349), omezení rychlostí dopadu při r_B < dx, dynamický Truelove i pro částice lokálně (disperze po buňkách).
 3. B&B: vyšší rozlišení / s akrecí; porovnat s literaturou (vzdálenost binárky ~ stovky AU).
 4. Úklid: `docs/simulation_class.md` je zatím necommitnutý (jiná session), diagnostics-check a optimization-check na Quadro nešly (Windows PermissionError při zápisu run_config.json; na P100 prošly).
+
+## Archiv: dřívější obsah CLAUDE.md (přesunuto 2026-11-06; anglicky, beze změn obsahu)
+Známé problémy 1-16 s čísly, session logy 2026-10-16 / 10-26, poučení a handoff 2026-10-27. Platná pravidla práce jsou teď v krátkém `CLAUDE.md`. Číslování issues zůstává (odkazy typu "issue 11" platí).
+
+### Known issues — status
+1. Gas CFL / FloatingPointError in NBodyGas:
+   - **Fixed 2026-10-16:** `dt_sub` was computed once per window; in a collapse the true Courant number grew
+     from 0.5 to ~3 and the run ended in NaN. Now `_substeps` re-evaluates it before every substep.
+     Emptied cells (below `rho_floor`) also lose their momentum/energy (`_reset_emptied_cells`).
+   - **Fixed 2026-10-26 (the window disk case):** independent limiting of rho and momentum left a vacuum cell
+     between two diverging flows with finite momentum but floored density, i.e. a face velocity ~1e11; Rusanov
+     fluxes of 1e10 made negative densities, whose clamp *created* mass. `_sweep_axis` now falls back to the
+     first-order cell states on faces whose velocity exceeds 10x (|v|+c) of the two adjacent cells. Regression
+     baselines stay bitwise identical; test `tests/test_gas_vacuum_hole_between_flows.py`. Reproducer:
+     `resources/diagnostics/cfl_disk_repro.py`.
+   - MUSCL with a single forward-Euler stage is untouched (limits time accuracy of the hydro).
+2. Baryon coupling in time: gas now uses a kick–drift–kick with a refreshed potential (second order for the
+   gas); particles and sinks (order 2) feel the force averaged over the step (`Simulation_Class.baryon_time_centered_force`,
+   opt-in, default False (2026-11-06): trial drift to the end of the step, force rebuilt there, mean of start and end forces; second
+   order in h, breathing-soliton error 1.3e-3 -> 2e-5 r0, apparent order 2.21, `tests/particle/test_particle_time_centered_force.py`;
+   one extra baryon drift + Poisson solve per step, ~1.7x per step with 20000 stars + a sink; with it on the P100 reference cases
+   change by <= 5e-6, a soliton + stars + sink run by ~0.1 %, and the error against a fine step falls only ~16 %; off = frozen
+   force, bitwise the old results); orders 4/6 still use the frozen force
+   and call particle drift with kick coefficients; gas supports order 2 only.
+3. Self-interaction potential `pref*(psi^2 + 2 rho psi)` looks complex/non-unitary; expected `g|psi|^2`. Not touched.
+4. Then: cleanup/packaging (requirements.txt is UTF-16 (tqdm added 2026-10-26); `.idea` tracked; duplicate
+   `system_fucntions.py`) → docs → settle licence/citation with me.
+
+5. Sinks (fixed 2026-10-26): (a) the analytic sink potential ignored the box's lower boundary, so in a [-L, L] box
+   a sink at the centre pulled towards the corner (-L, -L, -L); (b) `accrete_from_gas` removed density but not the
+   energy of the cell (specific energy and CFL exploded). Both fixed with tests; accretion is off unless
+   `sim.sink_accretion = True` (the call in the main loop was commented out). 5 sink reference files per set
+   changed; only `baselines_koios_p100/` was regenerated, the Quadro/RTX/GTX sets are stale for sink cases.
+   Older BH runs in boxes that do not start at 0 were affected.
+6. Open observations: (the ULDM wave-function mass loss of 0.04-0.09 % per Gyr was the complex64 precision, fixed, see 7); gas loses ~3.6 %
+   of its angular momentum per orbit at N=128 (numerical viscosity of Rusanov, should fall with resolution);
+   Bondi accretion uses the constant `gas.cs`; the code's `W` (periodic Poisson) is ~17 % off the isolated value in a
+   20 kpc box, so use an isolated `W` for virial checks (isolated soliton: 2K/|W| = 1.004).
+
+7. Wave-function precision (fixed 2026-10-26): psi was kept in complex64 (created as complex64, the in-place `*=` keeps
+   the dtype), so every kick and drift rounded to float32 and the norm of psi drifted proportionally to the number of
+   steps (about -4e-5 % per step; -0.3 % per Gyr at h=1.25e-4, N=256; energy drift +0.28 % -> +1.2 % when h shrank 4x).
+   Now `complex128` (`Wave_function_class.py`, `Wave_Packet_Class.py`): the norm is conserved to rounding and the results no
+   longer depend on h. Results changed by ~1e-7 (relative). Only `baselines_koios_p100/` was regenerated; the Quadro, RTX
+   and GTX sets are stale for ALL cases (psi dtype). psi snapshots/checkpoints are twice as big; old complex64 checkpoints
+   stay complex64 on restart.
+8. Particle tests (2026-10-26, `tests/`): `test_particle_kepler_orbit.py` (NBody.drift with one substep is the textbook DKD,
+   mean order 2.06; the real step is set by the substep criterion 0.25*dx/v, not by h; production error <1e-3 r0 after 3
+   orbits), `test_sink_force_vs_analytic.py` (sink force on the grid vs the Gaussian + periodic-box formula: mean error ~1e-4;
+   the max error grows as (r/L)^4 above ~4 kpc = cubic lattice anisotropy, so the sink field is usable up to r <= L/4),
+   `test_particle_breathing_soliton.py` (time-varying source: first order in h because the force is frozen at the start of
+   the step; error ~1e-3 r0 for a source that changes 3x; accepted).
+9. A circular orbit started with the analytic v = sqrt(GM/r) is NOT circular in a periodic box: at r = L/4 the force is ~6.5 %
+   weaker (background term -(4 pi/3) G M r / L^3) plus 1-3 % axis anisotropy. Use r0 <~ L/10 or the speed from the grid force
+   (`circular_velocity` in `test_particle_kepler_orbit.py`). `testing_baryons.py` is the minimal orbit script; the old orbit
+   figure of the thesis (r0 = 20 kpc) shows exactly this effect.
+
+10. Convergence with complex128 (main.py, phase 2, 1 Gyr, 2026-10-26; h = 5e-4 for N = 64/128, 1.25e-4 for N = 256; N = 32
+   relaxes but the gas goes NaN in phase 2, too coarse): psi mass change ~1e-10 %, energy drift -0.036 / -0.024 / -0.015 % for
+   N = 64 / 128 / 256 (before: +0.25 / +0.28 / +1.16 %, growing with the number of steps). Soliton converges: rho_max(t=0)
+   1.500 / 1.508 / 1.511 e7, profile at r >= 1 kpc within 1 % between 128 and 256; below ~0.5 kpc slower (order ~1). Breathing
+   of rho_max (10.3 / 12.2 / 13.4 % for N = 64 / 128 / 256) is physical: the soliton oscillates after the baryons are
+   switched on. Its growth with N is mostly the better resolved peak (max 1.662 / 1.704 / 1.727e7, increments 0.042 / 0.023),
+   not a different physics. Gas: angular-momentum loss -30.9 / -18.2 / -9.9 %
+   (falls slowly, apparent order ~0.6 from three points), vphi at 1-3 kpc 5.28 / 6.34 / 6.55 (128 vs 256 within 3 %), outer
+   gas (3-6 kpc) not converged. complex128 costs nothing measurable on the P100 (N = 256: 2 h 46 vs 2 h 42). The remaining
+   non-converged part is the gas numerical viscosity (single forward-Euler MUSCL stage).
+
+11. Sink-sink gravity (added 2026-10-27): sinks used to move only in `forces_environment` (no sink potential, to avoid self-force),
+   so they did not attract each other. `SinkNBody._pair_accelerations` now adds a direct pair force, applied through the
+   `_interpolate_force_trilinear` override (only for N_sinks > 1; a single sink is bitwise unchanged). Each sink is a Gaussian
+   source (BH part softening_bh, reservoir part softening_cusp) that the others feel as a point mass (the kernel of the sink
+   potential and of the energy log; symmetric and momentum-conserving unless sinks carry different reservoir fractions),
+   periodic minimum image, plus the mean-density term -(4 pi/3) G m r / V of the periodic
+   Poisson solver (far field matches the grid; valid up to r ~ L/4). Test `tests/test_sink_binary_kepler.py` (circular binary:
+   separation 1.6e-4, angular velocity 2.3e-4, momentum and angular momentum conserved; it failed before the change).
+   P100 reference set and optimization checks stay bitwise identical (no reference case has 2+ sinks). Demos with plots:
+   `tests/sink_grav1.py` (infall from rest, merge at 3.888 Gyr vs 3.89 expected for 2 x 1e7 Msun, 10 kpc, box 30 kpc) and
+   `tests/sink_grav2.py` (circular orbit, period ~23 Gyr). Merging: `merge_close_sinks` exists but is only called from the
+   disabled sink-formation path; the demos call it after every step. It averages positions without periodic wrapping.
+   The kernel was first a symmetric s^2 = 2 eps^2 one; changed the same day to the point-receiver kernel so that the force is
+   the gradient of the potential energy Diagnostics logs. Energy conservation along a binary orbit is not measured yet.
+12. Sink merging (2026-10-27): `sim.sink_merging = True` (and optionally `sim.sink_merge_radius` in kpc, default = capture radius)
+   makes Evolution call `SinkNBody.merge_close_sinks` before every step (`Evolution._perform_sink_merging`); off by default.
+   It is a resolution-scale rule, not merger physics: bound sinks closer than the merge radius become one sink at their
+   centre of mass (mass, momentum conserved; no recoil, no gravitational-wave loss). Three gaps fixed: (a) the energy lost in
+   a merge (kinetic + softened potential, same model as Diagnostics) is added to `E_diss_merge_total` and Diagnostics now
+   includes it in `E_diss` (before, `E_tot_cons` jumped at every merge); (b) the centre of mass uses the minimum-image
+   displacement and is wrapped into the box (a pair across the box edge used to merge in the middle of the box); (c) the bound
+   check uses the softened escape speed 2 G M erf(r / (sqrt(2) eps)) / r instead of the point-mass one. Test
+   `tests/test_sink_merging.py` (written first, failed on the old code; the residual jump of E_total + E_diss at a merge is
+   ~5 % of the energy lost, the grid-deposited vs analytic sink energy; tolerance 10 %). It cleans up its output folders.
+   The merge radius sets when the merge happens, so report the sensitivity to it (and to N) in any result. Merging is
+   cheap: a few small GPU->CPU copies per call, well under 0.1 % of a step.
+13. Dynamical friction test (2026-10-27): `tests/sink_friction.py` sends a sink (3e6 Msun, 30 kpc/Gyr) through a uniform psi
+   (3e5 Msun/kpc^3, m = 2.5e-22 eV, quantum Mach number M_Q = 17.4, 19.2 kpc box, half a box of travel) and measures the drag
+   coefficient C = F / F_rel, F_rel = 4 pi rho (G M / v)^2, from the sink's dv/dt. References: (1) exact linear theory for this
+   very box (discrete mode sum: periodic, Gaussian sink of width `softening_bh`, switched on at t = 0, psi self-gravity included;
+   u'' + Omega^2 u = -psi0 k^2 Phi_k exp(-i k.v t), Omega^2 = hbar^2 k^4 / 4 - 4 pi G rho0), (2) Lancaster et al. 2020
+   (arXiv:1909.06381) Eq. 4.26 for a point source in an infinite medium with b = v t (formula checked against the paper text).
+   Mean C for v t / lambda > 7, simulation / linear theory / literature: softening 1.5 cells 2.70 / 2.71 / 3.27, 1.0 cell 2.95 / 2.97,
+   0.5 cell 3.17 / 3.17, and N = 256 with 0.25 cell (run by the user) 3.28 / 3.25 / 3.27; rms difference simulation vs theory
+   0.5-1.1 %. The theory itself changes by < 0.3 % below 0.25 cell, so smaller softening is pointless. Rule of thumb:
+   softening_bh <~ 0.3 lambda (lambda = hbar / (m v)) and lambda >= 3 cells. Not covered: the nonlinear regime M_Q <~ 1,
+   a soliton background, conservation of the total momentum sink + psi (the sink feels the wake at a point, psi feels the
+   Gaussian sink). The N = 256 run used H = 4e-4, above the printed stability limit (1.5e-4), with no visible harm.
+14. Friction scans (2026-10-29): `tests/sink_friction_scan.py` (SCAN = "mq" or "softening", N = 128, plots in
+   `resources/data/sink_friction_scan_<SCAN>/`). T1: mean drag coefficient for v t / lambda > 7 at M_Q = 100, 30, 10, 3, 1, 0.3
+   (softening 0.29 lambda): simulation 3.148, 3.159, 3.185, 3.130, 2.788, 2.222; exact linear theory for the box 3.174, 3.174, 3.174,
+   3.152, 3.132, 3.125; exact steady-state point-source formula (Lancaster Eq. 4.21, own implementation, tends to Eq. 4.26 for large M_Q)
+   3.267, 3.271, 3.275, 3.216, 2.783, 1.923. Simulation = linear theory within 0.8 % for M_Q >= 3; at M_Q <= 1 the coefficient oscillates
+   strongly (mean equals the steady state at M_Q = 1, 15 % above it at 0.3). T3: the momentum gained by psi differs from the momentum lost by
+   the sink by -13.0 / -8.0 / -1.9 / +0.3 % for softening 0.86 / 0.57 / 0.29 / 0.14 lambda (the sink feels the wake at a point, psi feels the
+   Gaussian sink). Fix implemented 2026-10-29 (uncommitted): `SinkNBody(smooth_force=True)` filters the force on the sink with the same Gaussian,
+   momentum balance error drops to +0.3...+2 % for all softening and M_Q (test `tests/test_sink_force_smoothing.py`, 4.6e-1 -> 2e-15); default False;
+   friction at finite softening is lower (Gaussian squared in the linear theory), same point-source limit. Details and caveats in `plans.md`.
+
+15. Time-step check (2026-10-30, commit 1513a21): `Simulation_Class.check_time_step_restriction` only printed a warning above 0.5 x the stability limit
+   (4 / (3 pi) dx^2 / hbar_tilde); `sim.strict_time_step = True` now raises ValueError instead (off by default, test `tests/test_time_step_strict.py`, registered
+   in `run_all.py`). The criterion ignores the potential of a black hole (static_potential only); the BH phase H V_BH(0) / hbar_tilde < 0.1 is checked only in `correct_params.py`.
+16. Black hole in a soliton and cross-code checks (2026-10-29..11-02; numbers and caveats in `plans.md` sections 8-11): T5 (`tests/t5_bh_soliton.py`, `tests/t5_analyze.py`,
+   `slurm/koios_t5.sbatch`) reproduces the stopping time of arXiv:2403.09038 to ~2 % (45.9 vs 46.9 Myr, one run) but shows E_total drift 0.6-0.8 % and a growing psi + BH momentum (cause open);
+   a quiet stationary BH needs r_B >= ~4-6 cells (rule of `correct_params.py`, not yet confirmed by a long run); the point receiver breaks down below ~0.5 cell; jaxion and our code
+   agree on the drag to 0.2-2.6 % (`docs/crosscode_comparison/`, agent-written scripts are not reviewed); spin tests (`tests/spin/`, 5 scripts, not in `run_all.py`) pass on the P100.
+
+### Accepted limitations (decided by the user, 2026-10-16)
+- The internal (thermal) energy of **cold gas in an unresolved potential** is not reliable: the difference between
+  the face-flux gravity work and the cell-centred work lands in `E−K`; a guard keeps it above the floor and
+  tracks the injected energy in `gas.E_guard_injected` (~1.5 % of |E0| in the disk test). This is a property of
+  the chosen solver; gas thermodynamics is not the priority.
+
+### Session log — 2026-10-16 (what was done; details in `CONTINUATION.md` and `git log`)
+- Moved to a new machine (Quadro P4000), created `baselines_quadro_p4000/`; later regenerated its gas cases.
+- Found that gas gravity did not conserve energy (+3.6 |E0| in 0.06 Gyr). Fixes in `NBodyGas.py` / `Evolution_Class.py`:
+  gravity work through cell faces, refreshed potential (kick–drift–kick), internal-energy guard; and in
+  `Diagnostics_Class.py` gas internal energy was counted once per baryonic system → once. Drift now ~0.1 % (N=64).
+- Verified against analytic cases: Sod shock tube, Jeans instability (growth and oscillation), free-fall collapse
+  of a cold sphere, work/energy balance. Old code did not converge with resolution on the disk run; the new does.
+- Fixed the heavy-collapse NaN (stale CFL step, see above). Cost of the new machinery: a few percent per step.
+- Added tests: work balance, positive internal energy, U_iso counted once, Sod, Jeans, free fall, vacuum cell,
+  adaptive substeps. `tests/` is no longer git-ignored.
+
+### What I (Claude) learned this session — apply next time
+- **Measure before explaining.** Several first hypotheses were wrong (e.g. "floors cause the NaN", "old code
+  converges in Jeans"). The decisive tools were: instrument per operation, compare old vs new by monkey-patching
+  (`Evolution._set_gas_potential = lambda self, a, b, c: None` reproduces the old gas behaviour bitwise),
+  and compare with an exact solution.
+- **Check the test, not only the code.** Jeans first failed because my initial pressure was isothermal instead of
+  adiabatic; Sod first failed because periodic waves met at t=0.15. When a validation test disagrees, suspect
+  the setup first, then the code.
+- A constant offset in a measured growth rate can be a time-label offset; use a local log-slope instead.
+- Redirected stdout swallows your own prints; filtering output with grep can hide the one line you need.
+- Report failures of your own change plainly (the new code gave NaN where the old one gave a clean error).
+- Energy diagnostics can be wrong independently of the dynamics (the double counted U_iso): separate
+  "dynamical energy" from the logged `E_total` before blaming the solver.
+- Periodic box: a rotating disk IC is not periodic; the "cross/arms" in density slices come from box faces.
+- Collapse planning: t_ff = sqrt(3π/(32 G ρ0)); use h ≈ t_ff/100; `max_substeps` may need raising.
+- Do not leave simulation output behind; `resources/data` fills the disk (8 GB removed today).
+
+### Session log — 2026-10-26 (Koios, details in `CONTINUATION.md`)
+- Running on the Koios cluster: see `KOIOS.md` (ssh-agent, venv, sbatch). P100 reference set `baselines_koios_p100/`
+  is bitwise reproducible; `compare_baseline_sets.py` compares two sets.
+- Fixed: window-disk CFL case (see issue 1), sink potential offset and accretion energy (issue 5). New tests in
+  `tests/` for all three; `run_all.py` passes.
+- `main.py` is now a simplified dwarf galaxy (soliton 5.3e7 Msun + stars + gas + black hole, masses as fractions of
+  the soliton) in two phases: relaxation with stars switched on slowly, then `from_checkpoint` + `start_new_segment`
+  with gas and sink. Plain relaxation does not damp the soliton breathing (+-13 %, period ~0.75 Gyr); slow switching-on does.
+- `plot_energies.py` / `plot_density.py` / `Plot_max_vals.py` / `plot_from_snapshots.py` save images into the simulation directory.
+- Nothing is committed.
+
+### Session log — 2026-10-26 (evening)
+- Convergence runs N=64/128/256 (phase 2, 1 Gyr, complex64): soliton profile and inner gas rotation converge (128 vs 256
+  within 1-2 %), gas angular momentum loss -31/-18/-10 %. Energy drift and psi mass loss grew with the NUMBER OF STEPS, not
+  with N: cause = complex64 psi (issue 7). Fixed with complex128; `tests/run_all.py` passes; P100 reference set regenerated.
+- New tests for particles and the sink field (issue 8); minimal orbit script `testing_baryons.py` (analytic Kepler speed).
+- Next: convergence N=32/64/128/256 with complex128; sink oscillation test in the soliton; open points 2 and 3 above.
+
+### Research plan (paper idea, literature numbers, test list, results, conclusions): `plans.md` (git-ignored on purpose, the repository is public: it exists only on Koios, keep a backup; sections 11.x = conclusions and open work)
+
+### Handoff 2026-10-27 — next tasks (read this first in a new session)
+Goal of the next phase: **black-hole collisions inside a soliton** (ULDM soliton 5.3e7 Msun, sinks as black holes). Gas is NOT
+needed for this (drop it; its numerical viscosity and outer-ring problems are then irrelevant).
+
+**RESOLVED later on 2026-10-27 (issue 11 above): sink-sink gravity is implemented and tested. Text below is the original diagnosis.**
+**Blocker found (2026-10-27): sinks do not attract each other.** Two sinks of 5e10 Msun, 4 kpc apart, no psi, 0.1 Gyr: the
+separation stays exactly 4.0000 kpc (Newton would collapse them in ~0.01 Gyr). Sinks move only in `forces_environment`
+(force from the density without any sink potential, `Evolution._evolve_order_2`), so there is no sink-sink gravity. Reproducer:
+`~/conv/exp_twosinks.py` (run on a GPU node with `PYTHONPATH=$PWD`). Only this configuration (no psi) was measured; the cause
+in the code was not investigated further. Changing it is a physics change: explain first, say which reference sets change.
+
+Ordered plan (agreed with the user):
+1. DONE (issue 11): add sink-sink gravity (softened, consistent with the analytic sink potential), plus a regression test with a two-sink
+   Kepler binary (period, energy, centre of mass). Style of the existing tests: `tests/test_particle_kepler_orbit.py`.
+2. Dynamical-friction test: a sink moving through psi (uniform background or soliton) against the literature formula (Hui et
+   al. 2017, Lancaster et al. 2020 — recalled from memory, verify before using). This also becomes the validation set for GAMER.
+3. Resolution check: BH of 2e5 Msun (0.4 % of the soliton) dominates only inside ~150 pc (rough estimate, constant core density)
+   = 2 cells at N = 256 (dx = 78 pc). A BH of ~1e7 Msun dominates inside ~0.5 kpc (resolved). Prototype with the heavy BH.
+   Uniform N = 512 would cost ~60 h per Gyr on a P100 (extrapolated from N = 128 -> 256: 7.4 min -> 166 min), so a scan needs AMR.
+4. GAMER (https://github.com/gamer-project/gamer): GPU + AMR + ELBDM (wave and hybrid schemes, refinement flag for
+   interference). Its wiki does not document ELBDM + particles or BH sinks (sink particles exist only for gas in a 2025 paper):
+   ask the developers on GitHub before deciding. Koios has no `nvcc` (try pip CUDA toolkit wheels or Phoebe). Decide after 1-3.
+5. Maintenance so the code is "functional/publishable": push (see below), `requirements.txt` is UTF-16, `.idea` is tracked,
+   duplicate `system_fucntions.py`, README (units, minimal example), licence and citation, self-interaction potential (point 3:
+   fix or switch off and document), regenerate the Quadro/RTX/GTX reference sets on Windows (stale for ALL cases since complex128).
+
+Physics notes for this phase: an isolated soliton is stationary; the ~10 % breathing seen in main.py is a coherent mode excited by
+the baryons (physical, user's view). The random "soliton walk" appears only if the soliton sits in a halo with interfering
+waves; main.py has no such halo. A circular orbit with v = sqrt(GM/r) is not circular in the periodic box (use r0 <~ L/10 or the
+grid force); the sink field is usable up to r <= L/4.
+
+State of the repo and data (Koios, `~/projects/research_task`, branch `working_with_chat`):
+- Commit `0d11459` (tests, minimal orbit script, docs) and `a236daa` (complex128) exist ONLY on Koios: `git push` over https needs
+  a GitHub token (the user does it). Uncommitted: the convergence notes in CLAUDE.md/CONTINUATION.md and this handoff,
+  `tests/test_sink_oscillation_in_soliton.py` (passes, registered in `tests/run_all.py`), untracked `slurm/koios_*_c128.sbatch`,
+  `koios_convergence_h.sbatch` (one-off scripts; do not commit).
+- `resources/data/` holds ~54 GB (home has no backup). Proposed deletions (not yet approved), exact names in
+  `~/conv/delete_tier_A.txt` (34 small test runs, 0.6 GB), `_B.txt` (8 older exploratory runs, 8.6 GB), `_C.txt` (4 superseded
+  complex64 N = 256 / N = 128 h = 1.25e-4 runs, 18 GB). Delete only by exact names the user approves.
+- Helper scripts (outside the repo, in `~/conv/`): `conv_metrics.py` (convergence table), `plot_particle_tests.py` (plots of tests
+  A-C), `plot_sink_osc.py`, `exp_twosinks.py`. Plots from this session are in `plots/particle_tests/` on the Windows machine.
+- Connection: PowerShell `ssh koios` (the Windows ssh-agent already holds the key). Long jobs: submit with `sbatch` (a long
+  `srun` over ssh drops the connection); only one P100 is usually free, so do not leave an interactive `srun --pty bash` open.
+

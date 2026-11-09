@@ -92,6 +92,9 @@ class Simulation_Class:
     # Set to True before evolve() to let sinks accrete baryons and gas (Bondi) before every step.
     sink_accretion = False
 
+    # Reserved for accretion of ULDM onto sinks; not read anywhere yet.
+    sink_accretion_uldm = False
+
     # Set to True before evolve() to merge sinks that come closer than sink_merge_radius [kpc] (None = the capture
     # radius of the sink system) and are gravitationally bound. Mass, momentum and centre of mass are conserved.
     sink_merging = False

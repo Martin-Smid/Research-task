@@ -214,7 +214,7 @@ class Evolution_Class:
                 save_step = True
 
             if getattr(self.simulation, "sink_accretion", False):
-                self._perform_sink_accretion()
+                self._perform_sink_accretion(wave_functions)
                 total_density = self._compute_total_density(wave_functions)  # accretion changed the gas density
 
             if getattr(self.simulation, "sink_merging", False):
@@ -953,9 +953,10 @@ class Evolution_Class:
                 if n_merged:
                     print(f"  [SINK MERGE] merged {n_merged} pair(s), {system.N} sink(s) left, E_diss = {dE:.3e}")
 
-    def _perform_sink_accretion(self):
+    def _perform_sink_accretion(self, wave_functions=None):
         """
         Perform sink accretion on all baryonic systems.
+        wave_functions: hook for future ULDM accretion, currently unused.
         CHANGE: Added detailed logging for both baryon and gas accretion.
         """
         if self.sink_system is None or self.sink_system.N == 0:

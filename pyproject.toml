@@ -18,6 +18,7 @@ dependencies = [
 
 [project.optional-dependencies]
 # CuPy depends on the CUDA version: pick one (or install cupy yourself).
+# Tested: Python 3.11.4 + numpy 2.2.2 + CuPy 13.3.0 (Windows), Python 3.12.3 + numpy 1.x + CuPy 13.3.0 (Koios, CUDA 12 wheels).
 cuda12 = ["cupy-cuda12x"]
 cuda11 = ["cupy-cuda11x"]
 docs = ["sphinx", "furo", "myst-parser"]

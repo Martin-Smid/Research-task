@@ -87,6 +87,7 @@ def build_simulation(total_time, x0=None):
         initial_masses=[M_SINK],                                # its mass [Msun]
         initial_positions=[[0.0 if x0 is None else x0, 0.0, 0.0]],   # starting position
         initial_velocities=[[0.0, 0.0, 0.0]],                   # at rest
+        smooth_force=False,                                     # point receiver: the static reference below uses the unsmoothed force
 
     )
     sim.add_baryons(sink)

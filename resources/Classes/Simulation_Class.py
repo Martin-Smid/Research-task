@@ -108,7 +108,7 @@ class Simulation_Class:
     @parameter_check(int, list, int, (int, float), (int, float),int, float, float,bool, bool, object, (str, type(None)), bool,(type(None),dict), dict,bool,bool,float)
     def __init__(self, dim, boundaries, N, total_time, h,order_of_evolution = 2, m_s=2.5e-22, sponge_V0 =0.6 ,use_sponge=True, use_gravity=True,
                  static_potential=None, baryonic_model = None, save_max_vals=False, sink_formation=None,
-                 sim_units={"dUnits": "kpc", "tUnits": "Gyr", "mUnits": "Msun", "eUnits": "eV"},use_units=True,self_int=True,a_s=-10e-80,):
+                 sim_units={"dUnits": "kpc", "tUnits": "Gyr", "mUnits": "Msun", "eUnits": "eV"},use_units=True,self_int=False,a_s=-10e-80,):
         """
         Initialize the simulation parameters and setup.
 
@@ -142,8 +142,8 @@ class Simulation_Class:
         self.static_potential = static_potential
 
         self.save_max_vals = save_max_vals
-        # if True, a time step above the stability limit raises ValueError instead of printing a warning
-        self.strict_time_step = False
+        # if True (default), a time step above the stability limit raises ValueError instead of printing a warning
+        self.strict_time_step = True
 
         # Initialize spatial grids
         self.dx = []

@@ -1,7 +1,7 @@
 """Check: sim.strict_time_step turns the time-step stability warning into an error.
 
-By default (strict_time_step = False) a step above the limit only prints a warning, as before. With sim.strict_time_step = True
-check_time_step_restriction raises ValueError for a step above the limit and still accepts a step below it."""
+By default (strict_time_step = True) check_time_step_restriction raises ValueError for a step above the limit and still accepts a
+step below it. With sim.strict_time_step = False a step above the limit only prints a warning."""
 
 from pathlib import Path
 import sys
@@ -24,10 +24,7 @@ def main():
 
     sim = make_sim(too_large)
     sim.calculate_physical_units()
-    assert sim.strict_time_step is False, "strict_time_step must be off by default"
-    assert sim.check_time_step_restriction() is True, "default behaviour must stay a warning"
-
-    sim.strict_time_step = True
+    assert sim.strict_time_step is True, "strict_time_step must be on by default"
     try:
         sim.check_time_step_restriction()
     except ValueError as error:
@@ -35,11 +32,13 @@ def main():
     else:
         raise AssertionError("strict_time_step = True must raise for a step above the limit")
 
+    sim.strict_time_step = False
+    assert sim.check_time_step_restriction() is True, "strict_time_step = False must only warn"
+
     sim_ok = make_sim(ok_step)
     sim_ok.calculate_physical_units()
-    sim_ok.strict_time_step = True
     assert sim_ok.check_time_step_restriction() is True, "a step below the limit must be accepted in strict mode"
-    print("PASS: strict_time_step raises above the limit, warns by default, accepts a small step")
+    print("PASS: strict_time_step raises above the limit by default, warns when switched off, accepts a small step")
 
 
 if __name__ == "__main__":

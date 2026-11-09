@@ -1,7 +1,11 @@
 """Run the small regression checks without pytest."""
 
+import os
 import sys
 from pathlib import Path
+
+# tests use paths relative to the project root (e.g. resources/solitons/...), whatever the launch directory is
+os.chdir(Path(__file__).resolve().parent.parent)
 
 # tests live in subfolders (gas, particle, sink, other); the spin tests are run separately
 for _d in sorted(Path(__file__).resolve().parent.iterdir()):
@@ -21,21 +25,20 @@ from test_gas_vacuum_hole_between_flows import main as test_gas_vacuum_hole_betw
 from test_gas_sod_shock_tube import main as test_gas_sod_shock_tube
 from test_particle_breathing_soliton import main as test_particle_breathing_soliton
 from test_particle_kepler_orbit import main as test_particle_kepler_orbit
+from test_particle_time_centered_force import main as test_particle_time_centered_force
 from test_sink_gas_accretion_energy import main as test_sink_gas_accretion_energy
 from test_sink_force_vs_analytic import main as test_sink_force_vs_analytic
 from test_sink_oscillation_in_soliton import main as test_sink_oscillation_in_soliton
 from test_sink_binary_kepler import main as test_sink_binary_kepler
-from test_particle_time_centered_force import main as test_particle_time_centered_force
 from test_sink_merging import main as test_sink_merging
 from test_sink_formation import main as test_sink_formation
 from test_boss_bodenheimer import main as test_boss_bodenheimer
 from test_sink_bondi_local import main as test_sink_bondi_local
-from test_sink_formation import main as test_sink_formation
-from test_boss_bodenheimer import main as test_boss_bodenheimer
 from test_sink_force_smoothing import main as test_sink_force_smoothing
 from test_sink_pair_smoothed import main as test_sink_pair_smoothed
 from test_max_values_during_run import main as test_max_values_during_run
 from test_time_step_strict import main as test_time_step_strict
+from test_self_int_default import main as test_self_int_default
 from test_sink_gravity_single_count import main as test_sink_gravity_single_count
 from test_sink_potential_position import main as test_sink_potential_position
 
@@ -65,13 +68,12 @@ def main():
         ("sink merging (periodic edge, softened bound check, energy, flag)", test_sink_merging),
         ("automatic sink formation (particles and gas)", test_sink_formation),
         ("Boss & Bodenheimer: m = 2 collapse forms two sinks", test_boss_bodenheimer),
-        ("automatic sink formation (particles and gas)", test_sink_formation),
-        ("Boss & Bodenheimer: m = 2 collapse forms two sinks", test_boss_bodenheimer),
         ("Bondi-Hoyle accretion with local cs and v_rel", test_sink_bondi_local),
         ("sink force smoothing gives action = reaction with psi", test_sink_force_smoothing),
         ("smoothed sinks attract with s^2 = 2 eps^2 (force and energy)", test_sink_pair_smoothed),
         ("max_values.csv is written during the run", test_max_values_during_run),
         ("strict_time_step raises above the stability limit", test_time_step_strict),
+        ("self_int is off by default", test_self_int_default),
     ]
 
     for name, check in checks:

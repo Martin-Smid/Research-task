@@ -22,13 +22,13 @@ class SinkNBody(NBody):
     def __init__(self, simulation, N_sinks, initial_masses,
                  initial_positions, initial_velocities,
                  capture_radius=None, softening_bh=None, softening_cusp=None, softening_length=None,
-                 reservoir_tau=10, smooth_force=False):
+                 reservoir_tau=10, smooth_force=True):
         """Initialize sink particle system.
 
         smooth_force: if True the force from the environment (psi, particles, gas) is smoothed with the same Gaussian as
         the sink potential (width softening_bh) before the sink feels it, i.e. the sink is a Gaussian-extended body that
         both acts on and feels the environment through the same kernel. Then the momentum that the sink gains is exactly
-        the momentum that psi loses (action = reaction). With False (default) the sink feels the force at a point while
+        the momentum that psi loses (action = reaction). With False the sink feels the force at a point while
         psi feels the smoothed sink, which breaks the balance when softening_bh is not much smaller than the de Broglie
         wavelength."""
         super().__init__(simulation, N_sinks, total_mass=1.0)

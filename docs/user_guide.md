@@ -47,8 +47,8 @@ sim.add_baryons(particles)              # Baryons, NBodyGas and SinkNBody go thr
 
 Other hooks: `static_potential=f` in `Simulation_Class` (a function that takes the simulation and returns the potential on the
 grid), `sim.add_external_density(rho)` (replaces the density that sources gravity), `use_sponge` (absorbing boundary,
-experimental), `self_int` / `a_s` (self-interaction; **experimental, see the known issues in `CLAUDE.md`**).
-Note: `self_int` defaults to `True` in `Simulation_Class`; set `self_int=False` unless you want it.
+experimental), `self_int` / `a_s` (self-interaction; **experimental, see the known issues in `CONTINUATION.md`, archive**).
+Note: `self_int` is `False` by default in `Simulation_Class`; `self_int=True` is experimental.
 
 ### Sinks
 
@@ -62,13 +62,13 @@ sim.sink_merging = True        # off by default; optional sim.sink_merge_radius 
 ```
 
 Rules of thumb (from the tests): the sink field is usable up to r ≲ L/4 (periodic box); for friction use
-`softening_bh ≲ 0.3 λ` with `λ = ħ/(m v)` and `λ ≥ 3` cells. `smooth_force=True` makes the sink feel the field with the same
+`softening_bh ≲ 0.3 λ` with `λ = ħ/(m v)` and `λ ≥ 3` cells. `smooth_force` (default `True`) makes the sink feel the field with the same
 Gaussian that acts on it (momentum balance exact). Results depend on the merge radius and on `N`, so report both.
 
 ## 3. Choosing the time step and the resolution
 
 - Stability limit on `h` (from the dispersion relation, ∝ dx²) is checked when the simulation is initialised. A too large `h`
-  only **warns** by default; set `sim.strict_time_step = True` to raise an error.
+  raises `ValueError` by default; set `sim.strict_time_step = False` to only warn.
 - Gas needs a CFL substep criterion (automatic); `free_fall_estimate` gives a start value for collapse problems.
 - Memory grows as N³ (the wave function is `complex128`); N = 384 did not fit into a 16 GB P100.
 - `evolve(save_every=1)` saves a snapshot **every step**, which is huge. Use e.g. `save_every=50` and
@@ -132,10 +132,10 @@ You can also add components before `evolve()`, for example a sink after the soli
 
 | Symptom | Likely cause / action |
 |---|---|
-| Warning "time step is too large" | `h` above the stability limit; use the advised `h` (or `strict_time_step = True` to stop). |
+| Warning "time step is too large" | `h` above the stability limit; use the advised `h` (or `strict_time_step = False` to only warn). |
 | Gas: `FloatingPointError`, NaN | the collapse is too violent for `h` or `max_substeps`; reduce `h` (`free_fall_estimate`) or raise `max_substeps`. |
 | Energy or norm drifts with the number of steps | reduce `h`; since the switch to `complex128` the norm of ψ is conserved to rounding. |
-| A sink "runs away" at small softening | softening below one cell without `smooth_force`; use softening ≥ 1 cell or `smooth_force=True` (see `tests/sink/`; **TODO** confirm the recommended default). |
+| A sink "runs away" at small softening | softening below one cell with `smooth_force=False`; use softening ≥ 1 cell or keep the default `smooth_force=True`. |
 | Out of memory | lower `N`; snapshots and checkpoints of ψ are `complex128` (twice the size of `complex64`). |
 | `ImportError`/CUDA error on start | see *Installation* in the README; on Windows `examples/_runtime.py` adds the CUDA path. |
 

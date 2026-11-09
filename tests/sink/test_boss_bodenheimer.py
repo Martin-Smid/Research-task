@@ -94,6 +94,7 @@ def main(n_grid=N_GRID, federrath=True, strict=True, keep_output=False, save_eve
         gas = NBodyGas(simulation=sim, rho=rho, vx=vx, vy=vy, vz=vz, cs=cs, gamma=GAMMA, name="gas", rho_floor=1.0e-6 * rho.min(),
                        e_floor=1.0e-12 * cs ** 2)
         sim.add_baryons(gas)
+        sim.strict_time_step = False   # gas-only collapse in tiny units: the wave-function step limit does not apply
         sim.initialize_simulation()
     assert abs(float(sim.G) / G_astropy - 1.0) < 1.0e-3, f"engine G {float(sim.G)} differs from astropy {G_astropy}"
     dx = box * 2 / n_grid

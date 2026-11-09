@@ -75,6 +75,7 @@ def main():
         initial_masses=[M_SINK, M_SINK],
         initial_positions=[[-R0 / 2, 0.0, 0.0], [R0 / 2, 0.0, 0.0]],
         initial_velocities=[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+        smooth_force=False,         # point receivers: the reference orbit uses the point-mass kernel
 
     )
     volume = (2.0 * BOX) ** 3

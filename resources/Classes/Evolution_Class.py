@@ -956,7 +956,7 @@ class Evolution_Class:
     def _perform_sink_accretion(self, wave_functions=None):
         """
         Perform sink accretion on all baryonic systems.
-        wave_functions: hook for future ULDM accretion, currently unused.
+        wave_functions: used only by the ULDM absorption (sim.sink_accretion_uldm), see SinkNBody.accrete_from_uldm.
         CHANGE: Added detailed logging for both baryon and gas accretion.
         """
         if self.sink_system is None or self.sink_system.N == 0:
@@ -1027,6 +1027,10 @@ class Evolution_Class:
                     print(f"    Remaining gas mass: {final_gas_mass:.6e} Msun")
                     '''
                     
+
+        # === ACCRETE ULDM (only with sim.sink_accretion_uldm) ===
+        if getattr(self.simulation, "sink_accretion_uldm", False) and wave_functions:
+            self.sink_system.accrete_from_uldm(wave_functions, dt=self.h)
 
         # Drain reservoir (common for all sources)
         self.sink_system.drain_reservoir(self.h)

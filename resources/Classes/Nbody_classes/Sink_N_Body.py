@@ -16,6 +16,9 @@ class SinkNBody(NBody):
     # False: Bondi accretion uses the constant gas.cs (default); True: local cs and relative velocity (see accrete_from_gas)
     bondi_local = False
 
+    # Multiplies the ULDM absorption cross section 16 pi (G M / c^2)^2 (accrete_from_uldm); 1 = the physical value
+    uldm_cross_section_scale = 1.0
+
     def __init__(self, simulation, N_sinks, initial_masses,
                  initial_positions, initial_velocities,
                  capture_radius=None, softening_bh=None, softening_cusp=None, softening_length=None,
@@ -650,6 +653,74 @@ class SinkNBody(NBody):
 
         return total_dm
 
+
+    def accrete_from_uldm(self, wave_functions, dt):
+        """
+        Absorb ULDM into the sinks, as an absorbing (imaginary) potential. Enabled by Simulation_Class.sink_accretion_uldm.
+
+        Rate (Bucciotti & Trincherini, JHEP 11 (2023) 193, arXiv:2309.02482, Eq. 3.25; Unruh 1976, l = 0 dominates for
+        mu r_g << 1):  dM/dt = A_H c rho_hor,  A_H = 16 pi (G M / c^2)^2.
+        Every sink s has K_s = uldm_cross_section_scale * 16 pi (G M_s / c^2)^2 c and a normalised periodic Gaussian
+        W_s of width softening_bh (integral W dV = 1, the kernel of the sink potential). All components are damped by
+        psi -> psi sqrt(1 - F), F = clip(sum_s f_s, 0, 1), f_s = 1 - exp(-K_s W_s dt); the phase is untouched.
+        The sink gains exactly the mass psi loses, split by f_s, and the momentum density hbar_tilde Im(psi* grad psi)
+        removed with it (v_new = (M v + dP) / (M + dM)). The mass goes to mass_res (drain_reservoir follows).
+
+        Known inaccuracy: rho_W is not rho_hor. Below the Bohr radius a_B = hbar_tilde^2 / (G M) psi is enhanced by the
+        Sommerfeld factor, which is neglected here, so the rate is underestimated. The physical rate is tiny
+        (~1e-6 Msun/yr for 1e9 Msun in an FDM core); uldm_cross_section_scale enlarges it for tests.
+
+        Returns the mass accreted (float).
+        """
+        if self.N == 0 or not wave_functions:
+            return 0.0
+
+        sim = self.simulation
+        dV = float(sim.dV)
+        grids = [cp.asarray(g) for g in sim.grids]
+        K = self.uldm_cross_section_scale * 16.0 * np.pi * (sim.G * self.masses / sim.c ** 2) ** 2 * sim.c
+
+        f = []
+        for s in range(self.N):
+            r2 = 0.0
+            for axis, (g, (a, b)) in enumerate(zip(grids, sim.boundaries)):
+                length = b - a
+                r2 = r2 + ((g - self.positions[s, axis] + 0.5 * length) % length - 0.5 * length) ** 2     # minimum image
+            W = cp.exp(-0.5 * r2 / float(self.softening_bh) ** 2)
+            W /= cp.sum(W) * dV
+            f.append(1.0 - cp.exp(-K[s] * W * dt))
+        f = cp.stack(f)
+        f_sum = f.sum(axis=0)
+        F = cp.clip(f_sum, 0.0, 1.0)
+        weights = f * (F / cp.where(f_sum > 0.0, f_sum, 1.0))                     # F split between the sinks, sum_s = F
+
+        rho = 0.0
+        momentum_density = [0.0] * len(grids)
+        for wf in wave_functions:
+            rho = rho + wf.calculate_density()
+            mult2 = float(getattr(wf, "multiplicity", 1)) ** 2
+            psi_k = cp.fft.fftn(wf.psi)
+            for d in range(len(grids)):
+                grad = cp.fft.ifftn(1j * sim.k_space[d] * psi_k)
+                momentum_density[d] = momentum_density[d] + mult2 * sim.h_bar_tilde * cp.imag(cp.conj(wf.psi) * grad)
+        for wf in wave_functions:
+            wf.psi *= cp.sqrt(1.0 - F)
+
+        dM = cp.sum(weights * rho, axis=tuple(range(1, weights.ndim))) * dV
+        dP = cp.zeros_like(self.velocities)
+        for d in range(len(grids)):
+            dP[:, d] = cp.sum(weights * momentum_density[d], axis=tuple(range(1, weights.ndim))) * dV
+        total_dm = float(cp.sum(dM))
+        if total_dm <= 0.0:
+            return 0.0
+
+        P_new = self.masses[:, None] * self.velocities + dP
+        self.mass_res = self.mass_res + dM
+        self.masses = self.mass_bh + self.mass_res
+        self.velocities = P_new / self.masses[:, None]
+        self.total_accreted_mass += total_dm
+        self.accretion_history.append(("uldm_absorption", float(dt), total_dm))
+        return total_dm
 
     def add_new_sink(self, mass, position, velocity):
         """Add a new sink particle to this system."""

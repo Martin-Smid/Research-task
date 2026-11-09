@@ -19,6 +19,9 @@ class SinkNBody(NBody):
     # Multiplies the ULDM absorption cross section 16 pi (G M / c^2)^2 (accrete_from_uldm); 1 = the physical value
     uldm_cross_section_scale = 1.0
 
+    # Energy taken off the grid by the ULDM absorption (booked by Evolution_Class._perform_sink_accretion, counted in E_diss)
+    E_diss_uldm_total = 0.0
+
     def __init__(self, simulation, N_sinks, initial_masses,
                  initial_positions, initial_velocities,
                  capture_radius=None, softening_bh=None, softening_cusp=None, softening_length=None,

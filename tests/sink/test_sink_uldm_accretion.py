@@ -5,6 +5,8 @@ factor psi -> psi sqrt(1 - f), f = 1 - exp(-K W dt), W = normalised Gaussian of 
 a) plane wave psi = sqrt(rho0) exp(i k x), one sink with an enlarged cross section: dM = mass lost by psi (1e-12),
    dM = K rho0 dt for small K W dt, dP = dM hbar_tilde k.
 b) huge K dt and two overlapping sinks: no NaN, rho >= 0 and never above the initial rho, the sinks gain what psi loses.
+d) energy: the energy removed from the grid by the absorption is booked as sink.E_diss_uldm_total and counted in E_diss of
+   Diagnostics, so E_total + E_diss does not jump (flag off: nothing is booked).
 c) short evolve with the flag on: mass of psi + sinks + gas + particles conserved; with the flag off (or sink_accretion off)
    accrete_from_uldm is never called."""
 
@@ -181,9 +183,45 @@ def check_evolve():
     print("PASS: evolve with the flag on conserves mass; flag off / sink_accretion off never calls it")
 
 
+def check_energy_bookkeeping():
+    for uldm in (True, False):
+        sim = make_sim()
+        sim.sink_accretion, sim.sink_accretion_uldm = True, uldm
+        with quiet():
+            wf = Wave_function(sim, packet_type="blank", means=[0, 0, 0], st_deviations=[1.0] * 3, momenta=[0, 0, 0])
+        _, wf.psi = plane_wave(sim)
+        sim.wave_functions.append(wf)
+        sink = SinkNBody(simulation=sim, N_sinks=1, initial_masses=[M_SINK], initial_positions=[[0.3, -0.2, 0.1]],
+                         initial_velocities=[[0.0, 0.0, 0.0]])
+        sink.uldm_cross_section_scale = scale_for(sim, sink, 1.0e-2)
+        sim.add_baryons(sink)
+        with quiet():
+            sim.initialize_simulation()
+        evo = sim.evolution
+        evo.sink_system = sink
+
+        def conserved():
+            v = evo.diagnostics.compute_energy(sim.wave_functions, evo._compute_total_density(sim.wave_functions), 0.0)
+            return v["K_total"] + v["W"] + v["U_iso"], v["E_diss"]
+
+        (e0, d0), m0 = conserved(), mass_of(wf, sim)
+        evo._perform_sink_accretion(sim.wave_functions)
+        (e1, d1), m1 = conserved(), mass_of(wf, sim)
+        print(f"energy, flag {uldm}: psi mass {m0:.6e} -> {m1:.6e}; E_total {e0:.6e} -> {e1:.6e}, E_diss {d0:.3e} -> {d1:.3e}, "
+              f"sink.E_diss_uldm_total {float(sink.E_diss_uldm_total):.3e}")
+        if uldm:
+            assert m1 < m0 and abs(e1 - e0) > 1.0e-7 * abs(e0), "the test setup does not move energy"
+            assert abs((e1 + d1) - (e0 + d0)) <= 1.0e-9 * abs(e0), "E_total + E_diss jumps with the absorption"
+            assert abs(float(sink.E_diss_uldm_total) - (e0 - e1)) <= 1.0e-9 * abs(e0)
+        else:
+            assert m1 == m0 and e1 == e0 and float(sink.E_diss_uldm_total) == 0.0
+    print("PASS: absorbed energy is booked in E_diss (flag off: nothing booked)")
+
+
 def main():
     check_plane_wave()
     check_large_kdt()
+    check_energy_bookkeeping()
     check_evolve()
 
 

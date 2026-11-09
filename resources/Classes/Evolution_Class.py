@@ -1030,10 +1030,17 @@ class Evolution_Class:
 
         # === ACCRETE ULDM (only with sim.sink_accretion_uldm) ===
         if getattr(self.simulation, "sink_accretion_uldm", False) and wave_functions:
+            e_before = self._grid_energy(wave_functions)
             self.sink_system.accrete_from_uldm(wave_functions, dt=self.h)
+            self.sink_system.E_diss_uldm_total += e_before - self._grid_energy(wave_functions)   # booked as dissipated
 
         # Drain reservoir (common for all sources)
         self.sink_system.drain_reservoir(self.h)
+
+    def _grid_energy(self, wave_functions):
+        """K + W + U_iso of everything on the grid (what E_total logs), for the energy bookkeeping of the ULDM absorption."""
+        values = self.diagnostics.compute_energy(wave_functions, self._compute_total_density(wave_functions), 0.0)
+        return float(values["K_total"] + values["W"] + values["U_iso"])
 
     def _accrete_gas_to_sinks(self, gas_system):
         """

@@ -210,6 +210,7 @@ def _add_sink(simulation: Simulation_Class) -> SinkNBody:
         capture_radius=2.5 * min(simulation.dx),
         softening_length=1.5 * min(simulation.dx),
         reservoir_tau=0.01,
+        smooth_force=False,  # the reference sets were made before smooth_force became the default (6792bd3); keeps them valid
     )
     simulation.add_baryons(sink)
     return sink

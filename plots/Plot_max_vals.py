@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 
-DATA_DIRECTORY = Path("resources/data")
-
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DATA_DIRECTORY = PROJECT_ROOT / "resources" / "data"
 
 def _latest_simulation_directory():
     candidates = [

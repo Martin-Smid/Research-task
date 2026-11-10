@@ -39,6 +39,7 @@ from test_sink_pair_smoothed import main as test_sink_pair_smoothed
 from test_max_values_during_run import main as test_max_values_during_run
 from test_time_step_strict import main as test_time_step_strict
 from test_self_int_default import main as test_self_int_default
+from test_output_root import main as test_output_root
 from test_sink_gravity_single_count import main as test_sink_gravity_single_count
 from test_sink_potential_position import main as test_sink_potential_position
 
@@ -74,6 +75,7 @@ def main():
         ("max_values.csv is written during the run", test_max_values_during_run),
         ("strict_time_step raises above the stability limit", test_time_step_strict),
         ("self_int is off by default", test_self_int_default),
+        ("output_root, checkpoint, resume, new segment", test_output_root),
     ]
 
     for name, check in checks:

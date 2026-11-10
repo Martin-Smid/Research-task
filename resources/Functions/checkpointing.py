@@ -95,6 +95,7 @@ def simulation_config(simulation: Any) -> dict[str, Any]:
         "use_sponge": simulation.use_sponge,
         "use_gravity": simulation.use_gravity,
         "save_max_vals": simulation.save_max_vals,
+        "output_root": simulation.output_root,
         "sink_formation": simulation._sink_cfg,
         "sim_units": {
             "dUnits": simulation.dUnits,
@@ -473,6 +474,7 @@ def load_checkpoint(
         use_units=bool(config["use_units"]),
         self_int=bool(config["self_int"]),
         a_s=float(config["a_s"]),
+        output_root=config.get("output_root", "resources/data"),
     )
     directory = manifest_path.parent
     simulation.wave_functions = [

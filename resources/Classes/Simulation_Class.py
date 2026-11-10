@@ -108,7 +108,7 @@ class Simulation_Class:
     @parameter_check(int, list, int, (int, float), (int, float),int, float, float,bool, bool, object, (str, type(None)), bool,(type(None),dict), dict,bool,bool,float)
     def __init__(self, dim, boundaries, N, total_time, h,order_of_evolution = 2, m_s=2.5e-22, sponge_V0 =0.6 ,use_sponge=True, use_gravity=True,
                  static_potential=None, baryonic_model = None, save_max_vals=False, sink_formation=None,
-                 sim_units={"dUnits": "kpc", "tUnits": "Gyr", "mUnits": "Msun", "eUnits": "eV"},use_units=True,self_int=False,a_s=-10e-80,):
+                 sim_units={"dUnits": "kpc", "tUnits": "Gyr", "mUnits": "Msun", "eUnits": "eV"},use_units=True,self_int=False,a_s=-10e-80,output_root="resources/data"):
         """
         Initialize the simulation parameters and setup.
 
@@ -126,8 +126,11 @@ class Simulation_Class:
             sim_units (dict): Simulation units configuration
         """
         # Setup parameters
+            output_root (str): Folder that holds the simulation_<timestamp> output folders (default "resources/data");
+                stored in checkpoints, so from_checkpoint() and start_new_segment() keep it. Set it before initialize_simulation().
         self.dim = dim
         self.boundaries = boundaries
+        self.output_root = output_root
         self.N = N
         self.total_time = total_time
         self.h = h

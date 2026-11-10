@@ -28,7 +28,7 @@ class Scribe:
         """
         self.simulation = simulation
         self.snapshot_directory = None
-        self.output_root = "resources/data"   # parent of the simulation_<timestamp> folder; may be overridden after initialize_simulation
+        self.output_root = getattr(simulation, "output_root", "resources/data")   # parent of the simulation_<timestamp> folder (Simulation_Class(output_root=...)); may still be overridden after initialize_simulation
         self.max_vals_filename = None
         self.max_locations_path = None
         self.trajectory_path = None

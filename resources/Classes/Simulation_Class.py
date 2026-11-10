@@ -100,10 +100,12 @@ class Simulation_Class:
     sink_merging = False
     sink_merge_radius = None
 
-    # Particles and sinks (order_of_evolution 2 only) feel the force averaged over the step (start and predicted end).
-    # Set to False before evolve() for the old behaviour, the force frozen at the start of the step. Costs one extra baryon
-    # drift, one Poisson solve and one density deposit per step; second order in h for a time-varying source.
-    baryon_time_centered_force = True
+    # True: more precise, more computationally heavy. Particles and sinks (order_of_evolution 2 only) feel the force
+    # averaged over the step (start and predicted end): second order in h for a time-varying source, but one extra baryon
+    # drift, one Poisson solve and one density deposit per step (~1.7x per step with many particles and a sink).
+    # False (default): less precise, cheaper. The force stays frozen at the start of the step (first order in h);
+    # set the flag before evolve().
+    baryon_time_centered_force = False
 
     @parameter_check(int, list, int, (int, float), (int, float),int, float, float,bool, bool, object, (str, type(None)), bool,(type(None),dict), dict,bool,bool,float,str)
     def __init__(self, dim, boundaries, N, total_time, h,order_of_evolution = 2, m_s=2.5e-22, sponge_V0 =0.6 ,use_sponge=True, use_gravity=True,

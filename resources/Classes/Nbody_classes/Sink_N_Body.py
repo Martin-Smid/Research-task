@@ -22,6 +22,9 @@ class SinkNBody(NBody):
     # Energy taken off the grid by the ULDM absorption (booked by Evolution_Class._perform_sink_accretion, counted in E_diss)
     E_diss_uldm_total = 0.0
 
+    # Sink motion follows Simulation_Class.baryon_time_centered_force (order 2): on = more precise, more computationally
+    # heavy; off = less precise, the sink feels the force frozen at the start of the step.
+
     def __init__(self, simulation, N_sinks, initial_masses,
                  initial_positions, initial_velocities,
                  capture_radius=None, softening_bh=None, softening_cusp=None, softening_length=None,

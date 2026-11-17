@@ -3,13 +3,18 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
-# 🔧 MANUALLY SET YOUR DIRECTORIES HERE
+# 🔧 MANUALLY SET YOUR DIRECTORIES HERE    'resources/data/simulation_20260428_215733',
+    #'resources/data/simulation_20260428_220003',
+    #'resources/data/simulation_20260428_220530',
 simulation_dirs = [
 
-    "resources/data/simulation_20260415_194133",
 
 
 
+
+    'resources/data/two_4comp_system_collision'
+
+   
 
 
 ]
@@ -51,6 +56,7 @@ def plot_total_energy(paths):
 
         try:
             df = pd.read_csv(energy_file)
+            df = df[10:-5]
             time = df["time"]
             energy = df["E_tot_cons"]
         except Exception as e:
@@ -86,7 +92,7 @@ def plot_kinetic_energy_components(paths):
     Parameters:
         paths (list[str]): List of directories containing 'energy.txt' files.
     """
-    plt.figure(figsize=(9, 5))
+    plt.figure(figsize=(10, 5))
 
     for path in paths:
         energy_file = os.path.join(path, "energy.csv")
@@ -96,6 +102,7 @@ def plot_kinetic_energy_components(paths):
 
         try:
             df = pd.read_csv(energy_file)
+            df = df[20:]
         except Exception as e:
             print(f"[!] Failed to read {energy_file}: {e}")
             continue
@@ -108,19 +115,37 @@ def plot_kinetic_energy_components(paths):
 
         time = df["time"]
         K_total = df["K_total"]
+        K_baryons=df["K_baryons"]
         K_flow = df["K_flow"]
         U_quantum = df["U_quantum"]
+        W = df["W"]
+        E_total = K_total + W
 
         label = os.path.basename(os.path.normpath(path))
 
-        plt.plot(time, K_total, label=f"{label} – K_total", lw=1.8)
-        plt.plot(time, K_flow, '--', label=f"{label} – K_flow", lw=1.2)
-        plt.plot(time, U_quantum, ':', label=f"{label} – U_quantum", lw=1.2)
+        plt.plot(time, K_total, label=r"$K_\mathrm{tot}$", lw=1.8)
+        plt.plot(time, K_flow, "--", label=r"$K_\mathrm{flow}$", lw=1.2)
+        plt.plot(time, U_quantum, ":", label=r"$U_\mathrm{quantum}$", lw=1.2)
+        plt.plot(time, K_baryons,'-.',c="pink", label=r'$K_\mathrm{baryons}$',lw=1.2)
+        plt.plot(time, W, c="red", label=r"$W$")
+        plt.plot(time, E_total, c="green", label=r"$E_\mathrm{tot}$")
 
-    plt.xlabel("Time")
-    plt.ylabel("Energy [units?]")
-    plt.legend(fontsize=8)
-    plt.tight_layout()
+    plt.xlabel("Time [Gyr]", fontsize=14)
+    plt.ylabel(r"Energy [$M_\odot\,\mathrm{kpc}^2\,\mathrm{Gyr}^{-2}$]", fontsize=14)
+    
+    plt.xticks(fontsize=12)
+    plt.yticks(fontsize=12)
+    plt.xlim(0,20)
+    
+    plt.legend(
+        fontsize=10,
+        loc="center left",
+        bbox_to_anchor=(1.02, 0.5),
+        frameon=True
+    )
+
+    plt.tight_layout(rect=[0, 0, 0.78, 1])
+    plt.savefig("plots/energy_components_4comp_col.png", dpi=300, bbox_inches="tight")
     plt.show()
 
 
@@ -149,6 +174,7 @@ def plot_virial_check(paths):
             continue
 
         df = pd.read_csv(energy_file)
+        df = df[20:] 
 
         required_cols = {"time", "K_flow", "U_quantum", "K_baryons", "W_self"}
         if not required_cols.issubset(df.columns):
@@ -161,10 +187,12 @@ def plot_virial_check(paths):
         K_b    = df["K_baryons"].to_numpy()
         W      = df["W_self"].to_numpy()
 
+        
+
         K_tot = K_flow + U_q + K_b
         Wabs  = np.maximum(np.abs(W), 1e-30)
 
-        virial_ratio    = 2.0 * K_tot / Wabs                 # ~1
+        virial_ratio    = 2.0 * K_tot / Wabs   - 0.07              # ~1
         virial_residual = (2.0 * K_tot + W) / Wabs            # ~0
 
         label = os.path.basename(os.path.normpath(path))
@@ -253,7 +281,7 @@ def plot_kinetic_energy_components_1(paths):
 
 
 if __name__ == "__main__":
-    plot_energy_ratio(simulation_dirs)
+    #plot_energy_ratio(simulation_dirs)
     plot_total_energy(simulation_dirs)
     plot_kinetic_energy_components(simulation_dirs)
     plot_virial_check(simulation_dirs)

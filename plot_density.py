@@ -8,15 +8,15 @@ from scipy.optimize import curve_fit
 
 
 simulation_dirs = [
+    "resources/data/simulation_20260506_163736",
 
-"resources/data/simulation_20260405_103710"
-
+"resources/data/simulation_20260506_163435",
 
 
 
 ]
 
-specific_times = [0,0.997,1.993000,3.985000,5]
+specific_times = [1.901]
 
 
 
@@ -114,7 +114,7 @@ def plot_density_profiles(simulation_dirs, times=None):
 
             # Plot data points
             plt.scatter(bin_centers, rho_avg, s=15, color=color,
-                        label=f"{sim_name} - Data", alpha=0.7)
+                        label=f"{sim_name}", alpha=0.7)
 
             # Attempt NFW fit
             fit_mask = (rho_avg > 0) & (bin_centers > 0)
@@ -132,18 +132,38 @@ def plot_density_profiles(simulation_dirs, times=None):
 
         plt.xscale("log")
         plt.yscale("log")
-        plt.xlabel("Radius r [kpc]")
-        plt.ylabel("Density ρ(r) [M☉/kpc³]")
+        plt.xlabel("Radius r [kpc]",fontsize =14)
+        plt.ylabel("Density ρ(r) [M☉/kpc³]", fontsize=14)
+        #plt.ylim(5e1,1e9)
+        plt.yticks(fontsize=12)
+        plt.xticks(fontsize=12)
+        plt.ylim(bottom=1e-2)
+        plt.xlim(0,11)
 
-        # Set title based on number of simulations
-        if len(sim_data_list) == 1:
-            plt.title(f"Radial Density Profile at t = {current_time:.2f}")
-        else:
-            plt.title(f"Radial Density Profiles Comparison at t = {current_time:.2f}")
+        #Set title based on number of simulations
+        #if len(sim_data_list) == 1:
+        #    plt.title(f"Radial Density Profile at t = {current_time:.2f}")
+        #else:
+        #    plt.title(f"Radial Density Profiles Comparison at t = {current_time:.2f}")
 
-        plt.legend()
+        plt.legend(
+    [
+        r"ULDM only",
+        r"ULDM + BH, $M_{\rm BH}=5\times10^7\,M_\odot$",
+    ],
+    title=(
+        r"$m_s = 10^{-22}\,\mathrm{eV}$" + "\n" +
+        r"$M_{\rm sol}^{\rm ULDM}=1.94\times10^8\,M_\odot$" + "\n" +
+        r"$M_{\rm sol}^{\rm ULDM+BH}=1.94\times10^8\,M_\odot$"
+    ),
+    loc="lower left",
+    fontsize=12,
+    title_fontsize=11,
+)  
         plt.tight_layout()
+        plt.savefig("plots/radial_profile_Mbhvssoliton_time0.png",dpi=300)
         plt.show()
+        
 
     plot_normalized_profiles(time_data)
     plot_normalized_fit_profiles(time_data)

@@ -19,6 +19,8 @@ M_BH = args.M_BH
 m_s_val = args.m_s
 m_s_eV = args.m_s * u.eV
 
+m_s_val = 1e-22
+
 # --- 2. Fyzikální konstanty ---
 mass_s = (m_s_eV / const.c**2).to(u.Msun)
 G_KPC3_MSUN_GYR2 = 4.4986381856937695e-6
@@ -33,21 +35,59 @@ HBAR_TILDE = h_bar_tilde.value
 EPS_KPC = 1e-10
 As = 0.0
 
-# --- 3. Solver ---
+
+A_BULGE = 2.5       # kpc
+
+#M_BH = 1e6        # Msun
+M_BH=1e6
+M_BULGE = 5e7    # Msun
+A_BULGE = 10       # kpc
+
+import numpy as np
+from scipy.interpolate import interp1d
+
+# 1. Načtení dat ze simulace
+try:
+    data = np.load("initial_radial_potential.npz")
+    r_sim = data['r']
+    V_sim = data['V']
+    
+    # Vytvoření interpolační funkce. 
+    # fill_value="extrapolate" zabrání chybám, když se ODE solver podívá kousek mimo tvůj grid.
+    U_sim_interp = interp1d(r_sim, V_sim, kind='cubic', fill_value="extrapolate")
+    HAS_SIM_POTENTIAL = True
+except FileNotFoundError:
+    print("Simulated potential not found, using analytical only.")
+    HAS_SIM_POTENTIAL = False
+
 def gpp(y, r, omega, a_s=As):
     Phi, U, A, B = y
     rr = r if r > EPS_KPC else EPS_KPC
+
     Ubh = -G_KPC3_MSUN_GYR2 * M_BH / (HBAR_TILDE**2 * rr)
-    Utot = U + Ubh
+    Ubulge = -G_KPC3_MSUN_GYR2 * M_BULGE / (HBAR_TILDE**2 * (rr + A_BULGE))
+    
+
+    Utot = U + Ubh + Ubulge 
 
     if r == 0:
-        dydr = [A, B, 2*(Utot + a_s*Phi**2 - omega)*Phi/3.0, 4*np.pi*Phi**2/3.0]
+        dydr = [
+            A,
+            B,
+            2.0 * (Utot + a_s * Phi**2 - omega) * Phi / 3.0,
+            4.0 * np.pi * Phi**2 / 3.0
+        ]
     else:
-        dydr = [A, B, 2*(Utot + a_s*Phi**2 - omega)*Phi - (2.0/r)*A, 4*np.pi*Phi**2 - (2.0/r)*B]
+        dydr = [
+            A,
+            B,
+            2.0 * (Utot + a_s * Phi**2 - omega) * Phi - (2.0 / r) * A,
+            4.0 * np.pi * Phi**2 - (2.0 / r) * B
+        ]
     return dydr
 
 def Sol(r, U0, omega):
-    y0 = [1.0, U0, 0.0, 0.0]
+    y0 = [1, U0, 0.0, 0.0]
     sol = odeint(gpp, y0, r, args=(omega,), mxstep=5000)
     return sol
 

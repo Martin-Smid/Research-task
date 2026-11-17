@@ -24,6 +24,7 @@ class Scribe:
         self.max_locations_path = None
         self.trajectory_path = None
         self.total_density = None
+        self.max_vals_filename = None
 
         # Data storage
         self.wave_values = []
@@ -44,9 +45,10 @@ class Scribe:
             save_dir = self.snapshot_directory
         os.makedirs(save_dir, exist_ok=True)
         self.snapshot_directory = save_dir
-        print(self.snapshot_directory)
 
-        self.max_vals_filename = "resources/data/max_values.csv"
+
+        if self.max_vals_filename is None:
+            self.max_vals_filename = "resources/data/max_values.csv"
 
         self.energy_path = os.path.join(self.snapshot_directory, "energy.csv")
 
@@ -62,6 +64,10 @@ class Scribe:
         self.trajectory_path = os.path.join(self.snapshot_directory, "particle_trajectory.csv")
         with open(self.trajectory_path, "w") as f:
             f.write("time,x,y,z\n")
+
+        self.sink_trajectory_path = os.path.join(self.snapshot_directory, "sink_trajectory.csv")
+        with open(self.sink_trajectory_path, "w") as f:
+            f.write("time,sink_id,x,y,z,vx,vy,vz,mass_bh,mass_res,mass_total\n")
 
         # Initialize max location logger
         self.max_locations_path = os.path.join(self.snapshot_directory, "max_locations.txt")
@@ -521,6 +527,18 @@ class Scribe:
                     "vz": cp.asnumpy(comp.vz),
                     "E": cp.asnumpy(comp.E) if hasattr(comp, "E") else None,
                     "E_radiated": float(getattr(comp, "E_radiated", 0.0)),
+            
+                    "name": getattr(comp, "name", "gas"),
+                    "cs": getattr(comp, "cs", None),
+                    "gamma": getattr(comp, "gamma", None),
+                    "tcool": getattr(comp, "tcool", None),
+                    "e_floor": getattr(comp, "e_floor", None),
+                    "rho_floor": getattr(comp, "rho_floor", None),
+                    "cfl": getattr(comp, "cfl", None),
+                    "dx": getattr(comp, "dx", None),
+                    "max_substeps": getattr(comp, "max_substeps", None),
+                    "dim": getattr(comp, "dim", None),
+                    "dx_list": getattr(comp, "dx_list", None),
                 })
     
             elif cls_name == "SinkNBody":
@@ -543,3 +561,46 @@ class Scribe:
             saved_files.append(os.path.basename(save_path))
 
         return saved_files
+
+    def log_sink_positions(self, current_time, sink_systems):
+        """
+        Append sink positions, velocities, and masses to sink_trajectory.csv.
+        """
+        if not sink_systems:
+            return
+    
+        if not hasattr(self, "sink_trajectory_path") or self.sink_trajectory_path is None:
+            self.sink_trajectory_path = os.path.join(self.snapshot_directory, "sink_trajectory.csv")
+            if not os.path.exists(self.sink_trajectory_path):
+                with open(self.sink_trajectory_path, "w") as f:
+                    f.write("time,sink_id,x,y,z,vx,vy,vz,mass_bh,mass_res,mass_total\n")
+    
+        with open(self.sink_trajectory_path, "a") as f:
+            global_id = 0
+    
+            for sink_sys in sink_systems:
+                if sink_sys is None or getattr(sink_sys, "N", 0) == 0:
+                    continue
+    
+                pos = cp.asnumpy(sink_sys.positions)
+                vel = cp.asnumpy(sink_sys.velocities)
+                mass_bh = cp.asnumpy(sink_sys.mass_bh)
+                mass_res = cp.asnumpy(sink_sys.mass_res)
+                masses = cp.asnumpy(sink_sys.masses)
+    
+                for i in range(int(sink_sys.N)):
+                    f.write(
+                        f"{float(current_time):.15e},"
+                        f"{global_id},"
+                        f"{float(pos[i, 0]):.15e},"
+                        f"{float(pos[i, 1]):.15e},"
+                        f"{float(pos[i, 2]):.15e},"
+                        f"{float(vel[i, 0]):.15e},"
+                        f"{float(vel[i, 1]):.15e},"
+                        f"{float(vel[i, 2]):.15e},"
+                        f"{float(mass_bh[i]):.15e},"
+                        f"{float(mass_res[i]):.15e},"
+                        f"{float(masses[i]):.15e}\n"
+                    )
+    
+                    global_id += 1

@@ -150,7 +150,8 @@ class SinkNBody(NBody):
             # 2. Escape velocity criterion
             G = self.simulation.G
             sink_masses_per_particle = self.masses[closest_sink_idx]  # (N_baryons,)
-            r_soft = cp.maximum(closest_dist, self.softening_length)
+
+            r_soft = cp.maximum(closest_dist, 1e-15) #second number should be the softening help... needs adjustment to not be hardcoded
             v_esc = cp.sqrt(2 * G * sink_masses_per_particle / r_soft)
 
             # Relative velocity to closest sink
@@ -804,10 +805,12 @@ def check_and_create_sinks(simulation, sink_tracker, density_threshold,
     ready_indices = sink_tracker.update_and_check(baryonic_density, density_threshold)
     if ready_indices is None:
         return None
-
+    rho_ready = rho[ready_indices[:, 0], ready_indices[:, 1], ready_indices[:, 2]]
+    imax = int(cp.argmax(rho_ready).get())
+    ready_indices = ready_indices[imax:imax+1]
     n_new_sinks = ready_indices.shape[0]
 
-    '''
+    
     print(f"\n{'=' * 60}")
     print(f"SINK CREATION EVENT")
     print(f"{'=' * 60}")
@@ -815,7 +818,7 @@ def check_and_create_sinks(simulation, sink_tracker, density_threshold,
     print(f"Source: {source}")
     print(f"Available: {n_baryon_particles} baryon particles, {n_gas_cells} gas cells")
     print(f"Initial mass: Baryons={initial_baryon_mass:.6e}, Gas={initial_gas_mass:.6e}")
-    '''
+    
 
     grids = simulation.grids
     min_dx = min(simulation.dx)
@@ -914,8 +917,8 @@ def check_and_create_sinks(simulation, sink_tracker, density_threshold,
     mass_removed = initial_total_mass - final_total_mass
     mass_error = abs(created_sink_mass - mass_removed)
     rel_error = mass_error / (initial_total_mass + 1e-30)
-
     '''
+    
     print(f"\nCONSUMPTION SUMMARY:")
     print(f"  Baryon particles consumed: {baryon_particles_consumed}")
     print(f"  Baryon mass consumed: {baryon_mass_consumed:.6e} Msun")
@@ -934,7 +937,7 @@ def check_and_create_sinks(simulation, sink_tracker, density_threshold,
         print(f"  ✓ Conserved (error: {rel_error:.3e})")
 
     print(f"{'=' * 60}\n")
-    '''
+       '''
 
     return {
         'masses': cp.array(new_masses, dtype=cp.float64),
@@ -965,10 +968,13 @@ def check_and_create_gas_sinks(simulation, sink_tracker, gas_system, density_thr
     ready_indices = sink_tracker.update_and_check(rho, density_threshold)
     if ready_indices is None:
         return None
-
+    # Keep only the densest ready cell to avoid creating many sinks
+    rho_ready = rho[ready_indices[:, 0], ready_indices[:, 1], ready_indices[:, 2]]
+    imax = int(cp.argmax(rho_ready).get())
+    ready_indices = ready_indices[imax:imax+1]
     n_new_sinks = ready_indices.shape[0]
 
-    '''
+
     print(f"\n{'=' * 60}")
     print(f"GAS SINK CREATION EVENT")
     print(f"{'=' * 60}")
@@ -976,7 +982,7 @@ def check_and_create_gas_sinks(simulation, sink_tracker, gas_system, density_thr
     print(f"Initial gas mass: {initial_gas_mass:.6e} Msun")
     print(f"Density - avg: {initial_avg_density:.3e}, max: {initial_max_density:.3e}")
     print(f"Threshold: {density_threshold:.3e}")
-    '''
+
 
     new_masses = []
     new_positions = []
@@ -1013,22 +1019,27 @@ def check_and_create_gas_sinks(simulation, sink_tracker, gas_system, density_thr
             if rho_cell <= density_threshold:
                 continue
 
-            rho_excess = rho_cell - density_threshold
-            dm = rho_excess * cellV
+            rho_cut = 0.5 * density_threshold
 
+            rho_cell = rho[i, j, k]
+            if rho_cell <= rho_cut:
+                continue
+            
+            rho_removed = rho_cell - rho_cut
+            dm = rho_removed * cellV
+            
             vx = gas_system.vx[i, j, k]
             vy = gas_system.vy[i, j, k]
             vz = gas_system.vz[i, j, k]
-
+            
             dM += dm
             dPx += dm * vx
             dPy += dm * vy
             dPz += dm * vz
             Kin_in += 0.5 * dm * (vx * vx + vy * vy + vz * vz)
-
-            gas_system.rho[i, j, k] = density_threshold
+            
+            gas_system.rho[i, j, k] = rho_cut
             cells_in_region += 1
-
         if dM <= 0:
             continue
 
@@ -1084,4 +1095,10 @@ def check_and_create_gas_sinks(simulation, sink_tracker, gas_system, density_thr
         "velocities": cp.vstack(new_velocities),
         "E_diss_formation": float(total_diss),
     }
-    '''
+       '''
+    return {
+        "masses": cp.asarray(new_masses, dtype=cp.float64),
+        "positions": cp.vstack(new_positions),
+        "velocities": cp.vstack(new_velocities),
+        "E_diss_formation": float(total_diss),
+        }

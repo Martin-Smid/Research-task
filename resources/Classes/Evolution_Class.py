@@ -52,6 +52,7 @@ class Evolution_Class:
         self.sink_system = None
         self.sink_check_interval = 1
         self.sink_source = 'both'  #  'baryons', 'gas', or 'both'
+        self.sink_energy_reference = None
 
         #values for checking conservations within gas
         self._ref_mass = None
@@ -89,7 +90,10 @@ class Evolution_Class:
         for wf in wave_functions:
             wf.psi = cp.asarray(wf.psi)
 
-
+        #r_bins, V_r = self.compute_baryon_potential_cross_section()
+        #import numpy as np
+        #np.savez("initial_radial_potential.npz", r=r_bins, V=V_r)
+        #print("potential saved to initial_radial_potential.npz")
 
         # Setup directories and save initial state
         if start_step == 0:
@@ -97,14 +101,29 @@ class Evolution_Class:
             self.scribe.save_initial_states(wave_functions)
         else:
             current_time = start_step * self.h
-            self.scribe.snapshot_directory = getattr(self.simulation, "snapshot_directory", None)
+        
+            self.scribe.snapshot_directory = (
+                self.scribe.snapshot_directory
+                or getattr(self.simulation, "snapshot_directory", None)
+            )
+        
             if self.scribe.snapshot_directory is None:
-                raise ValueError("Restart mode requires simulation.snapshot_directory to be set.")
+                raise ValueError("Restart mode requires simulation.snapshot_directory or scribe.snapshot_directory to be set.")
+        
+            self.simulation.snapshot_directory = self.scribe.snapshot_directory
         
             self.scribe.energy_path = os.path.join(self.scribe.snapshot_directory, "energy.csv")
             self.scribe.trajectory_path = os.path.join(self.scribe.snapshot_directory, "particle_trajectory.csv")
             self.scribe.max_locations_path = os.path.join(self.scribe.snapshot_directory, "max_locations.txt")
             self.scribe.rotation_curve_path = os.path.join(self.scribe.snapshot_directory, "rotational_velocity.dat")
+            self.scribe.sink_trajectory_path = os.path.join(
+            self.scribe.snapshot_directory,
+                "sink_trajectory.csv"
+            )
+            
+            if not os.path.exists(self.scribe.sink_trajectory_path):
+                with open(self.scribe.sink_trajectory_path, "w") as f:
+                    f.write("time,sink_id,x,y,z,vx,vy,vz,mass_bh,mass_res,mass_total\n")
         
             if not self.scribe.wave_values or len(self.scribe.wave_values) != self.num_wave_functions:
                 self.scribe.wave_values = [[] for _ in range(self.num_wave_functions)]
@@ -186,15 +205,32 @@ class Evolution_Class:
                 save_step = True
 
             #checking if BH appeared
-            '''
-            #off right now
-            new_sink = self._check_and_form_sinks(step)
-            self._perform_sink_accretion()
+            wave_functions = self._perform_evolution_step(wave_functions, total_density, step, save_step)
+            new_sink, dM_formed = self._check_and_form_sinks(step + 1)
+            
             if new_sink:
-                print("New sink formed at step", step)
-                total_density = self._compute_total_density(wave_functions)
-            '''
+                print(
+                    f"[SINK FORMATION] New sink formed at step={step + 1}, "
+                    f"t={(step + 1)*self.h:.4f} Gyr, "
+                    f"M_formed={dM_formed:.6e} Msun"
+                )
+            
+            dM_acc = self._perform_sink_accretion()
+            
+            # 3) Then log
+            if getattr(self, "enable_sink_formation", False) or getattr(self, "sink_system", None) is not None:
+                self._log_sink_debug(
+                    current_time=(step + 1) * self.h,
+                    dM_formed_step=dM_formed,
+                    dM_accreted_step=dM_acc,
+                )
+            
+            # 4) Then recompute density for diagnostics
+            total_density = self._compute_total_density(wave_functions)
+            current_time = (step + 1) * self.h
+            
             #temporary Mbh mass gain
+            '''
             if self.sink_system is not None and self.sink_system.N > 0:
                 M_start = 1e7  
                 M_end = 3e7    
@@ -212,17 +248,19 @@ class Evolution_Class:
                 
                 self.sink_system.mass_bh[0] = new_mass
                 self.sink_system.masses[0] = new_mass
+                '''
                 
-            # Perform evolution step
-            wave_functions = self._perform_evolution_step(wave_functions, total_density, step, save_step)
-
-            total_density = self._compute_total_density(wave_functions)
-            current_time = (step + 1) * self.h
             if self.save_max_vals:
                 max_val = float(cp.max(cp.abs(total_density)))
 
                 self.scribe.track_max_value(step + 1, max_val)
             self.compute_total_energy(wave_functions, total_density, current_time)
+
+            if hasattr(self.simulation, 'baryonic_matter') and self.simulation.baryonic_matter:
+                for sys in self.simulation.baryonic_matter:                        
+                        if self._is_sink_system(sys):
+                            sink_systems = self._collect_sink_systems()
+                            self.scribe.log_sink_positions(current_time, sink_systems)
 
             # Save snapshots and profiles
             if step % save_every == 0:
@@ -252,7 +290,7 @@ class Evolution_Class:
                             rho_gas_only += dens
                             U = sys.internal_energy()
                             Er = sys.E_radiated
-                            print(step, self.h*step, U, Er, U + Er)
+                            #print(step, self.h*step, U, Er, U + Er)
 
 
                     baryon_density_to_save = rho_baryons_all
@@ -273,6 +311,7 @@ class Evolution_Class:
                     self.simulation.baryonic_matter,
                     current_time=current_time
                 )
+                
                 
                 self.scribe.save_restart_metadata(
                     current_step=step + 1,
@@ -338,6 +377,9 @@ class Evolution_Class:
             self.simulation.baryonic_matter,
             current_time=self.total_time
         )
+        sink_systems = self._collect_sink_systems()
+        self.scribe.log_sink_positions(self.total_time, sink_systems)
+        
         self.scribe.save_restart_metadata(
             current_step=self.num_steps,
             current_time=self.total_time,
@@ -642,34 +684,34 @@ class Evolution_Class:
         """
         dV = float(self.simulation.dV)
 
-        rho_w = total_density
-        phi_w = self.propagator.compute_gravity_potential(rho_w)  # from wave density only
-        phi_s = self._compute_sink_potential_analytic_kspace()  # analytic sinks (all sinks)
-
-        # sinks deposited on grid (for energy integrals)
-        rho_s = cp.zeros_like(rho_w)
-        if getattr(self.simulation, "baryonic_matter", None):
-            for sys in self.simulation.baryonic_matter:
-                if self._is_sink_system(sys):
-                    rho_s += sys.deposit_to_grid()
-
-        # self terms
-        W_w_self = 0.5 * cp.sum(rho_w * phi_w) * dV
-        W_s_self = 0.5 * cp.sum(rho_s * phi_s) * dV
-
-        # cross terms (MISSING in your current version)
-        W_cross = (cp.sum(rho_w * phi_s) + cp.sum(rho_s * phi_w)) * dV
-
+        # --- wave density only ---
+        shape = (self.simulation.N,) * self.simulation.dim
+        rho_wave = cp.zeros(shape, dtype=cp.float64)
+        for wf in wave_functions:
+            rho_wave += wf.calculate_density()
+    
+        # --- potentials ---
+        phi_wave = self.propagator.compute_gravity_potential(rho_wave)
+        phi_sink = self._compute_sink_potential_analytic_kspace()
+    
+        # Shift sink potential by a constant reference for energy bookkeeping only
+        phi_ref = self._get_sink_energy_reference(phi_sink)
+        phi_sink_energy = phi_sink - phi_ref
+    
+        # --- energy terms ---
+        W_wave_self = 0.5 * cp.sum(rho_wave * phi_wave) * dV
+        W_wave_sink = cp.sum(rho_wave * phi_sink_energy) * dV
+    
         W_static = 0.0
         if self.simulation.static_potential is not None:
             phi_static = self.simulation.static_potential(self.simulation)
-            W_static = cp.sum((rho_w + rho_s) * cp.real(phi_static)) * dV
-
-        W_total = cp.real(W_w_self + W_s_self + W_cross + W_static)
-
-        self.W_self = cp.real(W_w_self + W_s_self + W_cross)  # pokud chceš mít "self" jako všechno bez static
+            W_static = cp.sum(rho_wave * cp.real(phi_static)) * dV
+    
+        W_self = cp.real(W_wave_self + W_wave_sink)
+        W_total = cp.real(W_wave_self + W_wave_sink + W_static)
+    
+        self.W_self = W_self
         self.W_static = cp.real(W_static)
-
         return self.W_self, self.W_static, W_total
 
     def _compute_kinetic_energy(self, wave_functions):
@@ -841,6 +883,14 @@ class Evolution_Class:
 
         # Save energy log
         self.scribe.save_energy_log()
+        if hasattr(self, "sink_debug_log") and self.sink_debug_log:
+            import pandas as pd
+            import os
+        
+            df = pd.DataFrame(self.sink_debug_log)
+            path = os.path.join(self.scribe.snapshot_directory, "sink_debug_log.csv")
+            df.to_csv(path, index=False)
+            print(f"Saved sink debug log to {path}")
 
         # Handle max values if enabled
         if self.save_max_vals:
@@ -849,7 +899,8 @@ class Evolution_Class:
                 resolution=int(self.simulation.N),
                 spin=spin if spin is not None else None
             )
-            plot_y_or_n = input("Should I plot these values? (y/n/del): ")
+            plot_y_or_n = "y"
+            #plot_y_or_n = input("Should I plot these values? (y/n/del): ")
             if plot_y_or_n == "y":
                 plot_max_values_on_N(self)
             elif plot_y_or_n == "del":
@@ -968,19 +1019,20 @@ class Evolution_Class:
         - Gas sinks use check_and_create_gas_sinks(...), with r_acc = gas_r_acc_cells * dx
         - Both branches merge created sinks into a single SinkNBody system via SinkNBody.merge_or_create(...)
         """
+        formed_mass_step = 0.0
+        new_sink_created = False
+    
         if not getattr(self, "enable_sink_formation", False):
-            return False
-
-        # Global cadence for particle sinks (and the function as a whole)
+            return False, 0.0
+    
         if step % getattr(self, "sink_check_interval", 1) != 0:
-            return False
-
+            return False, 0.0
+    
         from resources.Classes.Nbody_classes.Sink_N_Body import (
             check_and_create_sinks,
             check_and_create_gas_sinks,
             SinkNBody,
         )
-
         new_sink_created = False
 
         # ---------------------------
@@ -1005,7 +1057,7 @@ class Evolution_Class:
                     new_sinks_data=new_sinks_data,
                     simulation=self.simulation,
                 )
-                if self.sink_system not in self.simulation.baryonic_matter:
+                if not any(b is self.sink_system for b in self.simulation.baryonic_matter):
                     self.simulation.baryonic_matter.append(self.sink_system)
 
                 new_sink_created = True
@@ -1033,8 +1085,13 @@ class Evolution_Class:
         if gas_systems and getattr(self, "enable_gas_sink_formation", False) and self.sink_source in ("gas", "both"):
             gas = gas_systems[0]
 
+
             if step % getattr(self, "gas_sink_check_interval", 1) == 0:
                 dx = float(min(self.simulation.dx))
+                #-------------------------------------------just for collapse runs ---------------------
+                if self.sink_system is not None and self.sink_system.N > 0:
+                    return False, 0.0
+                #-------------------------------------------------------------------------------------
                 r_acc = float(getattr(self, "gas_r_acc_cells", 3)) * dx
 
                 new_gas_sinks = check_and_create_gas_sinks(
@@ -1044,6 +1101,7 @@ class Evolution_Class:
                     density_threshold=self.gas_sink_density_threshold,
                     r_acc=r_acc
                 )
+    
 
                 if new_gas_sinks is not None:
                     self.sink_system = SinkNBody.merge_or_create(
@@ -1051,6 +1109,7 @@ class Evolution_Class:
                         new_sinks_data=new_gas_sinks,
                         simulation=self.simulation
                     )
+                    formed_mass_step += float(cp.sum(new_gas_sinks["masses"]))
                     if self.sink_system not in self.simulation.baryonic_matter:
                         self.simulation.baryonic_matter.append(self.sink_system)
 
@@ -1070,16 +1129,17 @@ class Evolution_Class:
                         if n_merge > 0:
                             print(f"  [SINK MERGE] merged {n_merge} pairs, dE_diss={dE:.3e}")
 
-        return new_sink_created
+        return new_sink_created, formed_mass_step
 
     def _perform_sink_accretion(self):
         """
         Perform sink accretion on all baryonic systems.
         CHANGE: Added detailed logging for both baryon and gas accretion.
         """
-        if self.sink_system is None or self.sink_system.N == 0:
-            return
+        total_gas_accreted = 0.0
 
+        if self.sink_system is None or self.sink_system.N == 0:
+            return total_gas_accreted
         # Separate baryonic and gas systems
         baryon_systems = []
         gas_systems = []
@@ -1117,7 +1177,7 @@ class Evolution_Class:
 
 
 
-        # === ACCRETE FROM GAS ===
+        # === ACCRETE FROM GAS ===        
         if gas_systems:
             for gas in gas_systems:
                 # Track initial state
@@ -1129,7 +1189,7 @@ class Evolution_Class:
                 mass_accreted_gas = self.sink_system.accrete_from_gas(
                     gas, dt=self.h, sound_speed=getattr(gas, "cs", None)
                 )
-
+                total_gas_accreted += float(mass_accreted_gas)
                 if mass_accreted_gas > 0:
                     final_gas_mass = float(cp.sum(gas.rho) * self.simulation.dV)
                     final_gas_momentum = gas.total_momentum()
@@ -1145,9 +1205,11 @@ class Evolution_Class:
                     print(f"    Remaining gas mass: {final_gas_mass:.6e} Msun")
                     '''
                     
+                    
 
         # Drain reservoir (common for all sources)
         self.sink_system.drain_reservoir(self.h)
+        return total_gas_accreted
 
     def _accrete_gas_to_sinks(self, gas_system):
         """
@@ -1300,6 +1362,8 @@ class Evolution_Class:
 
         phi_k_total[mask0] = 0.0 + 0.0j
         phi_sink = cp.fft.ifftn(phi_k_total).real.astype(cp.float64)
+        
+        
         return phi_sink
 
     def _compute_and_save_rotation_curves(self, current_time, nbins=40, rmax=None, zmax_gas=1.0, zmax_stars=2.0):
@@ -1343,6 +1407,130 @@ class Evolution_Class:
             except Exception as e:
                 print(f"[Evolution] Warning: could not compute rotation curve for {component_name}: {e}")
 
+    def _get_sink_energy_reference(self, phi_sink):
+        """
+        Return a fixed reference level for the sink potential used only
+        in the energy diagnostic.
+        """
+        if self.sink_energy_reference is None:
+            self.sink_energy_reference = float(cp.max(phi_sink))
+            print(f"[Energy gauge] sink potential reference set to phi_ref = {self.sink_energy_reference:.6e}")
+        return self.sink_energy_reference
+
     def _is_gas_system(self, sys):
         """Check if a baryonic system is a gas system."""
         return sys.__class__.__name__.lower() == "nbodygas"
+
+
+    def compute_baryon_potential_cross_section(self):
+        import numpy as np
+        import cupy as cp
+        
+        shape = (self.simulation.N,) * self.simulation.dim
+        baryon_density = cp.zeros(shape, dtype=cp.float64)
+
+        # 1. Posbíráme hustotu pouze z baryonů (plyn, částice)
+        if hasattr(self.simulation, 'baryonic_matter') and self.simulation.baryonic_matter:
+            for baryon_sys in self.simulation.baryonic_matter:
+                # Sinky ignorujeme, řešíme je analyticky
+                if not self._is_sink_system(baryon_sys):
+                    baryon_density += baryon_sys.deposit_to_grid()
+
+        # 2. Potenciál z baryonové hustoty na gridu
+        phi_baryons = self.propagator.compute_gravity_potential(baryon_density)
+        
+        # 3. Analytický potenciál ze sinků (černá díra)
+        phi_sink = self._compute_sink_potential_analytic_kspace()
+        
+        # 4. Statický potenciál simulace (pokud je)
+        phi_total = phi_baryons + phi_sink
+        if self.simulation.static_potential is not None:
+            phi_total += cp.real(self.simulation.static_potential(self.simulation))
+
+        # Střed bereme natvrdo v centru gridu, protože baryony tam máš nacentrované (0,0,0)
+        ix, iy, iz = self.simulation.N // 2, self.simulation.N // 2, self.simulation.N // 2
+
+        grid_x = cp.asarray(self.simulation.grids[0])
+        x_axis = cp.asnumpy(grid_x[:, iy, iz])
+        phi_slice = cp.asnumpy(phi_total[:, iy, iz])
+        
+        # Oříznutí od středu k okraji (zajištění r >= 0)
+        r_slice = x_axis[ix:] - x_axis[ix]
+        phi_1d = phi_slice[ix:]
+        
+        return r_slice, phi_1d
+    def _log_sink_debug(self, current_time, dM_formed_step=0.0, dM_accreted_step=0.0):
+        if not hasattr(self, "sink_debug_log"):
+            self.sink_debug_log = []
+    
+        # ----------------------------
+        # Gas quantities
+        # ----------------------------
+        M_gas = 0.0
+        rho_max = 0.0
+    
+        for b in getattr(self.simulation, "baryonic_matter", []):
+            if self._is_gas_system(b):
+                M_gas += float(cp.sum(b.rho) * self.simulation.dV)
+                rho_max = max(rho_max, float(cp.max(b.rho)))
+    
+        rho_thr = getattr(self, "gas_sink_density_threshold", np.nan)
+        if rho_thr is None:
+            rho_thr = np.nan
+    
+        rho_ratio = rho_max / rho_thr if np.isfinite(rho_thr) and rho_thr > 0 else np.nan
+    
+        # ----------------------------
+        # Sink quantities
+        # ----------------------------
+        N_sinks = 0
+        M_sink = 0.0
+        M_bh = 0.0
+        M_res = 0.0
+    
+        sink_systems = []
+    
+        if getattr(self, "sink_system", None) is not None:
+            sink_systems.append(self.sink_system)
+    
+        for b in getattr(self.simulation, "baryonic_matter", []):
+            if self._is_sink_system(b):
+                if not any(b is s for s in sink_systems):
+                    sink_systems.append(b)
+    
+        for s in sink_systems:
+            if s is None or getattr(s, "N", 0) == 0:
+                continue
+    
+            N_sinks += int(s.N)
+            M_sink += float(cp.sum(s.masses))
+            M_bh += float(cp.sum(s.mass_bh))
+            M_res += float(cp.sum(s.mass_res))
+    
+        self.sink_debug_log.append({
+            "time": float(current_time),
+            "N_sinks": N_sinks,
+            "M_gas": M_gas,
+            "M_sink": M_sink,
+            "M_bh": M_bh,
+            "M_res": M_res,
+            "M_formed_step": float(dM_formed_step),
+            "M_accreted_step": float(dM_accreted_step if dM_accreted_step is not None else 0.0),
+            "rho_max_gas": rho_max,
+            "rho_thr_gas": float(rho_thr),
+            "rho_max_over_thr": float(rho_ratio),
+            "M_total_gas_plus_sink": M_gas + M_sink,
+        })
+
+    def _collect_sink_systems(self):
+        sink_systems = []
+    
+        if getattr(self, "sink_system", None) is not None:
+            sink_systems.append(self.sink_system)
+    
+        for b in getattr(self.simulation, "baryonic_matter", []):
+            if self._is_sink_system(b):
+                if not any(b is s for s in sink_systems):
+                    sink_systems.append(b)
+    
+        return sink_systems

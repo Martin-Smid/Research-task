@@ -137,13 +137,18 @@ class Baryons(NBody):
                 velocity=velocity,
                 vel_sigma=vel_sigma
             )
-
         elif init_profile == "disk":
+
+            height = kwargs.get('height', 1.0) 
+            circular_velocity = kwargs.get('circular_velocity', 200.0)
+            
             self.initialize_exponential_disk(
                 center=center,
                 radius=radius,
                 velocity=velocity,
-                vel_sigma=vel_sigma
+                vel_sigma=vel_sigma,
+                height=height,
+                circular_velocity=circular_velocity
             )
         elif init_profile == "from_file":
             file_path = kwargs.get('file_path')
@@ -446,56 +451,87 @@ class Baryons(NBody):
 
         self.velocities = v
 
-    def initialize_exponential_disk(self, center, velocity, radius=1.0, height=0.1,
-                                    circular_velocity=200.0, vel_sigma=0.0):
+    def initialize_exponential_disk(
+        self,
+        center,
+        velocity,
+        radius=1.0,
+        height=0.1,
+        circular_velocity=200.0,
+        vel_sigma=0.0,
+    ):
         """
-        Create an exponential disk with rotation (GPU: CuPy).
-
-        Parameters:
-        -----------
+        Create a truncated exponential stellar disk with approximate rotational support.
+    
+        Parameters
+        ----------
         center : tuple
-            (x, y, z) coordinates for the center of the disk.
+            (x, y, z) center of the disk.
         velocity : tuple
             (vx, vy, vz) bulk velocity of the disk.
         radius : float
-            Scale radius of the exponential disk.
+            Exponential scale radius [kpc].
         height : float
-            Scale height of the disk.
+            Exponential vertical scale height [kpc].
         circular_velocity : float
-            Circular velocity in km/s (will be converted to kpc/Gyr).
+            Approximate outer circular velocity [km/s].
         vel_sigma : float
-            Vertical velocity dispersion in km/s.
+            Velocity dispersion scale [km/s].
+            Used mainly for vertical support; small radial/azimuthal dispersions
+            are added as well to avoid an unrealistically cold disk.
         """
-        # Sample radial positions (exponential) (GPU)
-        u = cp.random.uniform(0, 1, self.N)
-        R = -radius * cp.log(1 - u)
+    
+        km_s_to_kpc_gyr = 1.0227121650537077
+    
+        Rmax = 3.0 * radius
+        zmax = 4.0 * height
+        R = cp.random.gamma(shape=2.0, scale=radius, size=self.N)
+    
+        mask = R > Rmax
+        while int(mask.sum()) > 0:
+            R[mask] = cp.random.gamma(shape=2.0, scale=radius, size=int(mask.sum()))
+            mask = R > Rmax
+    
+        z_sign = cp.random.choice(cp.array([-1.0, 1.0]), size=self.N)
+        z_abs = cp.random.exponential(scale=height, size=self.N)
+        z = z_sign * z_abs
+    
+        mask = cp.abs(z) > zmax
+        while int(mask.sum()) > 0:
+            z_sign_new = cp.random.choice(cp.array([-1.0, 1.0]), size=int(mask.sum()))
+            z_abs_new = cp.random.exponential(scale=height, size=int(mask.sum()))
+            z[mask] = z_sign_new * z_abs_new
+            mask = cp.abs(z) > zmax
 
-        # Sample vertical positions (exponential) (GPU)
-        z_sign = cp.random.choice([-1, 1], self.N)
-        z = z_sign * height * cp.random.exponential(1.0, self.N)
+        phi = 2.0 * cp.pi * cp.random.uniform(0.0, 1.0, self.N)
+    
+        self.positions[:, 0] = center[0] + R * cp.cos(phi)
+        self.positions[:, 1] = center[1] + R * cp.sin(phi)
+        self.positions[:, 2] = center[2] + z
+    
+        v0 = circular_velocity * km_s_to_kpc_gyr
+        Rcore = max(0.5 * radius, 2.0 * height, 0.5)
+        vphi_mean = v0 * R / cp.sqrt(R**2 + Rcore**2)
+    
 
-        # Random angles (GPU)
-        phi = 2 * cp.pi * cp.random.uniform(0, 1, self.N)
-
-        # Cartesian positions (GPU)
-        self.positions[:, 0] = R * cp.cos(phi) + center[0]
-        self.positions[:, 1] = R * cp.sin(phi) + center[1]
-        self.positions[:, 2] = z + center[2]
-
-        # Circular velocities (simplified flat rotation curve) (GPU)
-        v_circ = cp.full(self.N, circular_velocity * 1.0227, dtype=cp.float64)  # Convert km/s → kpc/Gyr
-
-        # Tangential velocities (GPU)
-        self.velocities[:, 0] = -v_circ * cp.sin(phi)
-        self.velocities[:, 1] = v_circ * cp.cos(phi)
-        self.velocities[:, 2] = 0.0
-
-        # Add bulk COM velocity (GPU)
-        self.velocities += cp.array(velocity)
-
-        # Small **vertical** dispersion (GPU)
-        sigma = vel_sigma * 1.0227  # km/s → kpc/Gyr
-        self.velocities[:, 2] += cp.random.normal(0, sigma, self.N)
+        sigma_user = vel_sigma * km_s_to_kpc_gyr
+        sigma_floor = 0.10 * v0   # small built-in floor for stability
+        sigma_base = max(float(sigma_user), float(sigma_floor))
+    
+        sigma_R = sigma_base
+        sigma_phi = 0.7 * sigma_base
+        sigma_z = 0.6 * sigma_base
+    
+        vR = cp.random.normal(0.0, sigma_R, self.N)
+        vphi = vphi_mean + cp.random.normal(0.0, sigma_phi, self.N)
+        vz = cp.random.normal(0.0, sigma_z, self.N)
+    
+        # Convert cylindrical velocities -> Cartesian
+        self.velocities[:, 0] = vR * cp.cos(phi) - vphi * cp.sin(phi)
+        self.velocities[:, 1] = vR * cp.sin(phi) + vphi * cp.cos(phi)
+        self.velocities[:, 2] = vz
+    
+        self.velocities += cp.array(velocity, dtype=cp.float64)
 
     def initialize_from_file(self, file_path, center, apply_center_offset=False, dist_factor=1.0, vel_factor=1.0):
         """

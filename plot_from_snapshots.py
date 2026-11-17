@@ -1,11 +1,11 @@
 from resources.Functions.system_fucntions import *
 
 
-#snapshot_directory = 'Projects/Reasearch-task/Research-task/resources/data/simulation_20260218_170320' # Replace with your path
+snapshot_directory = 'resources/data/two_4comp_system_collision' # Replace with your path
 
 #-------------------------JUST WFS -----------------------------------------------------------
 '''
-wave_function_number = 6# Which wave function to plot
+wave_function_number = 0# Which wave function to plot
 
 # Plot single wave function
 data = plot_wave_function_snapshots(
@@ -19,15 +19,15 @@ show_plots=False
 
 plot_multiple_wave_functions(
      snapshot_dir=snapshot_directory,
-     wf_numbers=[0, 1, 2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25],  # List of wave functions to compare
+     wf_numbers=[0, ],  # List of wave functions to compare
      save_plots=True,
      show_plots=False)
 
 
 plot_wave_function_panel(
-    snapshot_dir="resources/data/simulation_20251029_133606",
+    snapshot_dir="resources/data/two_4comp_system_collision",
     wf_number=0,
-    times=[2.5,5, 7.5,10, 12.5,15],  # pick any 4+
+    times=[0,20],  # pick any 4+
     ncols=3,                 # 2x2 grid
     z_index=None,            # middle slice for 3D
     log_scale=True,          # shared LogNorm
@@ -126,89 +126,88 @@ for time in times:
     plt.tight_layout()
     plt.show()
 
-
+'''
 
 #------------------------------------------JUST BARYONS-------------------------------------------------
-
-snapshot_dir = "resources/data/simulation_20260121_112709"  # your snapshot folder
+'''
+snapshot_dir = "resources/data/ULDM+BH1e6+HernquistN+diskGas"  # your snapshot folder
 boundaries = [(-50, 50), (-50, 50), (-50, 50)]              # same as in Simulation_Class
 slice_axis = 2                                              # 0=x,1=y,2=z
-time_target = 0.1                                       # pick saved time
+time_targets = [10.001]                                       # pick saved time
 
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 import glob, os
 
-
-baryon_files = sorted(
-    glob.glob(os.path.join(snapshot_dir, "baryons_snapshot_at_time_*.npy"))
-)
-if not baryon_files:
-    raise FileNotFoundError("No baryon snapshots found in folder")
-
-import re
-num_re = re.compile(r"at_time_([0-9.+\-eE]+)\.npy$")
-
-def extract_time(fname):
-    m = num_re.search(fname)
-    return float(m.group(1)) if m else np.inf
-
-times = np.array([extract_time(f) for f in baryon_files], dtype=float)
-if np.isinf(times).all():
-    raise ValueError("Failed to parse any snapshot times.")
-
-# choose closest by numeric time
-chosen_i = int(np.nanargmin(np.abs(times - time_target)))
-baryon_file = baryon_files[chosen_i]
-actual_time = float(times[chosen_i])
-
-# --- load baryon density grid ---
-rho_b = np.load(baryon_file)  # expected shape (N,N,N), non-negative
-if np.any(~np.isfinite(rho_b)):
-    rho_b = np.nan_to_num(rho_b, nan=0.0, posinf=0.0, neginf=0.0)
-
-# --- build coordinate grid matching chosen slice ---
-N = rho_b.shape[0]
-axes = [
-    np.linspace(boundaries[0][0], boundaries[0][1], N, endpoint=False),
-    np.linspace(boundaries[1][0], boundaries[1][1], N, endpoint=False),
-    np.linspace(boundaries[2][0], boundaries[2][1], N, endpoint=False),
-]
-
-# --- pick slice & its coordinate mesh correctly ---
-idx = N // 2
-if slice_axis == 0:           # x-slice -> show y–z
-    baryon_slice = rho_b[idx, :, :]
-    A, B = np.meshgrid(axes[1], axes[2], indexing="ij")
-    xlabel, ylabel = "y", "z"
-elif slice_axis == 1:         # y-slice -> show x–z
-    baryon_slice = rho_b[:, idx, :]
-    A, B = np.meshgrid(axes[0], axes[2], indexing="ij")
-    xlabel, ylabel = "x", "z"
-else:                         # z-slice -> show x–y
-    baryon_slice = rho_b[:, :, idx]
-    A, B = np.meshgrid(axes[0], axes[1], indexing="ij")
-    xlabel, ylabel = "x", "y"
-
-# --- require strictly positive values for LogNorm; fall back to epsilon if tiny roundoff ---
-pos = baryon_slice > 0
-if not np.any(pos):
-    raise ValueError(f"Slice has no positive baryon density at t={actual_time:.3f}. "
-                     f"Check snapshot contents or clump leaving the slice plane.")
-levels = np.logspace(np.log10(baryon_slice[pos].min()),
-                     np.log10(baryon_slice[pos].max()), 128)
-
-# --- plot ---
-plt.figure(figsize=(8, 6))
-plt.contourf(A, B, baryon_slice.T, origin="lower", levels=levels,
-             cmap="viridis", norm=LogNorm())
-plt.colorbar(label=r"$\rho_{\mathrm{baryons}}$")
-plt.xlabel(xlabel); plt.ylabel(ylabel)
-plt.title(f"t = {actual_time:.3f}  (baryons only)")
-plt.grid(alpha=0.3)
-plt.tight_layout(); plt.show()
-
+for time_target in time_targets:
+    baryon_files = sorted(
+        glob.glob(os.path.join(snapshot_dir, "baryons_snapshot_at_time_*.npy"))
+    )
+    if not baryon_files:
+        raise FileNotFoundError("No baryon snapshots found in folder")
+    
+    import re
+    num_re = re.compile(r"at_time_([0-9.+\-eE]+)\.npy$")
+    
+    def extract_time(fname):
+        m = num_re.search(fname)
+        return float(m.group(1)) if m else np.inf
+    
+    times = np.array([extract_time(f) for f in baryon_files], dtype=float)
+    if np.isinf(times).all():
+        raise ValueError("Failed to parse any snapshot times.")
+    
+    # choose closest by numeric time
+    chosen_i = int(np.nanargmin(np.abs(times - time_target)))
+    baryon_file = baryon_files[chosen_i]
+    actual_time = float(times[chosen_i])
+    
+    # --- load baryon density grid ---
+    rho_b = np.load(baryon_file)  # expected shape (N,N,N), non-negative
+    if np.any(~np.isfinite(rho_b)):
+        rho_b = np.nan_to_num(rho_b, nan=0.0, posinf=0.0, neginf=0.0)
+    
+    # --- build coordinate grid matching chosen slice ---
+    N = rho_b.shape[0]
+    axes = [
+        np.linspace(boundaries[0][0], boundaries[0][1], N, endpoint=False),
+        np.linspace(boundaries[1][0], boundaries[1][1], N, endpoint=False),
+        np.linspace(boundaries[2][0], boundaries[2][1], N, endpoint=False),
+    ]
+    
+    # --- pick slice & its coordinate mesh correctly ---
+    idx = N // 2
+    if slice_axis == 0:           # x-slice -> show y–z
+        baryon_slice = rho_b[idx, :, :]
+        A, B = np.meshgrid(axes[1], axes[2], indexing="ij")
+        xlabel, ylabel = "y", "z"
+    elif slice_axis == 1:         # y-slice -> show x–z
+        baryon_slice = rho_b[:, idx, :]
+        A, B = np.meshgrid(axes[0], axes[2], indexing="ij")
+        xlabel, ylabel = "x", "z"
+    else:                         # z-slice -> show x–y
+        baryon_slice = rho_b[:, :, idx]
+        A, B = np.meshgrid(axes[0], axes[1], indexing="ij")
+        xlabel, ylabel = "x", "y"
+    
+    # --- require strictly positive values for LogNorm; fall back to epsilon if tiny roundoff ---
+    pos = baryon_slice > 0
+    if not np.any(pos):
+        raise ValueError(f"Slice has no positive baryon density at t={actual_time:.3f}. "
+                         f"Check snapshot contents or clump leaving the slice plane.")
+    levels = np.logspace(np.log10(baryon_slice[pos].min()),
+                         np.log10(baryon_slice[pos].max()), 128)
+    
+    # --- plot ---
+    plt.figure(figsize=(8, 6))
+    plt.contourf(A, B, baryon_slice.T, origin="lower", levels=levels,
+                 cmap="viridis", norm=LogNorm())
+    plt.colorbar(label=r"$\rho_{\mathrm{baryons}}$")
+    plt.xlabel(xlabel); plt.ylabel(ylabel)
+    plt.title(f"t = {actual_time:.3f}  (baryons only)")
+    plt.grid(alpha=0.3)
+    plt.tight_layout(); plt.show()
 '''
 
 # -----------------------------------------------------total dansity-------------------------------
@@ -218,11 +217,11 @@ import glob
 import numpy as np
 import matplotlib.pyplot as plt
 
-snapshot_dir = r"resources/data/simulation_20260416_133110"
-times_to_plot = [0,1, 2,3,4,5,6,7,8,9,10]
+snapshot_dir = "resources/data/two_4comp_system_collision"
+times_to_plot = [0,20]
 
-L_full = 25   # full physical half-size of the simulation box
-L = 20         # half-size of the region to actually plot
+L_full = 10   
+L = 50        
 
 files = sorted(glob.glob(os.path.join(snapshot_dir, "total_density_snapshot_at_time_*.npy")))
 available_times = [float(f.split("at_time_")[-1].replace(".npy", "")) for f in files]
@@ -235,7 +234,6 @@ for t in times_to_plot:
     # Load data
     rho = np.load(files[idx])
 
-    # Automatic slicing: find indices of global max density
     mx, my, mz = np.unravel_index(np.argmax(rho), rho.shape)
     data_slice = rho[:, :, mz]   # XY plane at z = mz
 
@@ -244,7 +242,6 @@ for t in times_to_plot:
     x_full = np.linspace(-L_full, L_full, N)
     y_full = np.linspace(-L_full, L_full, N)
 
-    # Select only data within [-L, L] in both x and y
     ix = np.where((x_full >= -L) & (x_full <= L))[0]
     iy = np.where((y_full >= -L) & (y_full <= L))[0]
 
@@ -272,6 +269,7 @@ for t in times_to_plot:
     plt.xlabel("x")
     plt.ylabel("y")
     plt.tight_layout()
+    #plt.savefig(f'plots/composite_system_at_time_{actual_time:.3f}.png',dpi=300)
     plt.show()
 
     
